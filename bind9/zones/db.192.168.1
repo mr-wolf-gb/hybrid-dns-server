@@ -1,0 +1,32 @@
+;
+; Reverse DNS Zone file for 192.168.1.0/24
+; Hybrid DNS Server - Reverse Zone
+;
+$TTL    86400
+@       IN      SOA     ns1.internal.local. admin.internal.local. (
+                    2024081501  ; Serial (YYYYMMDDNN)
+                    10800       ; Refresh (3 hours)
+                    3600        ; Retry (1 hour)
+                    604800      ; Expire (1 week)
+                    86400 )     ; Minimum TTL (1 day)
+
+; Name servers
+@       IN      NS      ns1.internal.local.
+@       IN      NS      ns2.internal.local.
+
+; PTR records for reverse lookups
+10      IN      PTR     dc1.internal.local.
+11      IN      PTR     dc2.internal.local.
+12      IN      PTR     dc3.internal.local.
+20      IN      PTR     dhcp.internal.local.
+50      IN      PTR     mail.internal.local.
+60      IN      PTR     www.internal.local.
+61      IN      PTR     intranet.internal.local.
+62      IN      PTR     portal.internal.local.
+70      IN      PTR     fileserver.internal.local.
+71      IN      PTR     backup.internal.local.
+80      IN      PTR     printserver.internal.local.
+90      IN      PTR     monitor.internal.local.
+91      IN      PTR     logging.internal.local.
+100     IN      PTR     ns1.internal.local.
+101     IN      PTR     ns2.internal.local.

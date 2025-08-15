@@ -1,0 +1,35 @@
+;
+; Response Policy Zone - Phishing Protection
+; Hybrid DNS Server - Security Filtering
+;
+$TTL 60
+@       IN  SOA localhost. admin.localhost. (
+            2024081501  ; Serial
+            86400       ; Refresh
+            7200        ; Retry
+            604800      ; Expire
+            60 )        ; Minimum
+
+        IN  NS  localhost.
+
+; CNAME to RPZ-DROP to block phishing domains
+; These domains attempt to steal credentials or personal information
+
+; Example phishing domains (populated from threat feeds)
+; fake-bank-login.com          IN CNAME .
+; phishing-paypal.net          IN CNAME .
+; fake-microsoft-login.org     IN CNAME .
+; credential-harvest.info      IN CNAME .
+
+; Common phishing patterns
+; Domains that mimic legitimate services
+; *.fake-google-login.com      IN CNAME .
+; *.phishing-microsoft.net     IN CNAME .
+; *.fake-amazon-security.org   IN CNAME .
+
+; Redirect to warning page instead of blocking
+; suspicious-login.com         IN A 192.168.1.201
+
+; This file will be automatically updated by threat intelligence feeds
+; Last updated: 2024-08-15
+; Total blocked domains: 0 (populated by automation)

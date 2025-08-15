@@ -1,0 +1,52 @@
+;
+; Response Policy Zone - Gambling Sites Blocking
+; Hybrid DNS Server - Category-based Filtering
+;
+$TTL 60
+@       IN  SOA localhost. admin.localhost. (
+            2024081501  ; Serial
+            86400       ; Refresh
+            7200        ; Retry
+            604800      ; Expire
+            60 )        ; Minimum
+
+        IN  NS  localhost.
+
+; Block gambling and betting websites
+; Useful for workplace policies and responsible internet use
+
+; Online casinos and gambling sites (examples)
+; casino-example.com           IN CNAME .
+; *.casino-example.com         IN CNAME .
+; poker-site.net               IN CNAME .
+; *.poker-site.net             IN CNAME .
+; betting-platform.org         IN CNAME .
+; *.betting-platform.org       IN CNAME .
+
+; Sports betting
+; sportsbet-example.com        IN CNAME .
+; *.sportsbet-example.com      IN CNAME .
+
+; Lottery and scratch cards
+; lottery-online.com           IN CNAME .
+; *.lottery-online.com         IN CNAME .
+
+; Cryptocurrency gambling
+; crypto-casino.com            IN CNAME .
+; *.crypto-casino.com          IN CNAME .
+
+; Fantasy sports (if considered gambling in jurisdiction)
+; fantasy-sports.com           IN CNAME .
+; *.fantasy-sports.com         IN CNAME .
+
+; This list would typically be populated from:
+; - Commercial gambling site lists
+; - Regulatory authority lists
+; - Custom organizational policies
+; - Community-maintained responsible internet lists
+
+; Alternative: Redirect to company policy or help resources
+; gambling-site.com            IN A 192.168.1.204
+
+; Last updated: 2024-08-15
+; Total blocked domains: 0 (populated by filtering service)

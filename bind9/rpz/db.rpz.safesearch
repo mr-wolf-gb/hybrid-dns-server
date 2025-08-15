@@ -1,0 +1,69 @@
+;
+; Response Policy Zone - SafeSearch Enforcement
+; Hybrid DNS Server - Search Engine Safety
+;
+$TTL 60
+@       IN  SOA localhost. admin.localhost. (
+            2024081501  ; Serial
+            86400       ; Refresh
+            7200        ; Retry
+            604800      ; Expire
+            60 )        ; Minimum
+
+        IN  NS  localhost.
+
+; Redirect search engines to their SafeSearch-enabled versions
+; This enforces safe search across popular search engines
+
+; Google SafeSearch Enforcement
+; Redirect google.com searches to forcesafesearch.google.com
+google.com                      IN A 216.239.38.120
+*.google.com                    IN A 216.239.38.120
+google.co.uk                    IN A 216.239.38.120
+*.google.co.uk                  IN A 216.239.38.120
+google.ca                       IN A 216.239.38.120
+*.google.ca                     IN A 216.239.38.120
+google.com.au                   IN A 216.239.38.120
+*.google.com.au                 IN A 216.239.38.120
+
+; YouTube SafeSearch (Restricted Mode)
+youtube.com                     IN A 216.239.38.119
+*.youtube.com                   IN A 216.239.38.119
+youtu.be                       IN A 216.239.38.119
+m.youtube.com                   IN A 216.239.38.119
+
+; Bing SafeSearch Enforcement  
+; Redirect to strict.bing.com
+bing.com                        IN CNAME strict.bing.com.
+*.bing.com                      IN CNAME strict.bing.com.
+
+; DuckDuckGo SafeSearch
+; DuckDuckGo has moderate safe search by default, but can be made stricter
+duckduckgo.com                  IN CNAME safe.duckduckgo.com.
+*.duckduckgo.com                IN CNAME safe.duckduckgo.com.
+
+; Yahoo SafeSearch
+; Redirect to family-friendly Yahoo search
+yahoo.com                       IN CNAME family.yahoo.com.
+*.yahoo.com                     IN CNAME family.yahoo.com.
+
+; Alternative approach for some search engines:
+; You can redirect to specific IPs that enforce safe search
+
+; Yandex SafeSearch (if used)
+; yandex.com                    IN A 213.180.193.56
+; *.yandex.com                  IN A 213.180.193.56
+
+; Note: Some of these IPs and CNAMEs may need to be updated
+; based on the current SafeSearch implementation by each provider
+; Always verify current SafeSearch endpoints before deployment
+
+; Custom safe search page (if implementing your own)
+; search.company.com            IN A 192.168.1.206
+
+; This configuration ensures that all search queries
+; from internal networks are automatically filtered
+; for inappropriate content
+
+; Last updated: 2024-08-15
+; Verify SafeSearch endpoints periodically as they may change

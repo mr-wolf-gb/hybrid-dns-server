@@ -1,0 +1,60 @@
+;
+; Response Policy Zone - Social Media Blocking
+; Hybrid DNS Server - Category-based Filtering
+;
+$TTL 60
+@       IN  SOA localhost. admin.localhost. (
+            2024081501  ; Serial
+            86400       ; Refresh
+            7200        ; Retry
+            604800      ; Expire
+            60 )        ; Minimum
+
+        IN  NS  localhost.
+
+; Block popular social media platforms
+; Can be enabled/disabled via web interface
+
+; Major social media platforms
+facebook.com                    IN CNAME .
+*.facebook.com                  IN CNAME .
+instagram.com                   IN CNAME .
+*.instagram.com                 IN CNAME .
+twitter.com                     IN CNAME .
+*.twitter.com                   IN CNAME .
+x.com                          IN CNAME .
+*.x.com                        IN CNAME .
+linkedin.com                   IN CNAME .
+*.linkedin.com                 IN CNAME .
+snapchat.com                   IN CNAME .
+*.snapchat.com                 IN CNAME .
+tiktok.com                     IN CNAME .
+*.tiktok.com                   IN CNAME .
+reddit.com                     IN CNAME .
+*.reddit.com                   IN CNAME .
+pinterest.com                  IN CNAME .
+*.pinterest.com                IN CNAME .
+tumblr.com                     IN CNAME .
+*.tumblr.com                   IN CNAME .
+discord.com                    IN CNAME .
+*.discord.com                  IN CNAME .
+slack.com                      IN CNAME .
+*.slack.com                    IN CNAME .
+
+; Messaging platforms
+whatsapp.com                   IN CNAME .
+*.whatsapp.com                 IN CNAME .
+telegram.org                   IN CNAME .
+*.telegram.org                 IN CNAME .
+signal.org                     IN CNAME .
+*.signal.org                   IN CNAME .
+
+; Alternative: Redirect to company policy page
+; facebook.com                 IN A 192.168.1.203
+; *.facebook.com               IN A 192.168.1.203
+
+; Note: This blocking can be granular - e.g., allow LinkedIn for business
+; but block other platforms during work hours
+; Configure via web interface based on organizational needs
+
+; Last updated: 2024-08-15

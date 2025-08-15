@@ -1,0 +1,39 @@
+;
+; Response Policy Zone - Custom Allow List
+; Hybrid DNS Server - Bypass Other RPZ Rules
+;
+$TTL 60
+@       IN  SOA localhost. admin.localhost. (
+            2024081501  ; Serial - automatically updated by web interface
+            86400       ; Refresh
+            7200        ; Retry
+            604800      ; Expire
+            60 )        ; Minimum
+
+        IN  NS  localhost.
+
+; Custom allow list - domains that should bypass other RPZ filtering
+; This file is managed via the web interface
+; Use "rpz-passthru" to allow domains that might otherwise be blocked
+
+; Example entries (will be populated via web interface):
+; business-social.linkedin.com IN CNAME rpz-passthru.
+; educational.youtube.com      IN CNAME rpz-passthru.
+; work-related.facebook.com    IN CNAME rpz-passthru.
+
+; Use cases:
+; - Allow specific business-related social media accounts
+; - Whitelist educational content from otherwise blocked streaming sites
+; - Allow access to specific gambling sites for legitimate business (e.g., sports betting analysis)
+; - Bypass adult content filtering for medical/educational sites
+
+; Format for passthrough:
+; domain.com                   IN CNAME rpz-passthru.
+; *.subdomain.domain.com       IN CNAME rpz-passthru.
+
+; === WEB INTERFACE MANAGED SECTION ===
+; Do not manually edit below this line
+; Entries are automatically managed by the web interface
+
+; Last updated via web interface: Never
+; Total custom allowed domains: 0

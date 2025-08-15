@@ -1,0 +1,37 @@
+;
+; Response Policy Zone - Adult Content Filtering
+; Hybrid DNS Server - Category-based Filtering
+;
+$TTL 60
+@       IN  SOA localhost. admin.localhost. (
+            2024081501  ; Serial
+            86400       ; Refresh
+            7200        ; Retry
+            604800      ; Expire
+            60 )        ; Minimum
+
+        IN  NS  localhost.
+
+; CNAME to RPZ-DROP to block adult content domains
+; This list can be populated from commercial filtering services
+
+; Example adult content domains (would be populated from filtering lists)
+; adult-site-example.com       IN CNAME .
+; explicit-content.net         IN CNAME .
+; adult-entertainment.org      IN CNAME .
+
+; Wildcard blocks for known adult content networks
+; *.adult-network.com          IN CNAME .
+; *.explicit-content.net       IN CNAME .
+
+; Alternative: Redirect to blocked page
+; blocked-adult-site.com       IN A 192.168.1.202
+
+; This file can be populated from:
+; - Commercial adult content filtering lists
+; - OpenDNS category lists
+; - Community-maintained lists
+; - Custom organizational policies
+
+; Last updated: 2024-08-15
+; Total blocked domains: 0 (populated by filtering service)

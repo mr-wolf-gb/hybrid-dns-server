@@ -1,0 +1,236 @@
+//
+// BIND9 Local Configuration
+// Hybrid DNS Server - Conditional Forwarding and Local Zones
+//
+
+// Include zone files managed by the web interface
+include "/etc/bind/zones.conf";
+
+//
+// CONDITIONAL FORWARDING CONFIGURATION
+// Multi-source forwarding for different domain types
+//
+
+// Active Directory Domain Forwarding
+// Example: corp.local -> AD Domain Controllers
+zone "corp.local" {
+    type forward;
+    forward first;
+    forwarders {
+        192.168.1.10;   // Primary AD DC
+        192.168.1.11;   // Secondary AD DC  
+        192.168.1.12;   // Tertiary AD DC
+    };
+};
+
+// Second AD Domain Example
+zone "ad2.company" {
+    type forward;
+    forward first;
+    forwarders {
+        192.168.50.5;   // Primary AD DC
+        192.168.50.6;   // Secondary AD DC
+    };
+};
+
+// Internal Intranet Zone Forwarding  
+// Example: intranet.company -> Internal DNS servers
+zone "intranet.company" {
+    type forward;
+    forward first;
+    forwarders {
+        10.10.10.5;     // Primary intranet DNS
+        10.10.10.6;     // Secondary intranet DNS
+    };
+};
+
+// Research Network Example
+zone "research.local" {
+    type forward;
+    forward first;
+    forwarders {
+        10.20.0.1;      // Research network DNS
+        10.20.0.2;      // Research network DNS backup
+    };
+};
+
+//
+// AUTHORITATIVE ZONES
+// Zones hosted locally on this DNS server
+//
+
+// Example local zone - replace with your actual domain
+zone "internal.local" {
+    type master;
+    file "/etc/bind/zones/db.internal.local";
+    allow-update { none; };
+    allow-transfer {
+        // Add secondary DNS servers here
+        // 192.168.1.100;  // Secondary DNS server
+    };
+    notify yes;
+};
+
+// Reverse DNS zones for internal networks
+// Adjust network ranges to match your environment
+
+// 192.168.1.0/24 reverse zone
+zone "1.168.192.in-addr.arpa" {
+    type master;
+    file "/etc/bind/zones/db.192.168.1";
+    allow-update { none; };
+    allow-transfer {
+        // Add secondary DNS servers here
+    };
+    notify yes;
+};
+
+// 10.0.0.0/8 reverse zone (example for 10.10.10.0/24)
+zone "10.10.10.in-addr.arpa" {
+    type master;
+    file "/etc/bind/zones/db.10.10.10";
+    allow-update { none; };
+    allow-transfer {
+        // Add secondary DNS servers here  
+    };
+    notify yes;
+};
+
+//
+// RESPONSE POLICY ZONES (RPZ)
+// Security filtering and threat protection
+//
+
+// Malware Protection
+zone "rpz.malware" {
+    type master;
+    file "/etc/bind/rpz/db.rpz.malware";
+    allow-update { none; };
+    allow-query { none; };
+};
+
+// Phishing Protection  
+zone "rpz.phishing" {
+    type master;
+    file "/etc/bind/rpz/db.rpz.phishing";
+    allow-update { none; };
+    allow-query { none; };
+};
+
+// Ransomware Protection
+zone "rpz.ransomware" {
+    type master;
+    file "/etc/bind/rpz/db.rpz.ransomware";
+    allow-update { none; };
+    allow-query { none; };
+};
+
+// Adult Content Filtering
+zone "rpz.adult" {
+    type master;
+    file "/etc/bind/rpz/db.rpz.adult";
+    allow-update { none; };
+    allow-query { none; };
+};
+
+// Social Media Blocking
+zone "rpz.social-media" {
+    type master;
+    file "/etc/bind/rpz/db.rpz.social-media";
+    allow-update { none; };
+    allow-query { none; };
+};
+
+// Gambling Sites Blocking
+zone "rpz.gambling" {
+    type master;
+    file "/etc/bind/rpz/db.rpz.gambling";
+    allow-update { none; };
+    allow-query { none; };
+};
+
+// Streaming/Video Blocking
+zone "rpz.streaming" {
+    type master;
+    file "/etc/bind/rpz/db.rpz.streaming";
+    allow-update { none; };
+    allow-query { none; };
+};
+
+// SafeSearch Enforcement
+zone "rpz.safesearch" {
+    type master;
+    file "/etc/bind/rpz/db.rpz.safesearch";
+    allow-update { none; };
+    allow-query { none; };
+};
+
+// Custom Block List (managed via web interface)
+zone "rpz.custom-block" {
+    type master;
+    file "/etc/bind/rpz/db.rpz.custom-block";
+    allow-update { none; };
+    allow-query { none; };
+};
+
+// Custom Allow List (bypass other RPZ rules)
+zone "rpz.custom-allow" {
+    type master;
+    file "/etc/bind/rpz/db.rpz.custom-allow";
+    allow-update { none; };
+    allow-query { none; };
+};
+
+//
+// TSIG KEYS FOR SECURE ZONE TRANSFERS
+// Generate with: tsig-keygen -a HMAC-SHA256 keyname
+//
+
+// Example TSIG key for zone transfers
+// key "transfer-key" {
+//     algorithm hmac-sha256;
+//     secret "base64-encoded-key-here";
+// };
+
+// Example secondary zone configuration
+// zone "example.local" {
+//     type slave;
+//     masters { 192.168.1.100 key transfer-key; };
+//     file "slaves/db.example.local";
+//     allow-notify { 192.168.1.100; };
+// };
+
+//
+// ROOT HINTS
+// Include the root hints file
+//
+zone "." {
+    type hint;
+    file "/usr/share/dns/root.hints";
+};
+
+//
+// ZONES FOR RFC 1918 ADDRESSES
+// These are typically included automatically
+//
+
+// Localhost zones
+zone "localhost" {
+    type master;
+    file "/etc/bind/db.local";
+};
+
+zone "127.in-addr.arpa" {
+    type master;
+    file "/etc/bind/db.127";
+};
+
+zone "0.in-addr.arpa" {
+    type master;
+    file "/etc/bind/db.0";
+};
+
+zone "255.in-addr.arpa" {
+    type master;
+    file "/etc/bind/db.255";
+};

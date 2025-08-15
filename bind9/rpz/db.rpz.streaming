@@ -1,0 +1,70 @@
+;
+; Response Policy Zone - Streaming/Video Blocking
+; Hybrid DNS Server - Category-based Filtering
+;
+$TTL 60
+@       IN  SOA localhost. admin.localhost. (
+            2024081501  ; Serial
+            86400       ; Refresh
+            7200        ; Retry
+            604800      ; Expire
+            60 )        ; Minimum
+
+        IN  NS  localhost.
+
+; Block streaming and video platforms
+; Useful for bandwidth management and workplace productivity
+
+; Major video streaming platforms
+youtube.com                     IN CNAME .
+*.youtube.com                   IN CNAME .
+youtu.be                       IN CNAME .
+netflix.com                    IN CNAME .
+*.netflix.com                  IN CNAME .
+hulu.com                       IN CNAME .
+*.hulu.com                     IN CNAME .
+disney.com                     IN CNAME .
+*.disney.com                   IN CNAME .
+disneyplus.com                 IN CNAME .
+*.disneyplus.com               IN CNAME .
+amazon.com                     IN CNAME .
+*.amazon.com                   IN CNAME .
+primevideo.com                 IN CNAME .
+*.primevideo.com               IN CNAME .
+hbo.com                        IN CNAME .
+*.hbo.com                      IN CNAME .
+hbomax.com                     IN CNAME .
+*.hbomax.com                   IN CNAME .
+paramount.com                  IN CNAME .
+*.paramount.com                IN CNAME .
+peacocktv.com                  IN CNAME .
+*.peacocktv.com                IN CNAME .
+appletv.com                    IN CNAME .
+*.appletv.com                  IN CNAME .
+
+; Live streaming platforms
+twitch.tv                      IN CNAME .
+*.twitch.tv                    IN CNAME .
+kick.com                       IN CNAME .
+*.kick.com                     IN CNAME .
+
+; Video sharing platforms
+vimeo.com                      IN CNAME .
+*.vimeo.com                    IN CNAME .
+dailymotion.com                IN CNAME .
+*.dailymotion.com              IN CNAME .
+
+; Music streaming (if included in policy)
+spotify.com                    IN CNAME .
+*.spotify.com                  IN CNAME .
+pandora.com                    IN CNAME .
+*.pandora.com                  IN CNAME .
+
+; Note: Consider allowing educational content from YouTube or other platforms
+; This can be managed through allow lists or more granular filtering
+
+; Alternative: Redirect to company policy page about streaming usage
+; youtube.com                  IN A 192.168.1.205
+; *.youtube.com                IN A 192.168.1.205
+
+; Last updated: 2024-08-15

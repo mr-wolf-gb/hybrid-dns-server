@@ -1,0 +1,23 @@
+;
+; Reverse DNS Zone file for 10.10.10.0/24
+; Hybrid DNS Server - Reverse Zone
+;
+$TTL    86400
+@       IN      SOA     ns1.internal.local. admin.internal.local. (
+                    2024081501  ; Serial (YYYYMMDDNN)
+                    10800       ; Refresh (3 hours)
+                    3600        ; Retry (1 hour)
+                    604800      ; Expire (1 week)
+                    86400 )     ; Minimum TTL (1 day)
+
+; Name servers
+@       IN      NS      ns1.internal.local.
+@       IN      NS      ns2.internal.local.
+
+; PTR records for reverse lookups
+; Example entries for intranet subnet
+5       IN      PTR     intranet-dns1.internal.local.
+6       IN      PTR     intranet-dns2.internal.local.
+10      IN      PTR     intranet-web.internal.local.
+15      IN      PTR     intranet-app.internal.local.
+20      IN      PTR     intranet-db.internal.local.

@@ -1,0 +1,65 @@
+;
+; DNS Zone file for internal.local
+; Hybrid DNS Server - Authoritative Zone
+;
+$TTL    86400
+@       IN      SOA     ns1.internal.local. admin.internal.local. (
+                    2024081501  ; Serial (YYYYMMDDNN)
+                    10800       ; Refresh (3 hours)
+                    3600        ; Retry (1 hour) 
+                    604800      ; Expire (1 week)
+                    86400 )     ; Minimum TTL (1 day)
+
+; Name servers
+@       IN      NS      ns1.internal.local.
+@       IN      NS      ns2.internal.local.
+
+; A records for name servers
+ns1     IN      A       192.168.1.100
+ns2     IN      A       192.168.1.101
+
+; Mail server (if needed)
+@       IN      MX      10 mail.internal.local.
+mail    IN      A       192.168.1.50
+
+; Web services
+www     IN      A       192.168.1.60
+intranet IN     A       192.168.1.61
+portal  IN      A       192.168.1.62
+
+; File servers
+fileserver IN  A       192.168.1.70
+backup  IN      A       192.168.1.71
+
+; Domain controllers / Active Directory
+dc1     IN      A       192.168.1.10
+dc2     IN      A       192.168.1.11
+dc3     IN      A       192.168.1.12
+
+; DHCP server
+dhcp    IN      A       192.168.1.20
+
+; Print servers
+printserver IN A       192.168.1.80
+
+; Monitoring and management
+monitor IN      A       192.168.1.90
+logging IN      A       192.168.1.91
+
+; Example CNAME records
+ftp     IN      CNAME   fileserver.internal.local.
+www2    IN      CNAME   www.internal.local.
+
+; Example TXT record for domain verification
+@       IN      TXT     "v=spf1 mx a -all"
+_dmarc  IN      TXT     "v=DMARC1; p=reject; rua=mailto:dmarc@internal.local"
+
+; Example SRV records (common for Active Directory)
+_ldap._tcp.dc._msdcs IN SRV 0 5 389 dc1.internal.local.
+_ldap._tcp.dc._msdcs IN SRV 0 5 389 dc2.internal.local.
+_kerberos._tcp       IN SRV 0 5 88  dc1.internal.local.
+_kerberos._tcp       IN SRV 0 5 88  dc2.internal.local.
+
+; Example AAAA records for IPv6 (if using IPv6)
+; www    IN      AAAA    2001:db8::60
+; ns1    IN      AAAA    2001:db8::100

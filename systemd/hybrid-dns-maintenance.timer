@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Hybrid DNS Server Maintenance Tasks
+Requires=hybrid-dns-maintenance.service
+
+[Timer]
+# Run daily at 2 AM
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target

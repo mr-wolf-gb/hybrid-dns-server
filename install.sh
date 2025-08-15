@@ -1,0 +1,865 @@
+#!/bin/bash
+
+# Hybrid DNS Server Installation Script
+# For Debian/Ubuntu systems
+# Author: Scout AI
+# Version: 1.0.0
+
+set -euo pipefail
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Configuration
+INSTALL_DIR="/opt/hybrid-dns-server"
+SERVICE_USER="dns-server"
+DB_NAME="hybrid_dns"
+DB_USER="dns_user"
+FRONTEND_PORT="3000"
+BACKEND_PORT="8000"
+NGINX_AVAILABLE="/etc/nginx/sites-available"
+NGINX_ENABLED="/etc/nginx/sites-enabled"
+
+# Logging
+LOG_FILE="/tmp/hybrid-dns-install.log"
+
+# Functions
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
+}
+
+info() {
+    echo -e "${BLUE}[INFO]${NC} $1" | tee -a "$LOG_FILE"
+}
+
+success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1" | tee -a "$LOG_FILE"
+}
+
+warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1" | tee -a "$LOG_FILE"
+}
+
+error() {
+    echo -e "${RED}[ERROR]${NC} $1" | tee -a "$LOG_FILE"
+    exit 1
+}
+
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        error "This script must be run as root. Use: sudo $0"
+    fi
+}
+
+check_os() {
+    if [[ ! -f /etc/debian_version ]]; then
+        error "This script only supports Debian/Ubuntu systems"
+    fi
+    
+    . /etc/os-release
+    info "Detected OS: $NAME $VERSION"
+}
+
+check_requirements() {
+    info "Checking system requirements..."
+    
+    # Check available memory (minimum 2GB)
+    local mem_gb=$(free -g | awk '/^Mem:/{print $2}')
+    if [[ $mem_gb -lt 2 ]]; then
+        warning "System has less than 2GB RAM. Performance may be affected."
+    fi
+    
+    # Check available disk space (minimum 5GB)
+    local disk_gb=$(df -BG / | awk 'NR==2{print $4}' | sed 's/G//')
+    if [[ $disk_gb -lt 5 ]]; then
+        error "Insufficient disk space. At least 5GB required."
+    fi
+    
+    success "System requirements check passed"
+}
+
+update_system() {
+    info "Updating system packages..."
+    apt-get update -qq
+    apt-get upgrade -y -qq
+    success "System updated"
+}
+
+install_dependencies() {
+    info "Installing system dependencies..."
+    
+    # Essential packages
+    apt-get install -y -qq \
+        curl \
+        wget \
+        gnupg \
+        software-properties-common \
+        apt-transport-https \
+        ca-certificates \
+        lsb-release \
+        ufw \
+        fail2ban \
+        unzip \
+        git \
+        htop \
+        nano \
+        vim \
+        sudo
+    
+    # BIND9 and DNS tools
+    apt-get install -y -qq \
+        bind9 \
+        bind9utils \
+        bind9-doc \
+        dnsutils
+    
+    # PostgreSQL
+    apt-get install -y -qq \
+        postgresql \
+        postgresql-contrib \
+        libpq-dev
+    
+    # Python
+    apt-get install -y -qq \
+        python3 \
+        python3-pip \
+        python3-venv \
+        python3-dev \
+        build-essential
+    
+    # Node.js (via NodeSource)
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    apt-get install -y -qq nodejs
+    
+    # Nginx
+    apt-get install -y -qq nginx
+    
+    # Install bun
+    curl -fsSL https://bun.sh/install | bash
+    
+    success "Dependencies installed"
+}
+
+create_user() {
+    info "Creating service user..."
+    
+    if ! id "$SERVICE_USER" &>/dev/null; then
+        useradd -r -s /bin/bash -d "$INSTALL_DIR" -m "$SERVICE_USER"
+        success "User $SERVICE_USER created"
+    else
+        info "User $SERVICE_USER already exists"
+    fi
+}
+
+setup_database() {
+    info "Setting up PostgreSQL database..."
+    
+    # Start PostgreSQL
+    systemctl start postgresql
+    systemctl enable postgresql
+    
+    # Generate random password for database user
+    local db_password=$(openssl rand -base64 32)
+    
+    # Create database and user
+    sudo -u postgres psql << EOF
+DROP DATABASE IF EXISTS $DB_NAME;
+DROP USER IF EXISTS $DB_USER;
+CREATE USER $DB_USER WITH PASSWORD '$db_password';
+CREATE DATABASE $DB_NAME OWNER $DB_USER;
+GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;
+\q
+EOF
+    
+    # Save database credentials
+    cat > "$INSTALL_DIR/.env" << EOF
+# Database Configuration
+DATABASE_URL=postgresql://$DB_USER:$db_password@localhost:5432/$DB_NAME
+
+# Security Configuration
+SECRET_KEY=$(openssl rand -base64 64)
+JWT_SECRET_KEY=$(openssl rand -base64 64)
+JWT_ALGORITHM=HS256
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
+
+# Application Configuration
+BACKEND_HOST=0.0.0.0
+BACKEND_PORT=$BACKEND_PORT
+FRONTEND_PORT=$FRONTEND_PORT
+DEBUG=false
+LOG_LEVEL=INFO
+
+# BIND9 Configuration
+BIND_CONFIG_DIR=/etc/bind
+BIND_ZONES_DIR=/etc/bind/zones
+BIND_RPZ_DIR=/etc/bind/rpz
+BIND_SERVICE_NAME=bind9
+
+# Monitoring Configuration
+MONITORING_ENABLED=true
+MONITORING_INTERVAL=60
+HEALTH_CHECK_INTERVAL=300
+
+# Rate Limiting
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_PER_MINUTE=100
+
+# 2FA Configuration
+TOTP_ISSUER_NAME="Hybrid DNS Server"
+TOTP_VALID_WINDOW=1
+
+# Backup Configuration
+BACKUP_ENABLED=true
+BACKUP_RETENTION_DAYS=30
+BACKUP_SCHEDULE="0 2 * * *"
+EOF
+    
+    chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/.env"
+    chmod 600 "$INSTALL_DIR/.env"
+    
+    success "Database configured"
+}
+
+install_application() {
+    info "Installing Hybrid DNS Server application..."
+    
+    # Copy application files
+    if [[ ! -d "$INSTALL_DIR/backend" ]]; then
+        cp -r "$(dirname "$0")/backend" "$INSTALL_DIR/"
+    fi
+    
+    if [[ ! -d "$INSTALL_DIR/frontend" ]]; then
+        cp -r "$(dirname "$0")/frontend" "$INSTALL_DIR/"
+    fi
+    
+    if [[ ! -d "$INSTALL_DIR/bind9" ]]; then
+        cp -r "$(dirname "$0")/bind9" "$INSTALL_DIR/"
+    fi
+    
+    # Set ownership
+    chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
+    
+    # Install Python dependencies
+    info "Installing Python dependencies..."
+    sudo -u "$SERVICE_USER" bash << EOF
+cd "$INSTALL_DIR/backend"
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+EOF
+    
+    # Install Node.js dependencies and build frontend
+    info "Building frontend application..."
+    sudo -u "$SERVICE_USER" bash << EOF
+cd "$INSTALL_DIR/frontend"
+export PATH="/root/.bun/bin:\$PATH"
+bun install
+bun run build
+EOF
+    
+    success "Application installed"
+}
+
+configure_bind9() {
+    info "Configuring BIND9..."
+    
+    # Backup original configuration
+    cp /etc/bind/named.conf /etc/bind/named.conf.backup
+    cp /etc/bind/named.conf.options /etc/bind/named.conf.options.backup
+    cp /etc/bind/named.conf.local /etc/bind/named.conf.local.backup
+    
+    # Copy our BIND9 configuration
+    cp "$INSTALL_DIR/bind9/named.conf.options" /etc/bind/
+    cp "$INSTALL_DIR/bind9/named.conf.local" /etc/bind/
+    cp "$INSTALL_DIR/bind9/zones.conf" /etc/bind/
+    
+    # Create directories
+    mkdir -p /etc/bind/zones
+    mkdir -p /etc/bind/rpz
+    mkdir -p /var/log/bind
+    
+    # Copy zone files
+    cp -r "$INSTALL_DIR/bind9/zones/"* /etc/bind/zones/
+    cp -r "$INSTALL_DIR/bind9/rpz/"* /etc/bind/rpz/
+    
+    # Set permissions
+    chown -R bind:bind /etc/bind/zones
+    chown -R bind:bind /etc/bind/rpz
+    chown -R bind:bind /var/log/bind
+    chmod 755 /etc/bind/zones
+    chmod 755 /etc/bind/rpz
+    chmod 755 /var/log/bind
+    
+    # Update main configuration
+    if ! grep -q "include \"/etc/bind/zones.conf\";" /etc/bind/named.conf; then
+        echo 'include "/etc/bind/zones.conf";' >> /etc/bind/named.conf
+    fi
+    
+    # Test configuration
+    if named-checkconf; then
+        success "BIND9 configuration is valid"
+    else
+        error "BIND9 configuration is invalid"
+    fi
+    
+    # Restart BIND9
+    systemctl restart bind9
+    systemctl enable bind9
+    
+    success "BIND9 configured"
+}
+
+setup_nginx() {
+    info "Configuring Nginx..."
+    
+    # Generate SSL certificate (self-signed for now)
+    mkdir -p /etc/nginx/ssl
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout /etc/nginx/ssl/dns-server.key \
+        -out /etc/nginx/ssl/dns-server.crt \
+        -subj "/C=US/ST=State/L=City/O=Organization/CN=dns-server.local"
+    
+    # Create Nginx configuration
+    cat > "$NGINX_AVAILABLE/hybrid-dns-server" << 'EOF'
+# Hybrid DNS Server Nginx Configuration
+
+# Rate limiting
+limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+limit_req_zone $binary_remote_addr zone=login:10m rate=5r/m;
+
+# Upstream backend
+upstream backend {
+    server 127.0.0.1:8000;
+    keepalive 32;
+}
+
+# HTTP redirect to HTTPS
+server {
+    listen 80;
+    server_name _;
+    return 301 https://$host$request_uri;
+}
+
+# HTTPS server
+server {
+    listen 443 ssl http2;
+    server_name _;
+
+    # SSL Configuration
+    ssl_certificate /etc/nginx/ssl/dns-server.crt;
+    ssl_certificate_key /etc/nginx/ssl/dns-server.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # Security headers
+    add_header X-Frame-Options DENY;
+    add_header X-Content-Type-Options nosniff;
+    add_header X-XSS-Protection "1; mode=block";
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin";
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data: https:; img-src 'self' data: https:; connect-src 'self'";
+
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types
+        text/plain
+        text/css
+        text/xml
+        text/javascript
+        application/javascript
+        application/xml+rss
+        application/json;
+
+    # Frontend static files
+    location / {
+        root /opt/hybrid-dns-server/frontend/dist;
+        try_files $uri $uri/ /index.html;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # API endpoints
+    location /api/ {
+        limit_req zone=api burst=20 nodelay;
+        
+        proxy_pass http://backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        
+        # Timeouts
+        proxy_connect_timeout 30s;
+        proxy_send_timeout 30s;
+        proxy_read_timeout 30s;
+    }
+
+    # Login rate limiting
+    location /api/auth/login {
+        limit_req zone=login burst=5 nodelay;
+        
+        proxy_pass http://backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Health check endpoint
+    location /health {
+        access_log off;
+        return 200 "healthy\n";
+        add_header Content-Type text/plain;
+    }
+}
+EOF
+    
+    # Enable site
+    ln -sf "$NGINX_AVAILABLE/hybrid-dns-server" "$NGINX_ENABLED/"
+    
+    # Remove default site
+    rm -f "$NGINX_ENABLED/default"
+    
+    # Test configuration
+    if nginx -t; then
+        success "Nginx configuration is valid"
+    else
+        error "Nginx configuration is invalid"
+    fi
+    
+    # Restart Nginx
+    systemctl restart nginx
+    systemctl enable nginx
+    
+    success "Nginx configured"
+}
+
+create_systemd_services() {
+    info "Creating systemd services..."
+    
+    # Backend service
+    cat > /etc/systemd/system/hybrid-dns-backend.service << EOF
+[Unit]
+Description=Hybrid DNS Server Backend
+After=network.target postgresql.service bind9.service
+Wants=postgresql.service bind9.service
+Requires=network.target
+
+[Service]
+Type=exec
+User=$SERVICE_USER
+Group=$SERVICE_USER
+WorkingDirectory=$INSTALL_DIR/backend
+Environment=PATH=$INSTALL_DIR/backend/venv/bin
+EnvironmentFile=$INSTALL_DIR/.env
+ExecStart=$INSTALL_DIR/backend/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port $BACKEND_PORT
+ExecReload=/bin/kill -s HUP \$MAINPID
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hybrid-dns-backend
+
+# Security settings
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=$INSTALL_DIR /etc/bind /var/log/bind /tmp
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Monitoring service
+    cat > /etc/systemd/system/hybrid-dns-monitor.service << EOF
+[Unit]
+Description=Hybrid DNS Server Monitoring
+After=network.target hybrid-dns-backend.service
+Wants=hybrid-dns-backend.service
+Requires=network.target
+
+[Service]
+Type=exec
+User=$SERVICE_USER
+Group=$SERVICE_USER
+WorkingDirectory=$INSTALL_DIR/backend
+Environment=PATH=$INSTALL_DIR/backend/venv/bin
+EnvironmentFile=$INSTALL_DIR/.env
+ExecStart=$INSTALL_DIR/backend/venv/bin/python -c "
+import asyncio
+from app.services.monitoring_service import MonitoringService
+from app.services.health_service import HealthService
+
+async def main():
+    monitor = MonitoringService()
+    health = HealthService()
+    await asyncio.gather(
+        monitor.start_monitoring(),
+        health.start_health_checks()
+    )
+
+if __name__ == '__main__':
+    asyncio.run(main())
+"
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hybrid-dns-monitor
+
+# Security settings
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=$INSTALL_DIR /var/log/bind /tmp
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Backup service
+    cat > /etc/systemd/system/hybrid-dns-backup.service << EOF
+[Unit]
+Description=Hybrid DNS Server Backup
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=$SERVICE_USER
+Group=$SERVICE_USER
+WorkingDirectory=$INSTALL_DIR
+EnvironmentFile=$INSTALL_DIR/.env
+ExecStart=/bin/bash -c '
+    BACKUP_DIR="$INSTALL_DIR/backups/\$(date +%%Y-%%m-%%d)"
+    mkdir -p "\$BACKUP_DIR"
+    
+    # Backup database
+    pg_dump \$DATABASE_URL > "\$BACKUP_DIR/database.sql"
+    
+    # Backup BIND configuration
+    tar -czf "\$BACKUP_DIR/bind-config.tar.gz" -C /etc bind/
+    
+    # Backup application configuration
+    cp $INSTALL_DIR/.env "\$BACKUP_DIR/"
+    
+    # Clean old backups (keep 30 days)
+    find $INSTALL_DIR/backups -type d -mtime +30 -exec rm -rf {} \\; 2>/dev/null || true
+    
+    echo "Backup completed: \$BACKUP_DIR"
+'
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hybrid-dns-backup
+EOF
+
+    # Backup timer
+    cat > /etc/systemd/system/hybrid-dns-backup.timer << EOF
+[Unit]
+Description=Hybrid DNS Server Backup Timer
+Requires=hybrid-dns-backup.service
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    # Reload systemd and enable services
+    systemctl daemon-reload
+    systemctl enable hybrid-dns-backend.service
+    systemctl enable hybrid-dns-monitor.service
+    systemctl enable hybrid-dns-backup.timer
+    
+    success "Systemd services created"
+}
+
+setup_firewall() {
+    info "Configuring firewall..."
+    
+    # Reset UFW
+    ufw --force reset
+    
+    # Default policies
+    ufw default deny incoming
+    ufw default allow outgoing
+    
+    # Allow SSH
+    ufw allow ssh
+    
+    # Allow HTTP/HTTPS
+    ufw allow 80/tcp
+    ufw allow 443/tcp
+    
+    # Allow DNS
+    ufw allow 53/tcp
+    ufw allow 53/udp
+    
+    # Enable firewall
+    ufw --force enable
+    
+    success "Firewall configured"
+}
+
+setup_fail2ban() {
+    info "Configuring Fail2ban..."
+    
+    # Create custom jail for our application
+    cat > /etc/fail2ban/jail.d/hybrid-dns.conf << EOF
+[hybrid-dns-auth]
+enabled = true
+port = 443
+filter = hybrid-dns-auth
+logpath = /var/log/nginx/access.log
+maxretry = 5
+bantime = 3600
+findtime = 600
+
+[hybrid-dns-api]
+enabled = true
+port = 443
+filter = hybrid-dns-api
+logpath = /var/log/nginx/access.log
+maxretry = 20
+bantime = 1800
+findtime = 300
+EOF
+
+    # Create filters
+    cat > /etc/fail2ban/filter.d/hybrid-dns-auth.conf << EOF
+[Definition]
+failregex = ^<HOST> -.*"POST /api/auth/login.*" (401|403|422)
+ignoreregex =
+EOF
+
+    cat > /etc/fail2ban/filter.d/hybrid-dns-api.conf << EOF
+[Definition]
+failregex = ^<HOST> -.*"(GET|POST|PUT|DELETE) /api/.*" (429|500|502|503)
+ignoreregex =
+EOF
+
+    systemctl restart fail2ban
+    systemctl enable fail2ban
+    
+    success "Fail2ban configured"
+}
+
+initialize_database() {
+    info "Initializing database..."
+    
+    sudo -u "$SERVICE_USER" bash << EOF
+cd "$INSTALL_DIR/backend"
+source venv/bin/activate
+python -c "
+import asyncio
+from app.core.database import init_db
+
+async def main():
+    await init_db()
+    print('Database initialized successfully')
+
+asyncio.run(main())
+"
+EOF
+    
+    success "Database initialized"
+}
+
+start_services() {
+    info "Starting services..."
+    
+    # Start all services
+    systemctl start hybrid-dns-backend
+    systemctl start hybrid-dns-monitor
+    systemctl start hybrid-dns-backup.timer
+    
+    # Wait a moment for services to start
+    sleep 5
+    
+    # Check service status
+    if systemctl is-active --quiet hybrid-dns-backend; then
+        success "Backend service started"
+    else
+        error "Failed to start backend service"
+    fi
+    
+    if systemctl is-active --quiet hybrid-dns-monitor; then
+        success "Monitoring service started"
+    else
+        warning "Monitoring service not started"
+    fi
+    
+    success "Services started"
+}
+
+create_admin_user() {
+    info "Creating admin user..."
+    
+    echo
+    echo "Please create an admin user for the DNS server:"
+    read -p "Username: " admin_username
+    read -s -p "Password: " admin_password
+    echo
+    read -p "Full Name: " admin_fullname
+    read -p "Email: " admin_email
+    
+    sudo -u "$SERVICE_USER" bash << EOF
+cd "$INSTALL_DIR/backend"
+source venv/bin/activate
+python -c "
+import asyncio
+from app.core.database import get_database
+from app.core.security import get_password_hash
+from sqlalchemy import text
+
+async def create_admin():
+    database = get_database()
+    await database.connect()
+    
+    hashed_password = get_password_hash('$admin_password')
+    
+    query = '''
+    INSERT INTO users (username, full_name, email, hashed_password, is_active, is_superuser)
+    VALUES (:username, :full_name, :email, :hashed_password, true, true)
+    ON CONFLICT (username) DO UPDATE SET
+        full_name = EXCLUDED.full_name,
+        email = EXCLUDED.email,
+        hashed_password = EXCLUDED.hashed_password
+    '''
+    
+    await database.execute(query, {
+        'username': '$admin_username',
+        'full_name': '$admin_fullname',
+        'email': '$admin_email',
+        'hashed_password': hashed_password
+    })
+    
+    await database.disconnect()
+    print('Admin user created successfully')
+
+asyncio.run(create_admin())
+"
+EOF
+    
+    success "Admin user created"
+}
+
+print_summary() {
+    echo
+    echo "================================================"
+    echo "🎉 Hybrid DNS Server Installation Complete! 🎉"
+    echo "================================================"
+    echo
+    echo "Services Status:"
+    echo "• BIND9 DNS Server: $(systemctl is-active bind9)"
+    echo "• Backend API: $(systemctl is-active hybrid-dns-backend)"
+    echo "• Monitoring: $(systemctl is-active hybrid-dns-monitor)"
+    echo "• Nginx Web Server: $(systemctl is-active nginx)"
+    echo "• PostgreSQL Database: $(systemctl is-active postgresql)"
+    echo
+    echo "Access Information:"
+    echo "• Web Interface: https://$(hostname -I | awk '{print $1}')"
+    echo "• DNS Server: $(hostname -I | awk '{print $1}'):53"
+    echo "• Installation Directory: $INSTALL_DIR"
+    echo "• Configuration File: $INSTALL_DIR/.env"
+    echo "• Log Files: /var/log/bind/, /var/log/nginx/"
+    echo
+    echo "Useful Commands:"
+    echo "• Check services: systemctl status hybrid-dns-backend"
+    echo "• View logs: journalctl -u hybrid-dns-backend -f"
+    echo "• Restart services: systemctl restart hybrid-dns-backend"
+    echo "• BIND configuration: /etc/bind/"
+    echo "• Manual backup: systemctl start hybrid-dns-backup"
+    echo
+    echo "Security:"
+    echo "• Firewall (UFW): $(ufw status | head -1)"
+    echo "• Fail2ban: $(systemctl is-active fail2ban)"
+    echo "• SSL Certificate: Self-signed (consider using Let's Encrypt)"
+    echo
+    echo "Next Steps:"
+    echo "1. Configure your clients to use this DNS server"
+    echo "2. Set up proper SSL certificates (Let's Encrypt recommended)"
+    echo "3. Configure external threat feed sources"
+    echo "4. Review and customize security settings"
+    echo
+    echo "Documentation: $INSTALL_DIR/README.md"
+    echo "Support: Check the GitHub repository for issues and updates"
+    echo
+    echo "Happy DNS serving! 🚀"
+}
+
+# Main installation process
+main() {
+    echo "🚀 Hybrid DNS Server Installation Script"
+    echo "========================================"
+    echo
+    
+    log "Starting installation at $(date)"
+    
+    check_root
+    check_os
+    check_requirements
+    
+    echo "This will install and configure:"
+    echo "• BIND9 DNS Server with RPZ security"
+    echo "• FastAPI backend with PostgreSQL database"
+    echo "• React frontend with Nginx"
+    echo "• Monitoring and health checks"
+    echo "• Automated backups and security"
+    echo
+    read -p "Continue with installation? (y/N): " -n 1 -r
+    echo
+    
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Installation cancelled."
+        exit 0
+    fi
+    
+    # Installation steps
+    update_system
+    install_dependencies
+    create_user
+    setup_database
+    install_application
+    configure_bind9
+    setup_nginx
+    create_systemd_services
+    setup_firewall
+    setup_fail2ban
+    initialize_database
+    start_services
+    create_admin_user
+    
+    log "Installation completed at $(date)"
+    print_summary
+}
+
+# Run main function
+main "$@"

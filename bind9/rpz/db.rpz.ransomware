@@ -1,0 +1,35 @@
+;
+; Response Policy Zone - Ransomware Protection
+; Hybrid DNS Server - Security Filtering
+;
+$TTL 60
+@       IN  SOA localhost. admin.localhost. (
+            2024081501  ; Serial
+            86400       ; Refresh
+            7200        ; Retry
+            604800      ; Expire
+            60 )        ; Minimum
+
+        IN  NS  localhost.
+
+; CNAME to RPZ-DROP to block ransomware domains
+; These domains are used for ransomware command & control or payment
+
+; Example ransomware domains (populated from threat feeds)
+; ransomware-c2.com            IN CNAME .
+; crypto-locker-payment.net    IN CNAME .
+; wannacry-decrypt.org         IN CNAME .
+; ransomware-tor-proxy.info    IN CNAME .
+
+; Common ransomware infrastructure patterns
+; *.ransomware-family.com      IN CNAME .
+; *.crypto-payment.net         IN CNAME .
+; *.ransom-decrypt.org         IN CNAME .
+
+; Block known ransomware payment processors
+; ransom-bitcoin.com           IN CNAME .
+; crypto-unlock.net            IN CNAME .
+
+; This file will be automatically updated by threat intelligence feeds
+; Last updated: 2024-08-15
+; Total blocked domains: 0 (populated by automation)

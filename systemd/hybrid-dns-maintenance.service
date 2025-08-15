@@ -1,0 +1,30 @@
+[Unit]
+Description=Hybrid DNS Server Maintenance Tasks
+Documentation=https://github.com/user/hybrid-dns-server
+
+[Service]
+Type=oneshot
+User=dns-admin
+Group=dns-admin
+WorkingDirectory=/opt/hybrid-dns-server
+
+# Security
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/hybrid-dns-server
+ReadWritePaths=/var/log/hybrid-dns
+ReadWritePaths=/var/log/bind
+ReadWritePaths=/etc/bind
+
+# Environment
+Environment=DATABASE_URL=postgresql://dns_user:${DB_PASSWORD}@localhost/hybrid_dns
+
+# Maintenance script
+ExecStart=/opt/hybrid-dns-server/scripts/maintenance.sh
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hybrid-dns-maintenance

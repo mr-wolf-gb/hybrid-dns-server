@@ -1,0 +1,41 @@
+;
+; Response Policy Zone - Custom Block List
+; Hybrid DNS Server - Organization-specific Blocking
+;
+$TTL 60
+@       IN  SOA localhost. admin.localhost. (
+            2024081501  ; Serial - automatically updated by web interface
+            86400       ; Refresh
+            7200        ; Retry
+            604800      ; Expire
+            60 )        ; Minimum
+
+        IN  NS  localhost.
+
+; Custom domains blocked by organization policy
+; This file is managed via the web interface
+; Administrators can add/remove domains through the management UI
+
+; Example entries (will be populated via web interface):
+; unwanted-site.com            IN CNAME .
+; *.unwanted-site.com          IN CNAME .
+; time-wasting-site.net        IN CNAME .
+; *.time-wasting-site.net      IN CNAME .
+
+; Alternative actions:
+; Redirect to internal warning page
+; blocked-site.org             IN A 192.168.1.210
+; *.blocked-site.org           IN A 192.168.1.210
+
+; Drop queries (no response)
+; dangerous-site.com           IN CNAME rpz-drop.
+
+; Return NXDOMAIN
+; fake-site.info               IN CNAME rpz-nxdomain.
+
+; === WEB INTERFACE MANAGED SECTION ===
+; Do not manually edit below this line
+; Entries are automatically managed by the web interface
+
+; Last updated via web interface: Never
+; Total custom blocked domains: 0
