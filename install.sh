@@ -907,50 +907,10 @@ start_services() {
 create_admin_user() {
     info "Creating admin user..."
     
-    echo
-    echo "Please create an admin user for the DNS server:"
-    read -p "Username: " admin_username
-    read -s -p "Password: " admin_password
-    echo
-    read -p "Full Name: " admin_fullname
-    read -p "Email: " admin_email
-    
     sudo -u "$SERVICE_USER" bash << EOF
 cd "$INSTALL_DIR/backend"
 source venv/bin/activate
-python -c "
-import asyncio
-from app.core.database import get_database
-from app.core.security import get_password_hash
-from sqlalchemy import text
-
-async def create_admin():
-    database = get_database()
-    await database.connect()
-    
-    hashed_password = get_password_hash('$admin_password')
-    
-    query = '''
-    INSERT INTO users (username, full_name, email, hashed_password, is_active, is_superuser)
-    VALUES (:username, :full_name, :email, :hashed_password, true, true)
-    ON CONFLICT (username) DO UPDATE SET
-        full_name = EXCLUDED.full_name,
-        email = EXCLUDED.email,
-        hashed_password = EXCLUDED.hashed_password
-    '''
-    
-    await database.execute(query, {
-        'username': '$admin_username',
-        'full_name': '$admin_fullname',
-        'email': '$admin_email',
-        'hashed_password': hashed_password
-    })
-    
-    await database.disconnect()
-    print('Admin user created successfully')
-
-asyncio.run(create_admin())
-"
+python create_admin.py
 EOF
     
     success "Admin user created"
