@@ -3,7 +3,13 @@
 # Hybrid DNS Server Installation Script
 # For Debian/Ubuntu systems
 # Author: Scout AI
-# Version: 1.0.0
+# Version: 1.1.0 - Added resume functionality
+#
+# Usage:
+#   sudo ./install.sh           # Start new installation
+#   sudo ./install.sh --resume  # Resume from checkpoint
+#   sudo ./install.sh --fresh   # Force fresh start
+#   sudo ./install.sh --status  # Check installation status
 
 set -euo pipefail
 
@@ -24,8 +30,9 @@ BACKEND_PORT="8000"
 NGINX_AVAILABLE="/etc/nginx/sites-available"
 NGINX_ENABLED="/etc/nginx/sites-enabled"
 
-# Logging
+# Logging and Checkpoints
 LOG_FILE="/tmp/hybrid-dns-install.log"
+CHECKPOINT_FILE="/tmp/hybrid-dns-install.checkpoint"
 
 # Functions
 log() {
@@ -47,6 +54,106 @@ warning() {
 error() {
     echo -e "${RED}[ERROR]${NC} $1" | tee -a "$LOG_FILE"
     exit 1
+}
+
+# Checkpoint functions
+save_checkpoint() {
+    echo "$1" > "$CHECKPOINT_FILE"
+    log "Checkpoint saved: $1"
+}
+
+get_checkpoint() {
+    if [[ -f "$CHECKPOINT_FILE" ]]; then
+        cat "$CHECKPOINT_FILE"
+    else
+        echo "start"
+    fi
+}
+
+clear_checkpoint() {
+    rm -f "$CHECKPOINT_FILE"
+    log "Installation completed - checkpoint cleared"
+}
+
+show_resume_menu() {
+    local current_step=$(get_checkpoint)
+    echo
+    echo "🔄 Previous installation detected!"
+    echo "Last completed step: $current_step"
+    echo
+    echo "Choose an option:"
+    echo "1) Resume from where it left off"
+    echo "2) Start fresh (will clear previous progress)"
+    echo "3) Exit"
+    echo
+    read -p "Enter your choice (1-3): " -n 1 -r
+    echo
+    
+    case $REPLY in
+        1)
+            info "Resuming installation from: $current_step"
+            return 0
+            ;;
+        2)
+            warning "Starting fresh installation..."
+            clear_checkpoint
+            return 0
+            ;;
+        3)
+            echo "Installation cancelled."
+            exit 0
+            ;;
+        *)
+            error "Invalid choice. Please run the script again."
+            ;;
+    esac
+}
+
+run_step() {
+    local step_name="$1"
+    local step_function="$2"
+    local current_checkpoint=$(get_checkpoint)
+    
+    # Define step order
+    local steps=(
+        "start"
+        "system_updated"
+        "dependencies_installed"
+        "user_created"
+        "database_setup"
+        "application_installed"
+        "bind9_configured"
+        "nginx_configured"
+        "systemd_created"
+        "firewall_configured"
+        "fail2ban_configured"
+        "database_initialized"
+        "services_started"
+        "admin_created"
+        "completed"
+    )
+    
+    # Find current step index
+    local current_index=0
+    local target_index=0
+    
+    for i in "${!steps[@]}"; do
+        if [[ "${steps[$i]}" == "$current_checkpoint" ]]; then
+            current_index=$i
+        fi
+        if [[ "${steps[$i]}" == "$step_name" ]]; then
+            target_index=$i
+        fi
+    done
+    
+    # Only run if we haven't passed this step yet
+    if [[ $target_index -gt $current_index ]]; then
+        info "Running step: $step_name"
+        $step_function
+        save_checkpoint "$step_name"
+    else
+        info "Skipping completed step: $step_name"
+    fi
 }
 
 check_root() {
@@ -813,51 +920,122 @@ print_summary() {
     echo "Happy DNS serving! 🚀"
 }
 
+# Command line argument parsing
+parse_arguments() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --resume)
+                if [[ -f "$CHECKPOINT_FILE" ]]; then
+                    info "Resuming installation from checkpoint: $(get_checkpoint)"
+                else
+                    warning "No checkpoint found. Starting fresh installation."
+                fi
+                shift
+                ;;
+            --fresh)
+                warning "Starting fresh installation (clearing any existing checkpoint)"
+                clear_checkpoint
+                shift
+                ;;
+            --status)
+                if [[ -f "$CHECKPOINT_FILE" ]]; then
+                    echo "Installation status: Incomplete"
+                    echo "Last completed step: $(get_checkpoint)"
+                    echo "To resume: sudo $0 --resume"
+                    echo "To start fresh: sudo $0 --fresh"
+                else
+                    echo "Installation status: Not started or completed"
+                    echo "To start: sudo $0"
+                fi
+                exit 0
+                ;;
+            --help|-h)
+                echo "Hybrid DNS Server Installation Script"
+                echo
+                echo "Usage: $0 [OPTIONS]"
+                echo
+                echo "Options:"
+                echo "  --resume    Resume installation from last checkpoint"
+                echo "  --fresh     Start fresh installation (clear checkpoint)"
+                echo "  --status    Show installation status"
+                echo "  --help, -h  Show this help message"
+                echo
+                echo "Examples:"
+                echo "  sudo $0                # Start new installation"
+                echo "  sudo $0 --resume       # Resume from checkpoint"
+                echo "  sudo $0 --fresh        # Force fresh start"
+                echo "  sudo $0 --status       # Check status"
+                exit 0
+                ;;
+            *)
+                warning "Unknown option: $1"
+                echo "Use --help for usage information"
+                exit 1
+                ;;
+        esac
+    done
+}
+
 # Main installation process
 main() {
     echo "🚀 Hybrid DNS Server Installation Script"
     echo "========================================"
     echo
     
-    log "Starting installation at $(date)"
+    # Check for previous installation
+    if [[ -f "$CHECKPOINT_FILE" ]]; then
+        show_resume_menu
+    fi
+    
+    log "Starting/resuming installation at $(date)"
     
     check_root
     check_os
     check_requirements
     
-    echo "This will install and configure:"
-    echo "• BIND9 DNS Server with RPZ security"
-    echo "• FastAPI backend with PostgreSQL database"
-    echo "• React frontend with Nginx"
-    echo "• Monitoring and health checks"
-    echo "• Automated backups and security"
-    echo
-    read -p "Continue with installation? (y/N): " -n 1 -r
-    echo
-    
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Installation cancelled."
-        exit 0
+    local current_checkpoint=$(get_checkpoint)
+    if [[ "$current_checkpoint" == "start" ]]; then
+        echo "This will install and configure:"
+        echo "• BIND9 DNS Server with RPZ security"
+        echo "• FastAPI backend with PostgreSQL database"
+        echo "• React frontend with Nginx"
+        echo "• Monitoring and health checks"
+        echo "• Automated backups and security"
+        echo
+        read -p "Continue with installation? (y/N): " -n 1 -r
+        echo
+        
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "Installation cancelled."
+            exit 0
+        fi
+    else
+        info "Resuming installation from checkpoint: $current_checkpoint"
     fi
     
-    # Installation steps
-    update_system
-    install_dependencies
-    create_user
-    setup_database
-    install_application
-    configure_bind9
-    setup_nginx
-    create_systemd_services
-    setup_firewall
-    setup_fail2ban
-    initialize_database
-    start_services
-    create_admin_user
+    # Installation steps with checkpoint support
+    run_step "system_updated" update_system
+    run_step "dependencies_installed" install_dependencies
+    run_step "user_created" create_user
+    run_step "database_setup" setup_database
+    run_step "application_installed" install_application
+    run_step "bind9_configured" configure_bind9
+    run_step "nginx_configured" setup_nginx
+    run_step "systemd_created" create_systemd_services
+    run_step "firewall_configured" setup_firewall
+    run_step "fail2ban_configured" setup_fail2ban
+    run_step "database_initialized" initialize_database
+    run_step "services_started" start_services
+    run_step "admin_created" create_admin_user
+    
+    # Mark as completed and clean up
+    save_checkpoint "completed"
+    clear_checkpoint
     
     log "Installation completed at $(date)"
     print_summary
 }
 
-# Run main function
-main "$@"
+# Parse command line arguments and run main function
+parse_arguments "$@"
+main
