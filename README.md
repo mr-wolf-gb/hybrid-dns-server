@@ -68,7 +68,7 @@ A production-ready hybrid DNS server solution running on Linux (Debian/Ubuntu), 
 
 1. **Download and run the installation script:**
    ```bash
-   wget https://github.com/user/hybrid-dns-server/raw/main/install.sh
+   wget https://github.com/mr-wolf-gb/hybrid-dns-server/raw/main/install.sh
    chmod +x install.sh
    sudo ./install.sh
    ```
@@ -88,7 +88,7 @@ A production-ready hybrid DNS server solution running on Linux (Debian/Ubuntu), 
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/user/hybrid-dns-server.git
+   git clone https://github.com/mr-wolf-gb/hybrid-dns-server.git
    cd hybrid-dns-server
    ```
 
@@ -340,7 +340,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 ### Development Setup
 ```bash
 # Clone repository
-git clone https://github.com/user/hybrid-dns-server.git
+git clone https://github.com/mr-wolf-gb/hybrid-dns-server.git
 cd hybrid-dns-server
 
 # Backend development
@@ -363,8 +363,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🆘 Support
 
 ### Community Support
-- [GitHub Issues](https://github.com/user/hybrid-dns-server/issues) - Bug reports and feature requests
-- [Discussions](https://github.com/user/hybrid-dns-server/discussions) - Community Q&A
+- [GitHub Issues](https://github.com/mr-wolf-gb/hybrid-dns-server/issues) - Bug reports and feature requests
+- [Discussions](https://github.com/mr-wolf-gb/hybrid-dns-server/discussions) - Community Q&A
 - [Documentation](docs/) - Comprehensive guides and tutorials
 
 ### Commercial Support
