@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     
     # Security
     SECRET_KEY: str = Field(..., description="Secret key for JWT tokens")
+    JWT_SECRET_KEY: str = Field(..., description="JWT secret key")
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
@@ -32,7 +36,16 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./dns_server.db"
     DATABASE_ECHO: bool = False
     
+    # Server Configuration
+    BACKEND_HOST: str = "0.0.0.0"
+    BACKEND_PORT: int = 8000
+    FRONTEND_PORT: int = 3000
+    
     # BIND9 Configuration
+    BIND_CONFIG_DIR: str = "/etc/bind"
+    BIND_ZONES_DIR: str = "/etc/bind/zones"
+    BIND_RPZ_DIR: str = "/etc/bind/rpz"
+    BIND_SERVICE_NAME: str = "bind9"
     BIND9_CONFIG_DIR: str = "/etc/bind"
     BIND9_ZONES_DIR: str = "/etc/bind/zones"
     BIND9_RPZ_DIR: str = "/etc/bind/rpz" 
@@ -53,6 +66,8 @@ class Settings(BaseSettings):
     DEFAULT_MINIMUM: int = 86400
     
     # Monitoring and Health Checks
+    MONITORING_ENABLED: bool = True
+    MONITORING_INTERVAL: int = 60
     HEALTH_CHECK_INTERVAL: int = 60  # seconds
     DNS_QUERY_TIMEOUT: int = 5  # seconds
     BIND_STATS_URL: str = "http://127.0.0.1:8053"
@@ -66,12 +81,15 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_REQUESTS: int = 100
     RATE_LIMIT_WINDOW: int = 60  # seconds
+    RATE_LIMIT_PER_MINUTE: int = 100
     
     # Authentication
     ENABLE_2FA: bool = True
     SESSION_TIMEOUT: int = 3600  # seconds
     MAX_LOGIN_ATTEMPTS: int = 5
     LOCKOUT_DURATION: int = 900  # seconds
+    TOTP_ISSUER_NAME: str = "Hybrid DNS Server"
+    TOTP_VALID_WINDOW: int = 1
     
     # Background Tasks
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -91,6 +109,7 @@ class Settings(BaseSettings):
     BACKUP_INTERVAL: int = 86400  # seconds (daily)
     BACKUP_RETENTION_DAYS: int = 30
     BACKUP_DIR: str = "/var/backups/dns-server"
+    BACKUP_SCHEDULE: str = "0 2 * * *"
     
     # Email Notifications (optional)
     SMTP_HOST: Optional[str] = None
@@ -143,6 +162,7 @@ class Settings(BaseSettings):
         env_file = [".env", "../.env"]
         env_file_encoding = "utf-8"
         case_sensitive = True
+        extra = "ignore"  # Allow extra environment variables
 
 
 @lru_cache()
