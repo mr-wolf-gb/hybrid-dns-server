@@ -22,11 +22,23 @@ logger = logging.getLogger(__name__)
 
 class DNSMonitor:
     def __init__(self):
-        self.db_host = os.getenv('DB_HOST', 'postgres')
-        self.db_port = os.getenv('DB_PORT', 5432)
-        self.db_name = os.getenv('DB_NAME', 'hybrid_dns')
-        self.db_user = os.getenv('DB_USER', 'dns_user')
-        self.db_password = os.getenv('DB_PASSWORD', 'dns_password')
+        # Parse DATABASE_URL if available
+        database_url = os.getenv('DATABASE_URL')
+        if database_url:
+            # Parse postgresql://user:password@host:port/database
+            import re
+            match = re.match(r'postgresql://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)', database_url)
+            if match:
+                self.db_user, self.db_password, self.db_host, self.db_port, self.db_name = match.groups()
+                self.db_port = int(self.db_port)
+            else:
+                raise ValueError(f"Invalid DATABASE_URL format: {database_url}")
+        else:
+            self.db_host = os.getenv('DB_HOST', 'localhost')
+            self.db_port = int(os.getenv('DB_PORT', 5432))
+            self.db_name = os.getenv('DB_NAME', 'hybrid_dns')
+            self.db_user = os.getenv('DB_USER', 'dns_user')
+            self.db_password = os.getenv('DB_PASSWORD', 'dns_password')
         self.log_file = Path('/var/log/bind/queries.log')
         self.security_log = Path('/var/log/bind/security.log')
         

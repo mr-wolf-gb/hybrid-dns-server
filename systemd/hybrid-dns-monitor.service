@@ -2,8 +2,7 @@
 Description=Hybrid DNS Server Monitoring Service
 Documentation=https://github.com/user/hybrid-dns-server
 After=network.target postgresql.service bind9.service
-Requires=postgresql.service
-Wants=bind9.service
+Wants=postgresql.service bind9.service
 
 [Service]
 Type=exec
@@ -12,11 +11,7 @@ Group=dns-admin
 WorkingDirectory=/opt/hybrid-dns-server/monitoring
 
 # Environment
-Environment=DB_HOST=localhost
-Environment=DB_PORT=5432
-Environment=DB_NAME=hybrid_dns
-Environment=DB_USER=dns_user
-Environment=DB_PASSWORD=${DB_PASSWORD}
+EnvironmentFile=/opt/hybrid-dns-server/.env
 
 # Security
 NoNewPrivileges=yes
@@ -31,7 +26,7 @@ LimitNOFILE=1024
 TasksMax=100
 
 # Start command
-ExecStart=/opt/hybrid-dns-server/monitoring/venv/bin/python monitor.py
+ExecStart=/opt/hybrid-dns-server/backend/venv/bin/python /opt/hybrid-dns-server/monitoring/simple_monitor.py
 KillMode=mixed
 Restart=on-failure
 RestartSec=10
