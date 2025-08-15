@@ -267,6 +267,10 @@ create_user() {
     else
         info "User $SERVICE_USER already exists"
     fi
+    
+    # Add www-data to dns-server group for file access
+    usermod -a -G "$SERVICE_USER" www-data
+    info "Added www-data to $SERVICE_USER group"
 }
 
 setup_database() {
@@ -376,8 +380,11 @@ install_application() {
         download_application
     fi
     
-    # Set ownership
+    # Set ownership and basic permissions
     chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
+    # Ensure directories are accessible by nginx (www-data needs execute permission on directories)
+    chmod 755 "$INSTALL_DIR"
+    find "$INSTALL_DIR" -type d -exec chmod 755 {} \;
     
     # Install Python dependencies
     info "Installing Python dependencies..."
@@ -396,6 +403,23 @@ cd "$INSTALL_DIR/frontend"
 npm install
 npm run build
 EOF
+    
+    # Fix permissions for nginx to access frontend files
+    info "Setting proper permissions for web files..."
+    if [[ -d "$INSTALL_DIR/frontend/dist" ]]; then
+        # Set proper ownership and permissions for nginx access
+        # nginx (www-data) needs read access to files and execute access to directories
+        chown -R "$SERVICE_USER:www-data" "$INSTALL_DIR/frontend/dist"
+        find "$INSTALL_DIR/frontend/dist" -type d -exec chmod 755 {} \;
+        find "$INSTALL_DIR/frontend/dist" -type f -exec chmod 644 {} \;
+        
+        # Ensure parent directories are accessible
+        chmod 755 "$INSTALL_DIR/frontend"
+        
+        success "Frontend file permissions set correctly"
+    else
+        error "Frontend dist directory not found - frontend build failed"
+    fi
     
     success "Application installed"
 }
@@ -493,6 +517,11 @@ configure_bind9() {
 
 setup_nginx() {
     info "Configuring Nginx..."
+    
+    # Verify frontend files exist before configuring nginx
+    if [[ ! -f "$INSTALL_DIR/frontend/dist/index.html" ]]; then
+        error "Frontend files not found at $INSTALL_DIR/frontend/dist/index.html. Please ensure frontend build completed successfully."
+    fi
     
     # Generate SSL certificate (self-signed for now)
     mkdir -p /etc/nginx/ssl
@@ -622,6 +651,14 @@ EOF
     # Restart Nginx
     systemctl restart nginx
     systemctl enable nginx
+    
+    # Verify nginx can access frontend files
+    info "Verifying nginx can access frontend files..."
+    if sudo -u www-data test -r "$INSTALL_DIR/frontend/dist/index.html"; then
+        success "Frontend files are accessible by nginx"
+    else
+        error "Frontend files are not accessible by nginx. Check permissions manually."
+    fi
     
     success "Nginx configured"
 }
