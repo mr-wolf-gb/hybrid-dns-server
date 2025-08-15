@@ -9,11 +9,11 @@ from pathlib import Path
 
 from .config import get_settings
 
-settings = get_settings()
-
 
 def setup_logging():
     """Configure application logging"""
+    
+    settings = get_settings()
     
     # Create logs directory if it doesn't exist
     if settings.LOG_FILE:

@@ -25,9 +25,6 @@ from ...schemas.auth import (
     UserInfo
 )
 
-settings = get_settings()
-logger = get_security_logger()
-
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 security = HTTPBearer()

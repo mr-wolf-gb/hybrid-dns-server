@@ -846,16 +846,7 @@ initialize_database() {
     sudo -u "$SERVICE_USER" bash << EOF
 cd "$INSTALL_DIR/backend"
 source venv/bin/activate
-python -c "
-import asyncio
-from app.core.database import init_db
-
-async def main():
-    await init_db()
-    print('Database initialized successfully')
-
-asyncio.run(main())
-"
+python init_db.py
 EOF
     
     success "Database initialized"

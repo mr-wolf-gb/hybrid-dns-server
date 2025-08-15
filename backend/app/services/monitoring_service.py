@@ -14,15 +14,13 @@ from ..core.config import get_settings
 from ..core.database import database
 from ..core.logging_config import get_monitoring_logger
 
-settings = get_settings()
-logger = get_monitoring_logger()
-
 
 class MonitoringService:
     """DNS monitoring and log parsing service"""
     
     def __init__(self):
         self.running = False
+        settings = get_settings()
         self.query_log_path = settings.log_dir / "query.log"
         self.rpz_log_path = settings.log_dir / "rpz.log"
         self.last_position = 0
@@ -30,6 +28,7 @@ class MonitoringService:
     async def start(self) -> None:
         """Start monitoring service"""
         self.running = True
+        logger = get_monitoring_logger()
         logger.info("Starting monitoring service")
         
         # Start background tasks
@@ -41,6 +40,7 @@ class MonitoringService:
     async def stop(self) -> None:
         """Stop monitoring service"""
         self.running = False
+        logger = get_monitoring_logger()
         logger.info("Monitoring service stopped")
     
     async def _monitor_query_logs(self):
@@ -51,6 +51,7 @@ class MonitoringService:
                 await asyncio.sleep(1)  # Check every second
                 
             except Exception as e:
+                logger = get_monitoring_logger()
                 logger.error(f"Error monitoring query logs: {e}")
                 await asyncio.sleep(5)  # Wait longer on error
     
@@ -69,6 +70,7 @@ class MonitoringService:
                 await self._process_query_log_line(line.strip())
                 
         except Exception as e:
+            logger = get_monitoring_logger()
             logger.error(f"Error parsing query log: {e}")
     
     async def _process_query_log_line(self, line: str):
@@ -111,6 +113,7 @@ class MonitoringService:
             })
             
         except Exception as e:
+            logger = get_monitoring_logger()
             logger.error(f"Error processing query log line: {e}")
     
     async def _check_if_blocked(self, domain: str, timestamp: datetime) -> bool:
@@ -175,6 +178,7 @@ class MonitoringService:
                 await asyncio.sleep(60)  # Collect metrics every minute
                 
             except Exception as e:
+                logger = get_monitoring_logger()
                 logger.error(f"Error collecting system metrics: {e}")
                 await asyncio.sleep(60)
     
@@ -207,6 +211,7 @@ class MonitoringService:
             }
             
         except Exception as e:
+            logger = get_monitoring_logger()
             logger.error(f"Error getting query statistics: {e}")
             return {}
     
@@ -228,5 +233,6 @@ class MonitoringService:
             return [dict(domain) for domain in domains]
             
         except Exception as e:
+            logger = get_monitoring_logger()
             logger.error(f"Error getting top domains: {e}")
             return []

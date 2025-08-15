@@ -33,9 +33,6 @@ from app.services.bind_service import BindService
 from app.services.monitoring_service import MonitoringService
 from app.services.health_service import HealthService
 
-# Initialize settings
-settings = get_settings()
-
 # Initialize rate limiter
 limiter = Limiter(key_func=get_remote_address)
 
@@ -73,35 +70,44 @@ async def lifespan(app: FastAPI):
 
 
 # Create FastAPI application
-app = FastAPI(
-    title="Hybrid DNS Server API",
-    description="Production-ready DNS server management API with BIND9 backend",
-    version="1.0.0",
-    docs_url="/docs" if settings.DEBUG else None,
-    redoc_url="/redoc" if settings.DEBUG else None,
-    lifespan=lifespan
-)
+def create_app():
+    settings = get_settings()
+    return FastAPI(
+        title="Hybrid DNS Server API",
+        description="Production-ready DNS server management API with BIND9 backend",
+        version="1.0.0",
+        docs_url="/docs" if settings.DEBUG else None,
+        redoc_url="/redoc" if settings.DEBUG else None,
+        lifespan=lifespan
+    )
+
+app = create_app()
 
 # Add rate limiting middleware
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.ALLOWED_HOSTS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-)
-
-# Add trusted host middleware for production
-if not settings.DEBUG:
+# Configure CORS and middleware
+def setup_middleware():
+    settings = get_settings()
+    
     app.add_middleware(
-        TrustedHostMiddleware, 
-        allowed_hosts=settings.ALLOWED_HOSTS
+        CORSMiddleware,
+        allow_origins=settings.ALLOWED_HOSTS,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
     )
+
+    # Add trusted host middleware for production
+    if not settings.DEBUG:
+        app.add_middleware(
+            TrustedHostMiddleware, 
+            allowed_hosts=settings.ALLOWED_HOSTS
+        )
+
+setup_middleware()
 
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")
@@ -115,6 +121,7 @@ if static_dir.exists():
 @app.get("/", include_in_schema=False)
 async def root():
     """Root endpoint - basic API info"""
+    settings = get_settings()
     return {
         "name": "Hybrid DNS Server API",
         "version": "1.0.0",

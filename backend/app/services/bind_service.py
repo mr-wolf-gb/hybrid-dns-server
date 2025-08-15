@@ -11,14 +11,12 @@ from typing import Dict, List, Optional
 from ..core.config import get_settings
 from ..core.logging_config import get_bind_logger
 
-settings = get_settings()
-logger = get_bind_logger()
-
 
 class BindService:
     """BIND9 service management"""
     
     def __init__(self):
+        settings = get_settings()
         self.service_name = settings.BIND9_SERVICE_NAME
         self.config_dir = settings.config_dir
         self.zones_dir = settings.zones_dir
@@ -54,6 +52,7 @@ class BindService:
             }
             
         except Exception as e:
+            logger = get_bind_logger()
             logger.error(f"Failed to get BIND service status: {e}")
             return {
                 "status": "unknown",
@@ -66,6 +65,7 @@ class BindService:
     
     async def start_service(self) -> bool:
         """Start BIND9 service"""
+        logger = get_bind_logger()
         try:
             result = await self._run_command(["systemctl", "start", self.service_name])
             success = result["returncode"] == 0
@@ -83,6 +83,7 @@ class BindService:
     
     async def stop_service(self) -> bool:
         """Stop BIND9 service"""
+        logger = get_bind_logger()
         try:
             result = await self._run_command(["systemctl", "stop", self.service_name])
             success = result["returncode"] == 0
@@ -100,6 +101,7 @@ class BindService:
     
     async def reload_service(self) -> bool:
         """Reload BIND9 configuration"""
+        logger = get_bind_logger()
         try:
             result = await self._run_command(["rndc", "reload"])
             success = result["returncode"] == 0
@@ -117,6 +119,7 @@ class BindService:
     
     async def validate_configuration(self) -> bool:
         """Validate BIND9 configuration"""
+        logger = get_bind_logger()
         try:
             result = await self._run_command(["named-checkconf"])
             is_valid = result["returncode"] == 0
@@ -132,9 +135,11 @@ class BindService:
     
     async def get_statistics(self) -> Dict:
         """Get BIND9 statistics"""
+        logger = get_bind_logger()
         try:
             # Try to get statistics from BIND's statistics channel
             import httpx
+            settings = get_settings()
             
             async with httpx.AsyncClient() as client:
                 response = await client.get(f"{settings.BIND_STATS_URL}/json/v1/server")
@@ -149,6 +154,7 @@ class BindService:
     
     async def flush_cache(self) -> bool:
         """Flush DNS cache"""
+        logger = get_bind_logger()
         try:
             result = await self._run_command(["rndc", "flush"])
             success = result["returncode"] == 0
@@ -185,6 +191,7 @@ class BindService:
             }
             
         except asyncio.TimeoutError:
+            logger = get_bind_logger()
             logger.error(f"Command timed out: {' '.join(command)}")
             return {
                 "returncode": -1,
@@ -192,6 +199,7 @@ class BindService:
                 "stderr": "Command timed out"
             }
         except Exception as e:
+            logger = get_bind_logger()
             logger.error(f"Command failed: {' '.join(command)}: {e}")
             return {
                 "returncode": -1,

@@ -16,9 +16,6 @@ from passlib.context import CryptContext
 from .config import get_settings
 from .logging_config import get_security_logger
 
-settings = get_settings()
-logger = get_security_logger()
-
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -41,6 +38,8 @@ def generate_random_password(length: int = 12) -> str:
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     """Create JWT access token"""
+    settings = get_settings()
+    logger = get_security_logger()
     to_encode = data.copy()
     
     if expires_delta:
@@ -57,6 +56,8 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
 
 def create_refresh_token(data: Dict[str, Any]) -> str:
     """Create JWT refresh token"""
+    settings = get_settings()
+    logger = get_security_logger()
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode.update({"exp": expire, "type": "refresh"})
@@ -69,6 +70,8 @@ def create_refresh_token(data: Dict[str, Any]) -> str:
 
 def verify_token(token: str) -> Optional[Dict[str, Any]]:
     """Verify and decode JWT token"""
+    settings = get_settings()
+    logger = get_security_logger()
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         return payload
@@ -172,11 +175,13 @@ def is_account_locked(failed_attempts: int, locked_until: Optional[datetime]) ->
     if locked_until and datetime.utcnow() < locked_until:
         return True
     
+    settings = get_settings()
     return failed_attempts >= settings.MAX_LOGIN_ATTEMPTS
 
 
 def calculate_lockout_time(failed_attempts: int) -> datetime:
     """Calculate account lockout time based on failed attempts"""
+    settings = get_settings()
     if failed_attempts >= settings.MAX_LOGIN_ATTEMPTS:
         return datetime.utcnow() + timedelta(seconds=settings.LOCKOUT_DURATION)
     return None

@@ -12,9 +12,6 @@ from ..core.config import get_settings
 from ..core.database import database
 from ..core.logging_config import get_health_logger
 
-settings = get_settings()
-logger = get_health_logger()
-
 
 class HealthService:
     """Health monitoring for DNS forwarders and system components"""
@@ -25,6 +22,7 @@ class HealthService:
     async def start(self) -> None:
         """Start health monitoring service"""
         self.running = True
+        logger = get_health_logger()
         logger.info("Starting health monitoring service")
         
         # Start background health checks
@@ -35,6 +33,7 @@ class HealthService:
     async def stop(self) -> None:
         """Stop health monitoring service"""
         self.running = False
+        logger = get_health_logger()
         logger.info("Health monitoring service stopped")
     
     async def _monitor_forwarders(self):
@@ -42,9 +41,11 @@ class HealthService:
         while self.running:
             try:
                 await self._check_all_forwarders()
+                settings = get_settings()
                 await asyncio.sleep(settings.HEALTH_CHECK_INTERVAL)
                 
             except Exception as e:
+                logger = get_health_logger()
                 logger.error(f"Error monitoring forwarders: {e}")
                 await asyncio.sleep(60)
     
@@ -65,12 +66,14 @@ class HealthService:
                     # TODO: Store health check results in database
                     
         except Exception as e:
+            logger = get_health_logger()
             logger.error(f"Error checking forwarders: {e}")
     
     async def _check_dns_server(self, server_ip: str, port: int = 53) -> bool:
         """Check if a DNS server is responding"""
         try:
             # Simple TCP connection test to DNS port
+            settings = get_settings()
             future = asyncio.open_connection(server_ip, port)
             reader, writer = await asyncio.wait_for(future, timeout=settings.DNS_QUERY_TIMEOUT)
             
@@ -107,5 +110,6 @@ class HealthService:
             return health_status
             
         except Exception as e:
+            logger = get_health_logger()
             logger.error(f"Error getting forwarder health: {e}")
             return []

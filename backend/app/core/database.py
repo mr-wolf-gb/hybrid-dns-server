@@ -16,29 +16,10 @@ from sqlalchemy.orm import sessionmaker
 from .config import get_settings
 from .logging_config import get_logger
 
-settings = get_settings()
-logger = get_logger(__name__)
+# Database setup will be initialized when needed
+engine = None
 
-# Database URL setup
-if settings.DATABASE_URL.startswith("sqlite"):
-    # For SQLite, use aiosqlite for async operations
-    database_url = settings.DATABASE_URL.replace("sqlite://", "sqlite+aiosqlite://")
-elif settings.DATABASE_URL.startswith("postgresql"):
-    # For PostgreSQL, use asyncpg for async operations
-    database_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
-else:
-    database_url = settings.DATABASE_URL
-
-# SQLAlchemy setup
-engine = create_async_engine(
-    database_url,
-    echo=settings.DATABASE_ECHO,
-    future=True
-)
-
-async_session = sessionmaker(
-    engine, class_=AsyncSession, expire_on_commit=False
-)
+async_session = None
 
 # Base class for models
 Base = declarative_base()
@@ -182,8 +163,39 @@ audit_logs_table = Table(
 )
 
 
+def _initialize_database_engine():
+    """Initialize database engine and session maker"""
+    global engine, async_session
+    
+    if engine is None:
+        settings = get_settings()
+        
+        # Database URL setup
+        if settings.DATABASE_URL.startswith("sqlite"):
+            # For SQLite, use aiosqlite for async operations
+            database_url = settings.DATABASE_URL.replace("sqlite://", "sqlite+aiosqlite://")
+        elif settings.DATABASE_URL.startswith("postgresql"):
+            # For PostgreSQL, use asyncpg for async operations
+            database_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+        else:
+            database_url = settings.DATABASE_URL
+
+        # SQLAlchemy setup
+        engine = create_async_engine(
+            database_url,
+            echo=settings.DATABASE_ECHO,
+            future=True
+        )
+
+        async_session = sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
+        )
+
+
 async def get_database_session() -> AsyncGenerator[AsyncSession, None]:
     """Get database session for dependency injection"""
+    _initialize_database_engine()
+    
     async with async_session() as session:
         try:
             yield session
@@ -193,6 +205,8 @@ async def get_database_session() -> AsyncGenerator[AsyncSession, None]:
 
 async def init_database():
     """Initialize database tables and create default data"""
+    _initialize_database_engine()
+    logger = get_logger(__name__)
     logger.info("Initializing database...")
     
     try:
@@ -214,6 +228,8 @@ async def create_default_admin():
     """Create default admin user if none exists"""
     from passlib.context import CryptContext
     
+    _initialize_database_engine()
+    logger = get_logger(__name__)
     pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
     
     async with async_session() as session:
@@ -248,5 +264,7 @@ async def create_default_admin():
 
 async def close_database():
     """Close database connection"""
-    await engine.dispose()
-    logger.info("Database connection closed")
+    if engine is not None:
+        await engine.dispose()
+        logger = get_logger(__name__)
+        logger.info("Database connection closed")
