@@ -93,7 +93,6 @@ options {
     disable-empty-zone "1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.IP6.ARPA";
     
     // Performance Tuning
-    cleaning-interval 60;       // Clean cache every 60 minutes
     interface-interval 60;      // Scan network interfaces every 60 minutes
     max-cache-size 256M;        // Maximum cache size
     

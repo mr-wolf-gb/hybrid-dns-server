@@ -3,6 +3,7 @@ Health monitoring service for DNS forwarders and system health
 """
 
 import asyncio
+import json
 import socket
 from datetime import datetime
 from typing import Dict, List
@@ -21,7 +22,7 @@ class HealthService:
     def __init__(self):
         self.running = False
     
-    async def start(self):
+    async def start(self) -> None:
         """Start health monitoring service"""
         self.running = True
         logger.info("Starting health monitoring service")
@@ -31,7 +32,7 @@ class HealthService:
         
         logger.info("Health monitoring service started")
     
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop health monitoring service"""
         self.running = False
         logger.info("Health monitoring service stopped")
@@ -58,7 +59,7 @@ class HealthService:
             """)
             
             for forwarder in forwarders:
-                servers = eval(forwarder["servers"])  # JSON array stored as string
+                servers = json.loads(forwarder["servers"])  # JSON array stored as string
                 for server_ip in servers:
                     is_healthy = await self._check_dns_server(server_ip)
                     # TODO: Store health check results in database
@@ -97,7 +98,7 @@ class HealthService:
                     "id": forwarder["id"],
                     "domain": forwarder["domain"],
                     "type": forwarder["forwarder_type"],
-                    "servers": eval(forwarder["servers"]),
+                    "servers": json.loads(forwarder["servers"]),
                     "status": "healthy",  # Placeholder
                     "last_check": datetime.utcnow().isoformat(),
                     "response_time": 50  # Placeholder

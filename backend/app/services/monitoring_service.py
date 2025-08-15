@@ -27,7 +27,7 @@ class MonitoringService:
         self.rpz_log_path = settings.log_dir / "rpz.log"
         self.last_position = 0
     
-    async def start(self):
+    async def start(self) -> None:
         """Start monitoring service"""
         self.running = True
         logger.info("Starting monitoring service")
@@ -38,7 +38,7 @@ class MonitoringService:
         
         logger.info("Monitoring service started")
     
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop monitoring service"""
         self.running = False
         logger.info("Monitoring service stopped")
