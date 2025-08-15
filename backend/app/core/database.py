@@ -5,10 +5,9 @@ Database configuration and management for Hybrid DNS Server API
 import asyncio
 from typing import AsyncGenerator
 
-from databases import Database
 from sqlalchemy import (
     Boolean, Column, DateTime, Integer, MetaData, String, Text, Table,
-    create_engine, func
+    create_engine, func, text
 )
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.ext.declarative import declarative_base
@@ -24,6 +23,9 @@ logger = get_logger(__name__)
 if settings.DATABASE_URL.startswith("sqlite"):
     # For SQLite, use aiosqlite for async operations
     database_url = settings.DATABASE_URL.replace("sqlite://", "sqlite+aiosqlite://")
+elif settings.DATABASE_URL.startswith("postgresql"):
+    # For PostgreSQL, use asyncpg for async operations
+    database_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
 else:
     database_url = settings.DATABASE_URL
 
@@ -37,9 +39,6 @@ engine = create_async_engine(
 async_session = sessionmaker(
     engine, class_=AsyncSession, expire_on_commit=False
 )
-
-# Database connection for direct queries
-database = Database(database_url)
 
 # Base class for models
 Base = declarative_base()
@@ -197,15 +196,9 @@ async def init_database():
     logger.info("Initializing database...")
     
     try:
-        # Connect to database
-        await database.connect()
-        
-        # Create tables
-        from sqlalchemy import create_engine as sync_create_engine
-        sync_engine = sync_create_engine(
-            settings.DATABASE_URL.replace("+aiosqlite", "")
-        )
-        metadata.create_all(sync_engine)
+        # Create tables using async engine
+        async with engine.begin() as conn:
+            await conn.run_sync(metadata.create_all)
         
         # Create default admin user if it doesn't exist
         await create_default_admin()
@@ -223,35 +216,37 @@ async def create_default_admin():
     
     pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
     
-    # Check if any users exist
-    query = "SELECT COUNT(*) as count FROM users"
-    result = await database.fetch_one(query)
-    
-    if result["count"] == 0:
-        # Create default admin user
-        hashed_password = pwd_context.hash("changeme123")
+    async with async_session() as session:
+        # Check if any users exist
+        result = await session.execute(text("SELECT COUNT(*) as count FROM users"))
+        count = result.scalar()
         
-        insert_query = """
-        INSERT INTO users (username, email, hashed_password, is_active, is_superuser)
-        VALUES (:username, :email, :hashed_password, :is_active, :is_superuser)
-        """
-        
-        await database.execute(
-            insert_query,
-            {
-                "username": "admin",
-                "email": "admin@localhost",
-                "hashed_password": hashed_password,
-                "is_active": True,
-                "is_superuser": True
-            }
-        )
-        
-        logger.info("Created default admin user (username: admin, password: changeme123)")
-        logger.warning("⚠️  Please change the default admin password immediately!")
+        if count == 0:
+            # Create default admin user
+            hashed_password = pwd_context.hash("changeme123")
+            
+            insert_query = text("""
+            INSERT INTO users (username, email, hashed_password, is_active, is_superuser)
+            VALUES (:username, :email, :hashed_password, :is_active, :is_superuser)
+            """)
+            
+            await session.execute(
+                insert_query,
+                {
+                    "username": "admin",
+                    "email": "admin@localhost",
+                    "hashed_password": hashed_password,
+                    "is_active": True,
+                    "is_superuser": True
+                }
+            )
+            await session.commit()
+            
+            logger.info("Created default admin user (username: admin, password: changeme123)")
+            logger.warning("⚠️  Please change the default admin password immediately!")
 
 
 async def close_database():
     """Close database connection"""
-    await database.disconnect()
+    await engine.dispose()
     logger.info("Database connection closed")
