@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
 """
 Standalone admin user creation script
+
+Usage:
+    python create_admin.py [--username USERNAME] [--password PASSWORD] [--email EMAIL] [--full-name FULLNAME]
+    
+Environment variables:
+    ADMIN_USERNAME - Default admin username
+    ADMIN_PASSWORD - Default admin password  
+    ADMIN_EMAIL - Default admin email
+    ADMIN_FULL_NAME - Default admin full name
 """
 
+import argparse
 import asyncio
 import getpass
 import os
@@ -38,24 +48,47 @@ elif env_file_current.exists():
 else:
     print("Warning: No .env file found in current or parent directory")
 
-async def create_admin_user():
+def get_user_input(args):
+    """Get user input from args, environment variables, or interactive input"""
+    username = args.username or os.getenv('ADMIN_USERNAME')
+    password = args.password or os.getenv('ADMIN_PASSWORD')
+    email = args.email or os.getenv('ADMIN_EMAIL')
+    full_name = args.full_name or os.getenv('ADMIN_FULL_NAME', '')
+    
+    # If running interactively and missing values, prompt for them
+    if sys.stdin.isatty() and (not username or not password or not email):
+        print("\nPlease create an admin user for the DNS server:")
+        if not username:
+            username = input("Username: ")
+        if not password:
+            password = getpass.getpass("Password: ")
+        if not full_name:
+            full_name = input("Full Name (optional): ")
+        if not email:
+            email = input("Email: ")
+    elif not sys.stdin.isatty():
+        # Non-interactive mode - all values should be provided via args or env
+        print(f"Creating admin user in non-interactive mode:")
+        print(f"Username: {username}")
+        print(f"Email: {email}")
+        print(f"Full Name: {full_name}")
+    
+    if not username or not password or not email:
+        if not sys.stdin.isatty():
+            print("Error: In non-interactive mode, username, password, and email must be provided via arguments or environment variables")
+        else:
+            print("Error: Username, password, and email are required")
+        sys.exit(1)
+    
+    return username, password, full_name, email
+
+async def create_admin_user(username, password, full_name, email):
     """Create admin user"""
     try:
         # Import here to avoid early loading of settings
         from app.core.database import get_database_session
         from passlib.context import CryptContext
         from sqlalchemy import text
-        
-        # Get user input
-        print("\nPlease create an admin user for the DNS server:")
-        username = input("Username: ")
-        password = getpass.getpass("Password: ")
-        full_name = input("Full Name: ")
-        email = input("Email: ")
-        
-        if not username or not password or not email:
-            print("Error: Username, password, and email are required")
-            sys.exit(1)
         
         pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
         hashed_password = pwd_context.hash(password)
@@ -116,4 +149,13 @@ async def create_admin_user():
         sys.exit(1)
 
 if __name__ == "__main__":
-    asyncio.run(create_admin_user())
+    parser = argparse.ArgumentParser(description='Create admin user for DNS server')
+    parser.add_argument('--username', help='Admin username')
+    parser.add_argument('--password', help='Admin password')
+    parser.add_argument('--email', help='Admin email')
+    parser.add_argument('--full-name', help='Admin full name')
+    
+    args = parser.parse_args()
+    
+    username, password, full_name, email = get_user_input(args)
+    asyncio.run(create_admin_user(username, password, full_name, email))

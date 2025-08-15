@@ -34,6 +34,13 @@ NGINX_ENABLED="/etc/nginx/sites-enabled"
 LOG_FILE="/tmp/hybrid-dns-install.log"
 CHECKPOINT_FILE="/tmp/hybrid-dns-install.checkpoint"
 
+# Admin User Configuration (can be overridden by environment variables)
+# Set these before running the script to customize admin credentials:
+# export ADMIN_USERNAME="your_admin"
+# export ADMIN_PASSWORD="your_secure_password"
+# export ADMIN_EMAIL="admin@yourdomain.com"
+# export ADMIN_FULL_NAME="Your Name"
+
 # Functions
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
@@ -910,10 +917,17 @@ create_admin_user() {
     sudo -u "$SERVICE_USER" bash << EOF
 cd "$INSTALL_DIR/backend"
 source venv/bin/activate
-python create_admin.py
+export ADMIN_USERNAME="$ADMIN_USERNAME"
+export ADMIN_PASSWORD="$ADMIN_PASSWORD"
+export ADMIN_EMAIL="$ADMIN_EMAIL"
+export ADMIN_FULL_NAME="$ADMIN_FULL_NAME"
+python create_admin.py --username "$ADMIN_USERNAME" --password "$ADMIN_PASSWORD" --email "$ADMIN_EMAIL" --full-name "$ADMIN_FULL_NAME"
 EOF
     
-    success "Admin user created"
+    success "Admin user created successfully"
+    info "Admin credentials:"
+    info "  Username: $ADMIN_USERNAME"
+    info "  Email: $ADMIN_EMAIL"
 }
 
 print_summary() {
@@ -935,6 +949,11 @@ print_summary() {
     echo "• Installation Directory: $INSTALL_DIR"
     echo "• Configuration File: $INSTALL_DIR/.env"
     echo "• Log Files: /var/log/bind/, /var/log/nginx/"
+    echo
+    echo "Admin Login Credentials:"
+    echo "• Username: $ADMIN_USERNAME"
+    echo "• Email: $ADMIN_EMAIL"
+    echo "• Password: [Set during installation]"
     echo
     echo "Useful Commands:"
     echo "• Check services: systemctl status hybrid-dns-backend"
@@ -960,10 +979,38 @@ print_summary() {
     echo "Happy DNS serving! 🚀"
 }
 
+# Show help information
+show_help() {
+    echo "Hybrid DNS Server Installation Script"
+    echo "Usage: sudo ./install.sh [OPTIONS]"
+    echo
+    echo "Options:"
+    echo "  --resume    Resume installation from last checkpoint"
+    echo "  --fresh     Force fresh installation (ignore checkpoints)"
+    echo "  --status    Check installation status"
+    echo "  --help      Show this help message"
+    echo
+    echo "Environment Variables (optional):"
+    echo "  ADMIN_USERNAME    Admin username (default: prompted)"
+    echo "  ADMIN_PASSWORD    Admin password (default: prompted)"
+    echo "  ADMIN_EMAIL       Admin email (default: prompted)"
+    echo "  ADMIN_FULL_NAME   Admin full name (default: prompted)"
+    echo
+    echo "Examples:"
+    echo "  sudo ./install.sh                    # Interactive installation"
+    echo "  sudo ./install.sh --resume           # Resume from checkpoint"
+    echo "  sudo ADMIN_USERNAME=admin ./install.sh  # Pre-set admin username"
+    echo
+}
+
 # Command line argument parsing
 parse_arguments() {
     while [[ $# -gt 0 ]]; do
         case $1 in
+            --help|-h)
+                show_help
+                exit 0
+                ;;
             --resume)
                 if [[ -f "$CHECKPOINT_FILE" ]]; then
                     info "Resuming installation from checkpoint: $(get_checkpoint)"
@@ -1016,6 +1063,69 @@ parse_arguments() {
     done
 }
 
+# Prompt for admin credentials
+prompt_admin_credentials() {
+    echo
+    echo "🔐 Admin Account Setup"
+    echo "====================="
+    echo "Please configure the administrator account for the DNS server:"
+    echo
+    
+    # Username
+    if [[ -z "${ADMIN_USERNAME:-}" ]]; then
+        read -p "Admin Username [admin]: " input_username
+        export ADMIN_USERNAME="${input_username:-admin}"
+    fi
+    
+    # Password
+    if [[ -z "${ADMIN_PASSWORD:-}" ]]; then
+        while true; do
+            echo -n "Admin Password: "
+            read -s admin_password
+            echo
+            if [[ ${#admin_password} -lt 6 ]]; then
+                echo "❌ Password must be at least 6 characters long"
+                continue
+            fi
+            echo -n "Confirm Password: "
+            read -s admin_password_confirm
+            echo
+            if [[ "$admin_password" != "$admin_password_confirm" ]]; then
+                echo "❌ Passwords do not match"
+                continue
+            fi
+            export ADMIN_PASSWORD="$admin_password"
+            break
+        done
+    fi
+    
+    # Email
+    if [[ -z "${ADMIN_EMAIL:-}" ]]; then
+        while true; do
+            read -p "Admin Email: " admin_email
+            if [[ "$admin_email" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
+                export ADMIN_EMAIL="$admin_email"
+                break
+            else
+                echo "❌ Please enter a valid email address"
+            fi
+        done
+    fi
+    
+    # Full Name
+    if [[ -z "${ADMIN_FULL_NAME:-}" ]]; then
+        read -p "Admin Full Name [System Administrator]: " input_fullname
+        export ADMIN_FULL_NAME="${input_fullname:-System Administrator}"
+    fi
+    
+    echo
+    echo "✅ Admin account configured:"
+    echo "   Username: $ADMIN_USERNAME"
+    echo "   Email: $ADMIN_EMAIL"
+    echo "   Full Name: $ADMIN_FULL_NAME"
+    echo
+}
+
 # Main installation process
 main() {
     echo "🚀 Hybrid DNS Server Installation Script"
@@ -1049,9 +1159,31 @@ main() {
             echo "Installation cancelled."
             exit 0
         fi
+        
+        # Prompt for admin credentials only on fresh installation
+        prompt_admin_credentials
     else
         info "Resuming installation from checkpoint: $current_checkpoint"
+        # Load admin credentials from previous session if available
+        if [[ -f "/tmp/hybrid-dns-admin-creds" ]]; then
+            source "/tmp/hybrid-dns-admin-creds"
+            info "Using admin credentials from previous session"
+        else
+            warning "Admin credentials not found from previous session, using defaults"
+            export ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
+            export ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin123}"
+            export ADMIN_EMAIL="${ADMIN_EMAIL:-admin@localhost}"
+            export ADMIN_FULL_NAME="${ADMIN_FULL_NAME:-System Administrator}"
+        fi
     fi
+    
+    # Save admin credentials for resume functionality
+    cat > "/tmp/hybrid-dns-admin-creds" << EOF
+export ADMIN_USERNAME="$ADMIN_USERNAME"
+export ADMIN_PASSWORD="$ADMIN_PASSWORD"
+export ADMIN_EMAIL="$ADMIN_EMAIL"
+export ADMIN_FULL_NAME="$ADMIN_FULL_NAME"
+EOF
     
     # Installation steps with checkpoint support
     run_step "system_updated" update_system
@@ -1072,6 +1204,9 @@ main() {
     # Mark as completed and clean up
     save_checkpoint "completed"
     clear_checkpoint
+    
+    # Clean up temporary credentials file
+    rm -f "/tmp/hybrid-dns-admin-creds"
     
     log "Installation completed at $(date)"
     print_summary
