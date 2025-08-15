@@ -6,7 +6,7 @@ import asyncio
 import json
 import psutil
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -36,6 +36,14 @@ class MonitoringService:
         asyncio.create_task(self._collect_system_metrics())
         
         logger.info("Monitoring service started")
+    
+    async def start_monitoring(self) -> None:
+        """Start monitoring service (alias for install script compatibility)"""
+        await self.start()
+        
+        # Keep running
+        while self.running:
+            await asyncio.sleep(1)
     
     async def stop(self) -> None:
         """Stop monitoring service"""
@@ -94,23 +102,27 @@ class MonitoringService:
             blocked = await self._check_if_blocked(query_domain, timestamp)
             
             # Store query in database
-            await database.execute("""
-                INSERT INTO dns_logs (
-                    timestamp, client_ip, query_domain, query_type,
-                    response_code, blocked, response_time
-                ) VALUES (
-                    :timestamp, :client_ip, :query_domain, :query_type,
-                    :response_code, :blocked, :response_time
-                )
-            """, {
-                "timestamp": timestamp,
-                "client_ip": client_ip,
-                "query_domain": query_domain,
-                "query_type": query_type,
-                "response_code": "NOERROR",  # Default, could be parsed from logs
-                "blocked": blocked,
-                "response_time": 0  # Would need more detailed logging to get actual response times
-            })
+            try:
+                await database.execute("""
+                    INSERT INTO dns_logs (
+                        timestamp, client_ip, query_domain, query_type,
+                        response_code, blocked, response_time
+                    ) VALUES (
+                        :timestamp, :client_ip, :query_domain, :query_type,
+                        :response_code, :blocked, :response_time
+                    )
+                """, {
+                    "timestamp": timestamp,
+                    "client_ip": client_ip,
+                    "query_domain": query_domain,
+                    "query_type": query_type,
+                    "response_code": "NOERROR",  # Default, could be parsed from logs
+                    "blocked": blocked,
+                    "response_time": 0  # Would need more detailed logging to get actual response times
+                })
+            except Exception as db_error:
+                logger = get_monitoring_logger()
+                logger.warning(f"Failed to store query log in database: {db_error}")
             
         except Exception as e:
             logger = get_monitoring_logger()
@@ -132,6 +144,7 @@ class MonitoringService:
             return result is not None
             
         except Exception:
+            # Table might not exist yet, return False
             return False
     
     async def _collect_system_metrics(self):
@@ -157,23 +170,31 @@ class MonitoringService:
                 ]
                 
                 for metric_name, metric_value, metric_type in metrics:
-                    await database.execute("""
-                        INSERT INTO system_stats (
-                            timestamp, metric_name, metric_value, metric_type
-                        ) VALUES (:timestamp, :metric_name, :metric_value, :metric_type)
-                    """, {
-                        "timestamp": timestamp,
-                        "metric_name": metric_name,
-                        "metric_value": str(metric_value),
-                        "metric_type": metric_type
-                    })
+                    try:
+                        await database.execute("""
+                            INSERT INTO system_stats (
+                                timestamp, metric_name, metric_value, metric_type
+                            ) VALUES (:timestamp, :metric_name, :metric_value, :metric_type)
+                        """, {
+                            "timestamp": timestamp,
+                            "metric_name": metric_name,
+                            "metric_value": str(metric_value),
+                            "metric_type": metric_type
+                        })
+                    except Exception as db_error:
+                        logger = get_monitoring_logger()
+                        logger.warning(f"Failed to store system metric: {db_error}")
                 
                 # Clean up old metrics (keep only last 24 hours)
-                cutoff = datetime.utcnow() - timedelta(hours=24)
-                await database.execute(
-                    "DELETE FROM system_stats WHERE timestamp < :cutoff",
-                    {"cutoff": cutoff}
-                )
+                try:
+                    cutoff = datetime.utcnow() - timedelta(hours=24)
+                    await database.execute(
+                        "DELETE FROM system_stats WHERE timestamp < :cutoff",
+                        {"cutoff": cutoff}
+                    )
+                except Exception as db_error:
+                    logger = get_monitoring_logger()
+                    logger.warning(f"Failed to clean up old metrics: {db_error}")
                 
                 await asyncio.sleep(60)  # Collect metrics every minute
                 

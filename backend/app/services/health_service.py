@@ -30,6 +30,14 @@ class HealthService:
         
         logger.info("Health monitoring service started")
     
+    async def start_health_checks(self) -> None:
+        """Start health checks (alias for install script compatibility)"""
+        await self.start()
+        
+        # Keep running
+        while self.running:
+            await asyncio.sleep(1)
+    
     async def stop(self) -> None:
         """Stop health monitoring service"""
         self.running = False
@@ -67,7 +75,7 @@ class HealthService:
                     
         except Exception as e:
             logger = get_health_logger()
-            logger.error(f"Error checking forwarders: {e}")
+            logger.warning(f"Error checking forwarders (table may not exist yet): {e}")
     
     async def _check_dns_server(self, server_ip: str, port: int = 53) -> bool:
         """Check if a DNS server is responding"""
@@ -111,5 +119,5 @@ class HealthService:
             
         except Exception as e:
             logger = get_health_logger()
-            logger.error(f"Error getting forwarder health: {e}")
+            logger.warning(f"Error getting forwarder health (table may not exist yet): {e}")
             return []
