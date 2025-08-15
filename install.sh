@@ -138,8 +138,7 @@ install_dependencies() {
     # Nginx
     apt-get install -y -qq nginx
     
-    # Install bun
-    curl -fsSL https://bun.sh/install | bash
+    # Install npm (already included with Node.js)
     
     success "Dependencies installed"
 }
@@ -258,9 +257,8 @@ EOF
     info "Building frontend application..."
     sudo -u "$SERVICE_USER" bash << EOF
 cd "$INSTALL_DIR/frontend"
-export PATH="/root/.bun/bin:\$PATH"
-bun install
-bun run build
+npm install
+npm run build
 EOF
     
     success "Application installed"
