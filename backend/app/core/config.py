@@ -139,7 +139,8 @@ class Settings(BaseSettings):
         return self.config_dir / "zones.conf"
     
     class Config:
-        env_file = ".env"
+        # Look for .env file in multiple locations
+        env_file = [".env", "../.env"]
         env_file_encoding = "utf-8"
         case_sensitive = True
 

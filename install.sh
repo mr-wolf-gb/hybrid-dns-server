@@ -843,11 +843,19 @@ EOF
 initialize_database() {
     info "Initializing database..."
     
+    # Copy .env file to backend directory for the initialization
+    cp "$INSTALL_DIR/.env" "$INSTALL_DIR/backend/.env"
+    chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/backend/.env"
+    chmod 600 "$INSTALL_DIR/backend/.env"
+    
     sudo -u "$SERVICE_USER" bash << EOF
 cd "$INSTALL_DIR/backend"
 source venv/bin/activate
 python init_db.py
 EOF
+    
+    # Remove the temporary .env file from backend directory
+    rm -f "$INSTALL_DIR/backend/.env"
     
     success "Database initialized"
 }
