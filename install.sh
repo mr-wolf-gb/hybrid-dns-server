@@ -697,6 +697,52 @@ ProtectControlGroups=yes
 WantedBy=multi-user.target
 EOF
 
+    # Create backup script
+    mkdir -p $INSTALL_DIR/scripts
+    cat > $INSTALL_DIR/scripts/backup.sh << 'EOF'
+#!/bin/bash
+
+# Hybrid DNS Server Backup Script
+set -e
+
+# Load environment variables
+if [ -f "/opt/hybrid-dns-server/.env" ]; then
+    source /opt/hybrid-dns-server/.env
+fi
+
+INSTALL_DIR="/opt/hybrid-dns-server"
+BACKUP_DIR="$INSTALL_DIR/backups/$(date +%Y-%m-%d)"
+
+echo "Starting backup process..."
+mkdir -p "$BACKUP_DIR"
+
+# Backup database
+if [ -n "$DATABASE_URL" ]; then
+    pg_dump "$DATABASE_URL" > "$BACKUP_DIR/database.sql"
+    echo "Database backup completed"
+fi
+
+# Backup BIND configuration
+if [ -d "/etc/bind" ]; then
+    tar -czf "$BACKUP_DIR/bind-config.tar.gz" -C /etc bind/
+    echo "BIND configuration backup completed"
+fi
+
+# Backup application configuration
+if [ -f "$INSTALL_DIR/.env" ]; then
+    cp "$INSTALL_DIR/.env" "$BACKUP_DIR/"
+    echo "Application configuration backup completed"
+fi
+
+# Clean old backups (keep 30 days)
+find "$INSTALL_DIR/backups" -type d -mtime +30 -exec rm -rf {} \; 2>/dev/null || true
+echo "Old backups cleaned"
+
+echo "Backup completed: $BACKUP_DIR"
+EOF
+
+    chmod +x $INSTALL_DIR/scripts/backup.sh
+
     # Backup service
     cat > /etc/systemd/system/hybrid-dns-backup.service << EOF
 [Unit]
@@ -709,27 +755,13 @@ User=$SERVICE_USER
 Group=$SERVICE_USER
 WorkingDirectory=$INSTALL_DIR
 EnvironmentFile=$INSTALL_DIR/.env
-ExecStart=/bin/bash -c '
-    BACKUP_DIR="$INSTALL_DIR/backups/\$(date +%%Y-%%m-%%d)"
-    mkdir -p "\$BACKUP_DIR"
-    
-    # Backup database
-    pg_dump \$DATABASE_URL > "\$BACKUP_DIR/database.sql"
-    
-    # Backup BIND configuration
-    tar -czf "\$BACKUP_DIR/bind-config.tar.gz" -C /etc bind/
-    
-    # Backup application configuration
-    cp $INSTALL_DIR/.env "\$BACKUP_DIR/"
-    
-    # Clean old backups (keep 30 days)
-    find $INSTALL_DIR/backups -type d -mtime +30 -exec rm -rf {} \\; 2>/dev/null || true
-    
-    echo "Backup completed: \$BACKUP_DIR"
-'
+ExecStart=$INSTALL_DIR/scripts/backup.sh
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=hybrid-dns-backup
+
+[Install]
+WantedBy=multi-user.target
 EOF
 
     # Backup timer
