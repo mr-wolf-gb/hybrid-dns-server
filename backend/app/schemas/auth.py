@@ -12,7 +12,7 @@ class LoginRequest(BaseModel):
     """Login request schema"""
     username: str = Field(..., min_length=3, max_length=50)
     password: str = Field(..., min_length=1)
-    totp_code: Optional[str] = Field(None, regex=r'^\d{6}$', description="6-digit TOTP code")
+    totp_code: Optional[str] = Field(None, pattern=r'^\d{6}$', description="6-digit TOTP code")
 
 
 class LoginResponse(BaseModel):
@@ -45,7 +45,7 @@ class TwoFactorSetupResponse(BaseModel):
 
 class TwoFactorVerifyRequest(BaseModel):
     """2FA verification request schema"""
-    totp_code: str = Field(..., regex=r'^\d{6}$', description="6-digit TOTP code")
+    totp_code: str = Field(..., pattern=r'^\d{6}$', description="6-digit TOTP code")
 
 
 class ChangePasswordRequest(BaseModel):
@@ -88,7 +88,7 @@ class UserInfo(BaseModel):
 
 class UserCreate(BaseModel):
     """User creation schema"""
-    username: str = Field(..., min_length=3, max_length=50, regex=r'^[a-zA-Z0-9_-]+$')
+    username: str = Field(..., min_length=3, max_length=50, pattern=r'^[a-zA-Z0-9_-]+$')
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)
     is_superuser: bool = False
@@ -113,7 +113,7 @@ class UserCreate(BaseModel):
 
 class UserUpdate(BaseModel):
     """User update schema"""
-    username: Optional[str] = Field(None, min_length=3, max_length=50, regex=r'^[a-zA-Z0-9_-]+$')
+    username: Optional[str] = Field(None, min_length=3, max_length=50, pattern=r'^[a-zA-Z0-9_-]+$')
     email: Optional[EmailStr] = None
     is_active: Optional[bool] = None
     is_superuser: Optional[bool] = None
