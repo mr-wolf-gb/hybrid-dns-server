@@ -675,7 +675,7 @@ Group=$SERVICE_USER
 WorkingDirectory=$INSTALL_DIR/backend
 Environment=PATH=$INSTALL_DIR/backend/venv/bin
 EnvironmentFile=$INSTALL_DIR/.env
-ExecStart=$INSTALL_DIR/backend/venv/bin/python $INSTALL_DIR/backend/start_monitoring.py
+ExecStart=/bin/bash -c 'cd $INSTALL_DIR/backend && source venv/bin/activate && python -c "import asyncio; from app.services.monitoring_service import MonitoringService; from app.services.health_service import HealthService; asyncio.run(asyncio.gather(MonitoringService().start_monitoring(), HealthService().start_health_checks()))"'
 Restart=always
 RestartSec=30
 StandardOutput=journal
