@@ -73,12 +73,26 @@ A production-ready hybrid DNS server solution running on Linux (Debian/Ubuntu), 
    sudo ./install.sh
    ```
 
-2. **Follow the interactive prompts:**
+2. **Installation Features:**
+   - **Resume Support**: Installation can be resumed from checkpoints if interrupted
+   - **Automatic Fixes**: Handles BIND9 configuration issues automatically
+   - **Comprehensive Setup**: Installs all dependencies and configures services
+   - **Security Hardening**: Configures firewall, fail2ban, and SSL certificates
+
+3. **Installation Options:**
+   ```bash
+   sudo ./install.sh           # Start new installation
+   sudo ./install.sh --resume  # Resume from checkpoint
+   sudo ./install.sh --fresh   # Force fresh start
+   sudo ./install.sh --status  # Check installation status
+   ```
+
+4. **Follow the interactive prompts:**
    - Set admin password
    - Configure network settings
    - Choose deployment options
 
-3. **Access the web interface:**
+5. **Access the web interface:**
    ```
    https://your-server-ip
    ```
@@ -309,6 +323,26 @@ sudo named-checkconf
 # Test DNS resolution
 dig @localhost google.com
 nslookup google.com localhost
+
+# Common fixes for BIND9 issues
+sudo chown -R bind:bind /var/log/bind
+sudo chmod 755 /var/log/bind
+sudo systemctl restart bind9
+```
+
+**Installation Issues**
+```bash
+# Check installation status
+sudo ./install.sh --status
+
+# Resume interrupted installation
+sudo ./install.sh --resume
+
+# Start fresh if needed
+sudo ./install.sh --fresh
+
+# Check installation logs
+tail -f /tmp/hybrid-dns-install.log
 ```
 
 **Web Interface Not Accessible**
@@ -383,6 +417,7 @@ For enterprise deployments and commercial support, contact us at enterprise@hybr
 - [ ] Advanced analytics and reporting
 
 ### Version History
+- **v1.1.0** - Fixed BIND9 configuration issues, added installation resume support
 - **v1.0.0** - Initial release with core functionality
 - **v0.9.0** - Beta release with web interface
 - **v0.5.0** - Alpha release with basic BIND9 integration

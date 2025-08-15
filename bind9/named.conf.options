@@ -174,7 +174,6 @@ logging {
 // Statistics Configuration
 statistics-channels {
     inet 127.0.0.1 port 8053 allow { 127.0.0.1; };
-    inet 192.168.0.0/16 port 8053 allow { 192.168.0.0/16; };
 };
 
 // Key for rndc remote administration

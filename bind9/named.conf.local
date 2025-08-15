@@ -200,37 +200,3 @@ zone "rpz.custom-allow" {
 //     allow-notify { 192.168.1.100; };
 // };
 
-//
-// ROOT HINTS
-// Include the root hints file
-//
-zone "." {
-    type hint;
-    file "/usr/share/dns/root.hints";
-};
-
-//
-// ZONES FOR RFC 1918 ADDRESSES
-// These are typically included automatically
-//
-
-// Localhost zones
-zone "localhost" {
-    type master;
-    file "/etc/bind/db.local";
-};
-
-zone "127.in-addr.arpa" {
-    type master;
-    file "/etc/bind/db.127";
-};
-
-zone "0.in-addr.arpa" {
-    type master;
-    file "/etc/bind/db.0";
-};
-
-zone "255.in-addr.arpa" {
-    type master;
-    file "/etc/bind/db.255";
-};

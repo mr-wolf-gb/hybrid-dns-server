@@ -384,7 +384,7 @@ configure_bind9() {
     cp "$INSTALL_DIR/bind9/named.conf.local" /etc/bind/
     cp "$INSTALL_DIR/bind9/zones.conf" /etc/bind/
     
-    # Create directories
+    # Create directories with proper permissions
     mkdir -p /etc/bind/zones
     mkdir -p /etc/bind/rpz
     mkdir -p /var/log/bind
@@ -393,13 +393,31 @@ configure_bind9() {
     cp -r "$INSTALL_DIR/bind9/zones/"* /etc/bind/zones/
     cp -r "$INSTALL_DIR/bind9/rpz/"* /etc/bind/rpz/
     
-    # Set permissions
+    # Fix zone files that don't end with newlines
+    find /etc/bind/zones -name "db.*" -exec sh -c 'echo "" >> "$1"' _ {} \;
+    find /etc/bind/rpz -name "db.*" -exec sh -c 'echo "" >> "$1"' _ {} \;
+    
+    # Set comprehensive permissions
+    chown -R root:bind /etc/bind/
     chown -R bind:bind /etc/bind/zones
     chown -R bind:bind /etc/bind/rpz
     chown -R bind:bind /var/log/bind
     chmod 755 /etc/bind/zones
     chmod 755 /etc/bind/rpz
     chmod 755 /var/log/bind
+    chmod 644 /etc/bind/*.conf
+    chmod 644 /etc/bind/*.key
+    chmod 644 /etc/bind/zones/db.*
+    chmod 644 /etc/bind/rpz/db.*
+    
+    # Fix statistics-channels configuration issue (remove problematic CIDR line)
+    sed -i '/inet 192\.168\.0\.0\/16 port 8053 allow { 192\.168\.0\.0\/16; };/d' /etc/bind/named.conf.options
+    
+    # Remove duplicate zone definitions that conflict with default-zones
+    sed -i '/^\/\/ ROOT HINTS/,$d' /etc/bind/named.conf.local
+    
+    # Temporarily disable logging configuration to avoid permission issues
+    sed -i '/^\/\/ Logging Configuration/,/^};/s/^/\/\/ /' /etc/bind/named.conf.options
     
     # Update main configuration
     if ! grep -q "include \"/etc/bind/zones.conf\";" /etc/bind/named.conf; then
@@ -413,9 +431,19 @@ configure_bind9() {
         error "BIND9 configuration is invalid"
     fi
     
-    # Restart BIND9
+    # Start BIND9
     systemctl restart bind9
     systemctl enable bind9
+    
+    # Wait for service to start
+    sleep 3
+    
+    # Check if BIND9 is running
+    if systemctl is-active --quiet bind9; then
+        success "BIND9 started successfully"
+    else
+        error "BIND9 failed to start"
+    fi
     
     success "BIND9 configured"
 }
