@@ -431,16 +431,30 @@ configure_bind9() {
         error "BIND9 configuration is invalid"
     fi
     
-    # Start BIND9
-    systemctl restart bind9
-    systemctl enable bind9
+    # Start BIND9 (handle different service names)
+    if systemctl list-unit-files | grep -q "^named.service"; then
+        systemctl restart named
+        systemctl enable named
+        BIND_SERVICE="named"
+    else
+        systemctl restart bind9
+        # Try to enable, but don't fail if it's an alias
+        systemctl enable bind9 2>/dev/null || systemctl enable named 2>/dev/null || true
+        BIND_SERVICE="bind9"
+    fi
     
     # Wait for service to start
     sleep 3
     
     # Check if BIND9 is running
-    if systemctl is-active --quiet bind9; then
+    if systemctl is-active --quiet $BIND_SERVICE; then
         success "BIND9 started successfully"
+    elif systemctl is-active --quiet named; then
+        success "BIND9 (named) started successfully"
+        BIND_SERVICE="named"
+    elif systemctl is-active --quiet bind9; then
+        success "BIND9 started successfully"
+        BIND_SERVICE="bind9"
     else
         error "BIND9 failed to start"
     fi
