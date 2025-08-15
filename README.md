@@ -72,14 +72,24 @@ A production-ready hybrid DNS server solution running on Linux (Debian/Ubuntu), 
    chmod +x install.sh
    sudo ./install.sh
    ```
+   
+   The script will automatically download all required files from the GitHub repository.
 
-2. **Installation Features:**
+2. **Alternative: Clone the repository first (for development):**
+   ```bash
+   git clone https://github.com/mr-wolf-gb/hybrid-dns-server.git
+   cd hybrid-dns-server
+   sudo ./install.sh
+   ```
+
+3. **Installation Features:**
+   - **Automatic Download**: Downloads all project files from GitHub automatically
    - **Resume Support**: Installation can be resumed from checkpoints if interrupted
    - **Automatic Fixes**: Handles BIND9 configuration issues automatically
    - **Comprehensive Setup**: Installs all dependencies and configures services
    - **Security Hardening**: Configures firewall, fail2ban, and SSL certificates
 
-3. **Installation Options:**
+4. **Installation Options:**
    ```bash
    sudo ./install.sh           # Start new installation
    sudo ./install.sh --resume  # Resume from checkpoint
@@ -87,12 +97,12 @@ A production-ready hybrid DNS server solution running on Linux (Debian/Ubuntu), 
    sudo ./install.sh --status  # Check installation status
    ```
 
-4. **Follow the interactive prompts:**
+5. **Follow the interactive prompts:**
    - Set admin password
    - Configure network settings
    - Choose deployment options
 
-5. **Access the web interface:**
+6. **Access the web interface:**
    ```
    https://your-server-ip
    ```
@@ -343,6 +353,10 @@ sudo ./install.sh --fresh
 
 # Check installation logs
 tail -f /tmp/hybrid-dns-install.log
+
+# If download fails, check internet connectivity
+wget -q --spider https://github.com/mr-wolf-gb/hybrid-dns-server/archive/refs/heads/main.zip
+echo $?  # Should return 0 if successful
 ```
 
 **Web Interface Not Accessible**

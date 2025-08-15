@@ -121,6 +121,7 @@ run_step() {
         "dependencies_installed"
         "user_created"
         "database_setup"
+        "application_downloaded"
         "application_installed"
         "bind9_configured"
         "nginx_configured"
@@ -331,20 +332,41 @@ EOF
     success "Database configured"
 }
 
+download_application() {
+    info "Downloading Hybrid DNS Server application..."
+    
+    # Create temporary directory for download
+    local temp_dir=$(mktemp -d)
+    cd "$temp_dir"
+    
+    # Download the latest release or main branch
+    info "Downloading from GitHub repository..."
+    if ! wget -q "https://github.com/mr-wolf-gb/hybrid-dns-server/archive/refs/heads/main.zip" -O hybrid-dns-server.zip; then
+        error "Failed to download application files from GitHub"
+    fi
+    
+    # Extract files
+    if ! unzip -q hybrid-dns-server.zip; then
+        error "Failed to extract application files"
+    fi
+    
+    # Move files to installation directory
+    mkdir -p "$INSTALL_DIR"
+    cp -r hybrid-dns-server-main/* "$INSTALL_DIR/"
+    
+    # Clean up
+    cd /
+    rm -rf "$temp_dir"
+    
+    success "Application files downloaded"
+}
+
 install_application() {
     info "Installing Hybrid DNS Server application..."
     
-    # Copy application files
-    if [[ ! -d "$INSTALL_DIR/backend" ]]; then
-        cp -r "$(dirname "$0")/backend" "$INSTALL_DIR/"
-    fi
-    
-    if [[ ! -d "$INSTALL_DIR/frontend" ]]; then
-        cp -r "$(dirname "$0")/frontend" "$INSTALL_DIR/"
-    fi
-    
-    if [[ ! -d "$INSTALL_DIR/bind9" ]]; then
-        cp -r "$(dirname "$0")/bind9" "$INSTALL_DIR/"
+    # Download application files if not already present
+    if [[ ! -d "$INSTALL_DIR/backend" ]] || [[ ! -d "$INSTALL_DIR/frontend" ]] || [[ ! -d "$INSTALL_DIR/bind9" ]]; then
+        download_application
     fi
     
     # Set ownership
@@ -1060,6 +1082,7 @@ main() {
     run_step "dependencies_installed" install_dependencies
     run_step "user_created" create_user
     run_step "database_setup" setup_database
+    run_step "application_downloaded" download_application
     run_step "application_installed" install_application
     run_step "bind9_configured" configure_bind9
     run_step "nginx_configured" setup_nginx
