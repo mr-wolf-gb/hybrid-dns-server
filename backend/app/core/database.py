@@ -163,44 +163,77 @@ audit_logs_table = Table(
 )
 
 
+class Database:
+    """Database connection manager"""
+    
+    def __init__(self):
+        self.engine = None
+        self.async_session = None
+        self._initialized = False
+    
+    def _initialize_engine(self):
+        """Initialize database engine and session maker"""
+        if not self._initialized:
+            settings = get_settings()
+            
+            # Database URL setup
+            if settings.DATABASE_URL.startswith("sqlite"):
+                # For SQLite, use aiosqlite for async operations
+                database_url = settings.DATABASE_URL.replace("sqlite://", "sqlite+aiosqlite://")
+            elif settings.DATABASE_URL.startswith("postgresql"):
+                # For PostgreSQL, use asyncpg for async operations
+                database_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+            else:
+                database_url = settings.DATABASE_URL
+
+            # SQLAlchemy setup
+            self.engine = create_async_engine(
+                database_url,
+                echo=settings.DATABASE_ECHO,
+                future=True
+            )
+
+            self.async_session = sessionmaker(
+                self.engine, class_=AsyncSession, expire_on_commit=False
+            )
+            self._initialized = True
+    
+    async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
+        """Get database session"""
+        self._initialize_engine()
+        
+        async with self.async_session() as session:
+            try:
+                yield session
+            finally:
+                await session.close()
+    
+    async def close(self):
+        """Close database connection"""
+        if self.engine is not None:
+            await self.engine.dispose()
+            logger = get_logger(__name__)
+            logger.info("Database connection closed")
+
+
+# Global database instance
+database = Database()
+
+
 def _initialize_database_engine():
-    """Initialize database engine and session maker"""
+    """Initialize database engine and session maker (legacy function)"""
     global engine, async_session
     
     if engine is None:
-        settings = get_settings()
-        
-        # Database URL setup
-        if settings.DATABASE_URL.startswith("sqlite"):
-            # For SQLite, use aiosqlite for async operations
-            database_url = settings.DATABASE_URL.replace("sqlite://", "sqlite+aiosqlite://")
-        elif settings.DATABASE_URL.startswith("postgresql"):
-            # For PostgreSQL, use asyncpg for async operations
-            database_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
-        else:
-            database_url = settings.DATABASE_URL
-
-        # SQLAlchemy setup
-        engine = create_async_engine(
-            database_url,
-            echo=settings.DATABASE_ECHO,
-            future=True
-        )
-
-        async_session = sessionmaker(
-            engine, class_=AsyncSession, expire_on_commit=False
-        )
+        database._initialize_engine()
+        engine = database.engine
+        async_session = database.async_session
 
 
 async def get_database_session() -> AsyncGenerator[AsyncSession, None]:
     """Get database session for dependency injection"""
-    _initialize_database_engine()
-    
-    async with async_session() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+    async for session in database.get_session():
+        yield session
 
 
 async def init_database():
@@ -264,7 +297,4 @@ async def create_default_admin():
 
 async def close_database():
     """Close database connection"""
-    if engine is not None:
-        await engine.dispose()
-        logger = get_logger(__name__)
-        logger.info("Database connection closed")
+    await database.close()
