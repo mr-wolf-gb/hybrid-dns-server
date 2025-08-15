@@ -22,13 +22,12 @@ export default defineConfig({
     outDir: 'dist',
     assetsDir: 'assets',
     sourcemap: false,
-    minify: 'terser',
+    minify: 'esbuild',
     rollupOptions: {
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom'],
-          charts: ['chart.js', 'react-chartjs-2', 'recharts'],
-          utils: ['axios', '@tanstack/react-query', 'date-fns'],
+          utils: ['axios', '@tanstack/react-query'],
         },
       },
     },
