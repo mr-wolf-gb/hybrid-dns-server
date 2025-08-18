@@ -23,12 +23,18 @@ class LoginResponse(BaseModel):
     session_token: Optional[str] = None
     requires_2fa: bool = False
     temporary_token: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
 
 
 class TokenResponse(BaseModel):
     """Token response schema"""
     access_token: str
     token_type: str = "bearer"
+    
+    class Config:
+        from_attributes = True
 
 
 class RefreshTokenRequest(BaseModel):
@@ -41,6 +47,9 @@ class TwoFactorSetupResponse(BaseModel):
     secret: str
     qr_code: str
     backup_codes: List[str]
+    
+    class Config:
+        from_attributes = True
 
 
 class TwoFactorVerifyRequest(BaseModel):
@@ -82,8 +91,11 @@ class UserInfo(BaseModel):
     is_active: bool
     is_superuser: bool
     two_factor_enabled: bool
-    last_login: Optional[datetime]
+    last_login: Optional[datetime] = None
     created_at: datetime
+    
+    class Config:
+        from_attributes = True
 
 
 class UserCreate(BaseModel):
@@ -126,9 +138,12 @@ class SessionInfo(BaseModel):
     session_token: str
     expires_at: datetime
     created_at: datetime
-    ip_address: Optional[str]
-    user_agent: Optional[str]
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
     is_current: bool = False
+    
+    class Config:
+        from_attributes = True
 
 
 class PasswordResetRequest(BaseModel):
@@ -157,6 +172,9 @@ class PasswordResetConfirm(BaseModel):
             raise ValueError('Password must contain at least one number')
         
         return v
+    
+    class Config:
+        from_attributes = True
 
 
 class ApiKeyCreate(BaseModel):
@@ -176,3 +194,51 @@ class ApiKeyInfo(BaseModel):
     expires_at: Optional[datetime]
     last_used: Optional[datetime]
     is_active: bool
+
+
+class ApiKeyUpdate(BaseModel):
+    """API key update schema"""
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+    expires_at: Optional[datetime] = None
+    is_active: Optional[bool] = None
+
+
+class SessionCreate(BaseModel):
+    """Session creation schema"""
+    user_id: int = Field(..., description="ID of the user")
+    session_token: str = Field(..., min_length=32, max_length=255, description="Session token")
+    expires_at: datetime = Field(..., description="Session expiration time")
+    ip_address: Optional[str] = Field(None, min_length=7, max_length=45, description="Client IP address")
+    user_agent: Optional[str] = Field(None, max_length=500, description="User agent string")
+
+    @validator('ip_address')
+    def validate_ip_address(cls, v):
+        """Validate IP address format"""
+        if v is not None:
+            import ipaddress
+            try:
+                ipaddress.ip_address(v)
+                return v
+            except ValueError:
+                raise ValueError('Invalid IP address format')
+        return v
+
+
+class SessionUpdate(BaseModel):
+    """Session update schema"""
+    expires_at: Optional[datetime] = None
+    ip_address: Optional[str] = Field(None, min_length=7, max_length=45)
+    user_agent: Optional[str] = Field(None, max_length=500)
+
+    @validator('ip_address')
+    def validate_ip_address(cls, v):
+        """Validate IP address format"""
+        if v is not None:
+            import ipaddress
+            try:
+                ipaddress.ip_address(v)
+                return v
+            except ValueError:
+                raise ValueError('Invalid IP address format')
+        return v

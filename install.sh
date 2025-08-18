@@ -1088,6 +1088,18 @@ start_services() {
     fi
     
     success "Services started"
+    
+    # Give services a moment to fully start
+    sleep 10
+    
+    # Check if backend is responding
+    info "Testing backend API..."
+    if curl -f -s "http://localhost:$BACKEND_PORT/health" > /dev/null; then
+        success "Backend API is responding"
+    else
+        warning "Backend API not responding, checking logs..."
+        journalctl -u hybrid-dns-backend --no-pager -n 20
+    fi
 }
 
 create_admin_user() {

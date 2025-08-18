@@ -7,22 +7,13 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from ...core.database import database
-from ...core.security import verify_token
+from ...core.dependencies import get_current_user
 from ...services.monitoring_service import MonitoringService
 from ...services.bind_service import BindService
 
 router = APIRouter()
-security = HTTPBearer()
-
-# Dependency for getting current user
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    payload = verify_token(credentials.credentials)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    return payload
 
 
 @router.get("/stats")

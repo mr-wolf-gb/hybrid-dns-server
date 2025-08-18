@@ -29,6 +29,7 @@ from app.api.routes import api_router
 from app.core.config import get_settings
 from app.core.database import init_database
 from app.core.logging_config import setup_logging
+from app.core.error_setup import setup_error_handlers, create_startup_message
 from app.services.bind_service import BindService
 from app.services.monitoring_service import MonitoringService
 from app.services.health_service import HealthService
@@ -83,6 +84,9 @@ def create_app():
 
 app = create_app()
 
+# Setup comprehensive error handling
+setup_error_handlers(app)
+
 # Add rate limiting middleware
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -120,14 +124,14 @@ if static_dir.exists():
 
 @app.get("/", include_in_schema=False)
 async def root():
-    """Root endpoint - basic API info"""
+    """Root endpoint - basic API info with error handling information"""
     settings = get_settings()
-    return {
-        "name": "Hybrid DNS Server API",
-        "version": "1.0.0",
+    startup_info = create_startup_message()
+    startup_info.update({
         "status": "running",
         "docs": "/docs" if settings.DEBUG else "disabled in production"
-    }
+    })
+    return startup_info
 
 
 @app.get("/health", include_in_schema=False)
@@ -141,27 +145,54 @@ async def health_check():
 
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):
-    """Custom 404 handler"""
+    """Custom 404 handler with helpful suggestions"""
+    from datetime import datetime
+    
     return JSONResponse(
         status_code=404,
         content={
-            "error": "Not Found",
-            "message": f"Path {request.url.path} not found",
-            "status_code": 404
+            "message": f"The requested path '{request.url.path}' was not found",
+            "error_code": "NOT_FOUND",
+            "details": {
+                "path": request.url.path,
+                "method": request.method
+            },
+            "suggestions": [
+                "Check that the URL is correct",
+                "Verify the API endpoint exists in the documentation",
+                "Ensure you're using the correct HTTP method",
+                "Visit /docs for API documentation (if available)"
+            ],
+            "timestamp": datetime.utcnow().isoformat(),
+            "path": request.url.path,
+            "method": request.method
         }
     )
 
 
 @app.exception_handler(500)
 async def internal_error_handler(request: Request, exc):
-    """Custom 500 handler"""
+    """Custom 500 handler with helpful information"""
+    from datetime import datetime
+    
     logger.error(f"Internal server error: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
         content={
-            "error": "Internal Server Error",
-            "message": "An unexpected error occurred",
-            "status_code": 500
+            "message": "An unexpected internal server error occurred",
+            "error_code": "INTERNAL_SERVER_ERROR",
+            "details": {
+                "error_type": type(exc).__name__
+            },
+            "suggestions": [
+                "Try the request again in a moment",
+                "Check that all required fields are provided",
+                "Verify that the server is running properly",
+                "Contact support if the problem persists"
+            ],
+            "timestamp": datetime.utcnow().isoformat(),
+            "path": request.url.path,
+            "method": request.method
         }
     )
 

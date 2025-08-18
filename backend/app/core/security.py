@@ -48,6 +48,122 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
         expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode.update({"exp": expire})
+    
+    try:
+        encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+        logger.debug(f"Created access token for user: {data.get('sub', 'unknown')}")
+        return encoded_jwt
+    except Exception as e:
+        logger.error(f"Failed to create access token: {e}")
+        raise
+
+
+def create_refresh_token(data: Dict[str, Any]) -> str:
+    """Create JWT refresh token"""
+    settings = get_settings()
+    logger = get_security_logger()
+    to_encode = data.copy()
+    
+    expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode.update({"exp": expire, "type": "refresh"})
+    
+    try:
+        encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+        logger.debug(f"Created refresh token for user: {data.get('sub', 'unknown')}")
+        return encoded_jwt
+    except Exception as e:
+        logger.error(f"Failed to create refresh token: {e}")
+        raise
+
+
+def verify_token(token: str) -> Optional[Dict[str, Any]]:
+    """Verify and decode JWT token"""
+    settings = get_settings()
+    logger = get_security_logger()
+    
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        return payload
+    except JWTError as e:
+        logger.warning(f"Token verification failed: {e}")
+        return None
+
+
+def generate_session_token() -> str:
+    """Generate a secure session token"""
+    return secrets.token_urlsafe(32)
+
+
+def generate_totp_secret() -> str:
+    """Generate TOTP secret for 2FA"""
+    return pyotp.random_base32()
+
+
+def generate_totp_qr_code(secret: str, user_email: str) -> str:
+    """Generate QR code for TOTP setup"""
+    settings = get_settings()
+    totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(
+        name=user_email,
+        issuer_name=settings.TOTP_ISSUER_NAME
+    )
+    
+    qr = qrcode.QRCode(version=1, box_size=10, border=5)
+    qr.add_data(totp_uri)
+    qr.make(fit=True)
+    
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffer = BytesIO()
+    img.save(buffer, format='PNG')
+    buffer.seek(0)
+    
+    import base64
+    return base64.b64encode(buffer.getvalue()).decode()
+
+
+def verify_totp_token(secret: str, token: str) -> bool:
+    """Verify TOTP token"""
+    settings = get_settings()
+    totp = pyotp.TOTP(secret)
+    return totp.verify(token, valid_window=settings.TOTP_VALID_WINDOW)
+
+
+def get_client_ip(request) -> str:
+    """Get client IP address from request"""
+    # Check for forwarded IP first (behind proxy)
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    
+    # Check for real IP header
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip
+    
+    # Fall back to client host
+    return request.client.host if request.client else "unknown"
+
+
+def is_account_locked(user: Dict[str, Any]) -> bool:
+    """Check if user account is locked"""
+    if not user.get("locked_until"):
+        return False
+    
+    locked_until = user["locked_until"]
+    if isinstance(locked_until, str):
+        from datetime import datetime
+        locked_until = datetime.fromisoformat(locked_until.replace('Z', '+00:00'))
+    
+    return datetime.utcnow() < locked_until
+
+
+def log_security_event(event_type: str, details: Dict[str, Any], ip_address: str = None):
+    """Log security events"""
+    logger = get_security_logger()
+    logger.info(f"Security event: {event_type}", extra={
+        "event_type": event_type,
+        "details": details,
+        "ip_address": ip_address
+    })
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     
     logger.info(f"Created access token for user: {data.get('sub', 'unknown')}")
