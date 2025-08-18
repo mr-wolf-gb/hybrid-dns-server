@@ -110,7 +110,7 @@ def setup_middleware():
 setup_middleware()
 
 # Include API routes
-app.include_router(api_router, prefix="/api/v1")
+app.include_router(api_router, prefix="/api")
 
 # Serve static files for web UI (if built)
 static_dir = Path(__file__).parent / "static"

@@ -13,7 +13,8 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ className, label, error, helperText, leftIcon, rightIcon, ...props }, ref) => {
     const baseClasses = 'block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 dark:focus:border-primary-400 dark:focus:ring-primary-400'
     const errorClasses = 'border-red-300 focus:border-red-500 focus:ring-red-500 dark:border-red-500'
-    const paddingClasses = leftIcon ? 'pl-10' : rightIcon ? 'pr-10' : ''
+    //const paddingClasses = leftIcon ? 'pl-10' : rightIcon ? 'pr-10' : ''
+    const paddingClasses = `p-2.5 ${leftIcon ? 'pl-10' : ''} ${rightIcon ? 'pr-10' : ''}`.trim();
 
     return (
       <div className="w-full">
