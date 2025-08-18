@@ -403,7 +403,7 @@ LOG_LEVEL=INFO
 # Server Configuration
 SERVER_IP=$SERVER_IP
 DOMAIN_NAME=$DOMAIN_NAME
-VITE_API_URL=http://$SERVER_IP:$BACKEND_PORT
+VITE_API_URL=https://$SERVER_IP
 ALLOWED_HOSTS=localhost,127.0.0.1,$SERVER_IP$(if [[ -n "$DOMAIN_NAME" ]]; then echo ",$DOMAIN_NAME"; fi),*
 
 # BIND9 Configuration
@@ -494,8 +494,8 @@ EOF
     info "Configuring frontend environment..."
     sudo -u "$SERVICE_USER" bash << EOF
 cd "$INSTALL_DIR/frontend"
-echo "VITE_API_URL=http://$SERVER_IP:$BACKEND_PORT" > .env
-echo "VITE_API_URL=http://$SERVER_IP:$BACKEND_PORT" > .env.production
+echo "VITE_API_URL=https://$SERVER_IP" > .env
+echo "VITE_API_URL=https://$SERVER_IP" > .env.production
 EOF
     
     # Validate vite.config.ts syntax
@@ -1125,11 +1125,11 @@ print_summary() {
     echo "Access Information:"
     if [[ -n "$DOMAIN_NAME" ]]; then
         echo "• Web Interface: https://$DOMAIN_NAME"
-        echo "• API Endpoint: http://$SERVER_IP:$BACKEND_PORT"
+        echo "• API Endpoint: https://$DOMAIN_NAME/api"
         echo "• DNS Server: $SERVER_IP:53 ($DOMAIN_NAME)"
     else
         echo "• Web Interface: https://$SERVER_IP"
-        echo "• API Endpoint: http://$SERVER_IP:$BACKEND_PORT"
+        echo "• API Endpoint: https://$SERVER_IP/api"
         echo "• DNS Server: $SERVER_IP:53"
     fi
     echo "• Installation Directory: $INSTALL_DIR"
@@ -1154,7 +1154,8 @@ print_summary() {
     echo "• SSL Certificate: Self-signed (consider using Let's Encrypt)"
     echo
     echo "Configuration:"
-    echo "• Frontend API URL: http://$SERVER_IP:$BACKEND_PORT"
+    echo "• Frontend API URL: https://$SERVER_IP/api"
+    echo "• Backend Direct: http://localhost:$BACKEND_PORT (internal only)"
     echo "• Allowed CORS Hosts: localhost, 127.0.0.1, $SERVER_IP$(if [[ -n "$DOMAIN_NAME" ]]; then echo ", $DOMAIN_NAME"; fi)"
     echo
     echo "Next Steps:"
