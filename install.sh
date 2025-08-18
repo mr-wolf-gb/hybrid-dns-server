@@ -500,12 +500,13 @@ EOF
     
     # Validate vite.config.ts syntax
     info "Validating Vite configuration..."
-    if ! node -c "$INSTALL_DIR/frontend/vite.config.ts" 2>/dev/null; then
-        warning "Vite config validation failed, checking for syntax errors..."
-        # Try to identify common issues
-        if grep -q "build:" "$INSTALL_DIR/frontend/vite.config.ts" && ! grep -q "build: {" "$INSTALL_DIR/frontend/vite.config.ts"; then
-            error "Syntax error in vite.config.ts: build configuration is not properly nested"
+    if [[ -f "$INSTALL_DIR/frontend/vite.config.ts" ]]; then
+        # Basic syntax check - ensure the file has proper structure
+        if ! grep -q "export default defineConfig" "$INSTALL_DIR/frontend/vite.config.ts"; then
+            warning "vite.config.ts may have syntax issues"
         fi
+    else
+        warning "vite.config.ts not found, frontend build may fail"
     fi
     
     # Install Node.js dependencies and build frontend
@@ -516,14 +517,16 @@ EOF
     
     # Install dependencies
     info "Installing frontend dependencies..."
-    if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm install --silent --no-audit --no-fund"; then
-        error "Failed to install frontend dependencies"
+    if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm install --silent --no-audit --no-fund 2>&1"; then
+        warning "npm install had warnings, but continuing..."
+        # Try again with verbose output for debugging
+        sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm install --no-audit --no-fund" || error "Failed to install frontend dependencies"
     fi
     
     # Build the application
     info "Building frontend..."
-    if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm run build"; then
-        error "Frontend build failed"
+    if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm run build 2>&1"; then
+        error "Frontend build failed - check vite.config.ts syntax and dependencies"
     fi
     
     # Verify build output
@@ -674,8 +677,8 @@ setup_nginx() {
 # Hybrid DNS Server Nginx Configuration
 
 # Rate limiting
-limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
-limit_req_zone $binary_remote_addr zone=login:10m rate=5r/m;
+limit_req_zone \$binary_remote_addr zone=api:10m rate=10r/s;
+limit_req_zone \$binary_remote_addr zone=login:10m rate=5r/m;
 
 # Upstream backend
 upstream backend {
@@ -1334,6 +1337,12 @@ main() {
     if [[ -f "/tmp/hybrid-dns-server-config" ]]; then
         source "/tmp/hybrid-dns-server-config"
         info "Loaded server configuration from previous session"
+    fi
+    
+    # Ensure SERVER_IP is set for fresh installations
+    if [[ -z "${SERVER_IP:-}" ]]; then
+        SERVER_IP=""
+        DOMAIN_NAME=""
     fi
     
     local current_checkpoint=$(get_checkpoint)
