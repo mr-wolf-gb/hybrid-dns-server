@@ -498,13 +498,40 @@ echo "VITE_API_URL=http://$SERVER_IP:$BACKEND_PORT" > .env
 echo "VITE_API_URL=http://$SERVER_IP:$BACKEND_PORT" > .env.production
 EOF
     
+    # Validate vite.config.ts syntax
+    info "Validating Vite configuration..."
+    if ! node -c "$INSTALL_DIR/frontend/vite.config.ts" 2>/dev/null; then
+        warning "Vite config validation failed, checking for syntax errors..."
+        # Try to identify common issues
+        if grep -q "build:" "$INSTALL_DIR/frontend/vite.config.ts" && ! grep -q "build: {" "$INSTALL_DIR/frontend/vite.config.ts"; then
+            error "Syntax error in vite.config.ts: build configuration is not properly nested"
+        fi
+    fi
+    
     # Install Node.js dependencies and build frontend
     info "Building frontend application..."
-    sudo -u "$SERVICE_USER" bash << EOF
-cd "$INSTALL_DIR/frontend"
-npm install
-npm run build
-EOF
+    
+    # Clean any existing build artifacts
+    sudo -u "$SERVICE_USER" rm -rf "$INSTALL_DIR/frontend/node_modules" "$INSTALL_DIR/frontend/package-lock.json" "$INSTALL_DIR/frontend/dist" 2>/dev/null || true
+    
+    # Install dependencies
+    info "Installing frontend dependencies..."
+    if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm install --silent --no-audit --no-fund"; then
+        error "Failed to install frontend dependencies"
+    fi
+    
+    # Build the application
+    info "Building frontend..."
+    if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm run build"; then
+        error "Frontend build failed"
+    fi
+    
+    # Verify build output
+    if [[ ! -f "$INSTALL_DIR/frontend/dist/index.html" ]]; then
+        error "Frontend build completed but dist/index.html not found"
+    fi
+    
+    success "Frontend build completed successfully"
     
     # Fix permissions for nginx to access frontend files
     info "Setting proper permissions for web files..."
