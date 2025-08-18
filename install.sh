@@ -30,6 +30,10 @@ BACKEND_PORT="8000"
 NGINX_AVAILABLE="/etc/nginx/sites-available"
 NGINX_ENABLED="/etc/nginx/sites-enabled"
 
+# Server IP Configuration
+SERVER_IP=""
+DOMAIN_NAME=""
+
 # Logging and Checkpoints
 LOG_FILE="/tmp/hybrid-dns-install.log"
 CHECKPOINT_FILE="/tmp/hybrid-dns-install.checkpoint"
@@ -124,6 +128,7 @@ run_step() {
     # Define step order
     local steps=(
         "start"
+        "server_configured"
         "system_updated"
         "dependencies_installed"
         "user_created"
@@ -177,6 +182,89 @@ check_os() {
     
     . /etc/os-release
     info "Detected OS: $NAME $VERSION"
+}
+
+load_server_configuration() {
+    # Try to load server configuration from existing .env file
+    if [[ -f "$INSTALL_DIR/.env" ]]; then
+        source "$INSTALL_DIR/.env" 2>/dev/null || true
+        if [[ -n "$SERVER_IP" ]]; then
+            info "Loaded server configuration from existing installation:"
+            info "  IP Address: $SERVER_IP"
+            if [[ -n "$DOMAIN_NAME" ]]; then
+                info "  Domain Name: $DOMAIN_NAME"
+            fi
+            return 0
+        fi
+    fi
+    return 1
+}
+
+get_server_configuration() {
+    info "Configuring server network settings..."
+    
+    # Try to load existing configuration first
+    if load_server_configuration; then
+        echo
+        read -p "Use existing server configuration? (Y/n): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Nn]$ ]]; then
+            # User wants to reconfigure
+            SERVER_IP=""
+            DOMAIN_NAME=""
+        else
+            success "Using existing server configuration"
+            return 0
+        fi
+    fi
+    
+    # Auto-detect primary IP address
+    local detected_ip=$(hostname -I | awk '{print $1}')
+    
+    echo
+    echo "🌐 Network Configuration"
+    echo "========================"
+    echo
+    echo "Detected IP address: $detected_ip"
+    echo
+    read -p "Enter server IP address (press Enter to use detected IP): " input_ip
+    
+    if [[ -n "$input_ip" ]]; then
+        SERVER_IP="$input_ip"
+    else
+        SERVER_IP="$detected_ip"
+    fi
+    
+    # Validate IP address format
+    if [[ ! $SERVER_IP =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        error "Invalid IP address format: $SERVER_IP"
+    fi
+    
+    echo
+    read -p "Enter domain name (optional, press Enter to skip): " DOMAIN_NAME
+    
+    info "Server will be configured with:"
+    info "  IP Address: $SERVER_IP"
+    if [[ -n "$DOMAIN_NAME" ]]; then
+        info "  Domain Name: $DOMAIN_NAME"
+    else
+        info "  Domain Name: Not configured (will use IP address)"
+    fi
+    
+    echo
+    read -p "Continue with these settings? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        error "Installation cancelled by user"
+    fi
+    
+    # Save server configuration to temporary file for resume functionality
+    cat > "/tmp/hybrid-dns-server-config" << EOF
+export SERVER_IP="$SERVER_IP"
+export DOMAIN_NAME="$DOMAIN_NAME"
+EOF
+    
+    success "Network configuration completed"
 }
 
 check_requirements() {
@@ -293,7 +381,7 @@ GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;
 \q
 EOF
     
-    # Save database credentials
+    # Save database credentials and server configuration
     cat > "$INSTALL_DIR/.env" << EOF
 # Database Configuration
 DATABASE_URL=postgresql://$DB_USER:$db_password@localhost:5432/$DB_NAME
@@ -311,6 +399,12 @@ BACKEND_PORT=$BACKEND_PORT
 FRONTEND_PORT=$FRONTEND_PORT
 DEBUG=false
 LOG_LEVEL=INFO
+
+# Server Configuration
+SERVER_IP=$SERVER_IP
+DOMAIN_NAME=$DOMAIN_NAME
+VITE_API_URL=http://$SERVER_IP:$BACKEND_PORT
+ALLOWED_HOSTS=localhost,127.0.0.1,$SERVER_IP$(if [[ -n "$DOMAIN_NAME" ]]; then echo ",$DOMAIN_NAME"; fi)
 
 # BIND9 Configuration
 BIND_CONFIG_DIR=/etc/bind
@@ -394,6 +488,14 @@ python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
+EOF
+    
+    # Configure frontend environment
+    info "Configuring frontend environment..."
+    sudo -u "$SERVICE_USER" bash << EOF
+cd "$INSTALL_DIR/frontend"
+echo "VITE_API_URL=http://$SERVER_IP:$BACKEND_PORT" > .env
+echo "VITE_API_URL=http://$SERVER_IP:$BACKEND_PORT" > .env.production
 EOF
     
     # Install Node.js dependencies and build frontend
@@ -525,13 +627,23 @@ setup_nginx() {
     
     # Generate SSL certificate (self-signed for now)
     mkdir -p /etc/nginx/ssl
+    local cert_cn="$SERVER_IP"
+    if [[ -n "$DOMAIN_NAME" ]]; then
+        cert_cn="$DOMAIN_NAME"
+    fi
+    
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
         -keyout /etc/nginx/ssl/dns-server.key \
         -out /etc/nginx/ssl/dns-server.crt \
-        -subj "/C=US/ST=State/L=City/O=Organization/CN=dns-server.local"
+        -subj "/C=US/ST=State/L=City/O=Hybrid DNS Server/CN=$cert_cn"
     
-    # Create Nginx configuration
-    cat > "$NGINX_AVAILABLE/hybrid-dns-server" << 'EOF'
+    # Create Nginx configuration with dynamic server name
+    local server_name="_"
+    if [[ -n "$DOMAIN_NAME" ]]; then
+        server_name="$DOMAIN_NAME"
+    fi
+    
+    cat > "$NGINX_AVAILABLE/hybrid-dns-server" << EOF
 # Hybrid DNS Server Nginx Configuration
 
 # Rate limiting
@@ -547,14 +659,14 @@ upstream backend {
 # HTTP redirect to HTTPS
 server {
     listen 80;
-    server_name _;
-    return 301 https://$host$request_uri;
+    server_name $server_name;
+    return 301 https://\$host\$request_uri;
 }
 
 # HTTPS server
 server {
     listen 443 ssl http2;
-    server_name _;
+    server_name $server_name;
 
     # SSL Configuration
     ssl_certificate /etc/nginx/ssl/dns-server.crt;
@@ -589,7 +701,7 @@ server {
     # Frontend static files
     location / {
         root /opt/hybrid-dns-server/frontend/dist;
-        try_files $uri $uri/ /index.html;
+        try_files \$uri \$uri/ /index.html;
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
@@ -600,13 +712,13 @@ server {
         
         proxy_pass http://backend;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
         
         # Timeouts
         proxy_connect_timeout 30s;
@@ -620,10 +732,10 @@ server {
         
         proxy_pass http://backend;
         proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
 
     # Health check endpoint
@@ -981,8 +1093,15 @@ print_summary() {
     echo "• PostgreSQL Database: $(systemctl is-active postgresql)"
     echo
     echo "Access Information:"
-    echo "• Web Interface: https://$(hostname -I | awk '{print $1}')"
-    echo "• DNS Server: $(hostname -I | awk '{print $1}'):53"
+    if [[ -n "$DOMAIN_NAME" ]]; then
+        echo "• Web Interface: https://$DOMAIN_NAME"
+        echo "• API Endpoint: http://$SERVER_IP:$BACKEND_PORT"
+        echo "• DNS Server: $SERVER_IP:53 ($DOMAIN_NAME)"
+    else
+        echo "• Web Interface: https://$SERVER_IP"
+        echo "• API Endpoint: http://$SERVER_IP:$BACKEND_PORT"
+        echo "• DNS Server: $SERVER_IP:53"
+    fi
     echo "• Installation Directory: $INSTALL_DIR"
     echo "• Configuration File: $INSTALL_DIR/.env"
     echo "• Log Files: /var/log/bind/, /var/log/nginx/"
@@ -1003,6 +1122,10 @@ print_summary() {
     echo "• Firewall (UFW): $(ufw status | head -1)"
     echo "• Fail2ban: $(systemctl is-active fail2ban)"
     echo "• SSL Certificate: Self-signed (consider using Let's Encrypt)"
+    echo
+    echo "Configuration:"
+    echo "• Frontend API URL: http://$SERVER_IP:$BACKEND_PORT"
+    echo "• Allowed CORS Hosts: localhost, 127.0.0.1, $SERVER_IP$(if [[ -n "$DOMAIN_NAME" ]]; then echo ", $DOMAIN_NAME"; fi)"
     echo
     echo "Next Steps:"
     echo "1. Configure your clients to use this DNS server"
@@ -1180,6 +1303,12 @@ main() {
     check_os
     check_requirements
     
+    # Load server configuration if resuming
+    if [[ -f "/tmp/hybrid-dns-server-config" ]]; then
+        source "/tmp/hybrid-dns-server-config"
+        info "Loaded server configuration from previous session"
+    fi
+    
     local current_checkpoint=$(get_checkpoint)
     if [[ "$current_checkpoint" == "start" ]]; then
         echo "This will install and configure:"
@@ -1223,6 +1352,7 @@ export ADMIN_FULL_NAME="$ADMIN_FULL_NAME"
 EOF
     
     # Installation steps with checkpoint support
+    run_step "server_configured" get_server_configuration
     run_step "system_updated" update_system
     run_step "dependencies_installed" install_dependencies
     run_step "user_created" create_user
@@ -1242,8 +1372,9 @@ EOF
     save_checkpoint "completed"
     clear_checkpoint
     
-    # Clean up temporary credentials file
+    # Clean up temporary files
     rm -f "/tmp/hybrid-dns-admin-creds"
+    rm -f "/tmp/hybrid-dns-server-config"
     
     log "Installation completed at $(date)"
     print_summary

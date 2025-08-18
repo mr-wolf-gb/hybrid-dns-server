@@ -7,7 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import List, Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -30,7 +30,14 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
     # CORS and hosts
-    ALLOWED_HOSTS: List[str] = ["localhost", "127.0.0.1", "*"]
+    ALLOWED_HOSTS: List[str] = Field(default=["localhost", "127.0.0.1", "10.10.20.13", "*"])
+    
+    @field_validator('ALLOWED_HOSTS', mode='before')
+    @classmethod
+    def parse_allowed_hosts(cls, v):
+        if isinstance(v, str):
+            return [host.strip() for host in v.split(',')]
+        return v
     
     # Database
     DATABASE_URL: str = "sqlite:///./dns_server.db"
