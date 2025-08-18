@@ -404,7 +404,7 @@ LOG_LEVEL=INFO
 SERVER_IP=$SERVER_IP
 DOMAIN_NAME=$DOMAIN_NAME
 VITE_API_URL=http://$SERVER_IP:$BACKEND_PORT
-ALLOWED_HOSTS=localhost,127.0.0.1,$SERVER_IP$(if [[ -n "$DOMAIN_NAME" ]]; then echo ",$DOMAIN_NAME"; fi)
+ALLOWED_HOSTS=localhost,127.0.0.1,$SERVER_IP$(if [[ -n "$DOMAIN_NAME" ]]; then echo ",$DOMAIN_NAME"; fi),*
 
 # BIND9 Configuration
 BIND_CONFIG_DIR=/etc/bind

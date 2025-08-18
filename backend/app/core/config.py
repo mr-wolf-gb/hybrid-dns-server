@@ -30,14 +30,16 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
     # CORS and hosts
-    ALLOWED_HOSTS: List[str] = Field(default=["localhost", "127.0.0.1", "10.10.20.13", "*"])
+    ALLOWED_HOSTS: str = Field(default="localhost,127.0.0.1,*")
     
-    @field_validator('ALLOWED_HOSTS', mode='before')
-    @classmethod
-    def parse_allowed_hosts(cls, v):
-        if isinstance(v, str):
-            return [host.strip() for host in v.split(',')]
-        return v
+    @property
+    def allowed_hosts_list(self) -> List[str]:
+        """Get ALLOWED_HOSTS as a list"""
+        if isinstance(self.ALLOWED_HOSTS, str):
+            if not self.ALLOWED_HOSTS.strip():
+                return ["localhost", "127.0.0.1", "*"]
+            return [host.strip() for host in self.ALLOWED_HOSTS.split(',') if host.strip()]
+        return self.ALLOWED_HOSTS if isinstance(self.ALLOWED_HOSTS, list) else ["localhost", "127.0.0.1", "*"]
     
     # Database
     DATABASE_URL: str = "sqlite:///./dns_server.db"

@@ -94,7 +94,7 @@ def setup_middleware():
     
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.ALLOWED_HOSTS,
+        allow_origins=settings.allowed_hosts_list,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["*"],
@@ -104,7 +104,7 @@ def setup_middleware():
     if not settings.DEBUG:
         app.add_middleware(
             TrustedHostMiddleware, 
-            allowed_hosts=settings.ALLOWED_HOSTS
+            allowed_hosts=settings.allowed_hosts_list
         )
 
 setup_middleware()

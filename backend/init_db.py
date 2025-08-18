@@ -54,6 +54,7 @@ async def init_database():
         print(f"Environment variables loaded:")
         print(f"  SECRET_KEY: {'*' * 20}")
         print(f"  DATABASE_URL: {os.environ.get('DATABASE_URL', 'Not set')}")
+        print(f"  ALLOWED_HOSTS: {os.environ.get('ALLOWED_HOSTS', 'Not set')}")
         
         # Import here to avoid early loading of settings
         from app.core.database import init_database as db_init
