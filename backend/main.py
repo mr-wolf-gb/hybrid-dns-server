@@ -32,7 +32,7 @@ from app.core.logging_config import setup_logging
 from app.core.error_setup import setup_error_handlers, create_startup_message
 from app.services.bind_service import BindService
 from app.services.monitoring_service import MonitoringService
-from app.services.health_service import HealthService
+from app.services.background_tasks import get_background_task_service
 
 # Initialize rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -53,11 +53,11 @@ async def lifespan(app: FastAPI):
     # Initialize services
     bind_service = BindService()
     monitoring_service = MonitoringService()
-    health_service = HealthService()
+    background_service = get_background_task_service()
     
     # Start background services
     asyncio.create_task(monitoring_service.start())
-    asyncio.create_task(health_service.start())
+    await background_service.start()
     
     logger.info("API server started successfully")
     
@@ -66,7 +66,7 @@ async def lifespan(app: FastAPI):
     # Shutdown cleanup
     logger.info("Shutting down API server...")
     await monitoring_service.stop()
-    await health_service.stop()
+    await background_service.stop()
     logger.info("API server stopped")
 
 

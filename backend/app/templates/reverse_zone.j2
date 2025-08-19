@@ -1,0 +1,39 @@
+; Reverse zone file for {{ zone.name }}
+; Generated automatically by Hybrid DNS Server
+; Zone Type: {{ zone.zone_type }}
+; Serial: {{ zone.serial }}
+; Last Updated: {{ zone.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+$TTL {{ zone.minimum }}
+$ORIGIN {{ zone.name }}.
+
+; SOA Record
+@	IN	SOA	{{ zone.name | ensure_trailing_dot }} {{ zone.email | format_email_for_soa }} (
+		{{ zone.serial }}	; Serial number (YYYYMMDDNN)
+		{{ zone.refresh }}	; Refresh interval ({{ zone.refresh }}s)
+		{{ zone.retry }}	; Retry interval ({{ zone.retry }}s)
+		{{ zone.expire }}	; Expire time ({{ zone.expire }}s)
+		{{ zone.minimum }}	; Minimum TTL ({{ zone.minimum }}s)
+		)
+
+{% if records %}
+; Reverse DNS Records (PTR)
+{% for record in records %}
+{% if record.is_active and record.record_type == 'PTR' %}
+{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	PTR	{{ record.value }}.
+{% endif %}
+{% endfor %}
+
+; Other records
+{% for record in records %}
+{% if record.is_active and record.record_type != 'PTR' %}
+{% if record.record_type == 'NS' %}
+{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	NS	{{ record.value }}.
+{% elif record.record_type == 'TXT' %}
+{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	TXT	"{{ record.value }}"
+{% endif %}
+{% endif %}
+{% endfor %}
+{% else %}
+; No reverse DNS records defined for this zone
+{% endif %}

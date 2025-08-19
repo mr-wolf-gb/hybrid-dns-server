@@ -1,0 +1,44 @@
+; Zone file for {{ zone.name }}
+; Generated automatically by Hybrid DNS Server
+; Zone Type: {{ zone.zone_type }}
+; Serial: {{ zone.serial }}
+; Last Updated: {{ zone.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+$TTL {{ zone.minimum }}
+$ORIGIN {{ zone.name }}.
+
+; SOA Record
+@	IN	SOA	{{ zone.name | ensure_trailing_dot }} {{ zone.email | format_email_for_soa }} (
+		{{ zone.serial }}	; Serial number (YYYYMMDDNN)
+		{{ zone.refresh }}	; Refresh interval ({{ zone.refresh }}s)
+		{{ zone.retry }}	; Retry interval ({{ zone.retry }}s)
+		{{ zone.expire }}	; Expire time ({{ zone.expire }}s)
+		{{ zone.minimum }}	; Minimum TTL ({{ zone.minimum }}s)
+		)
+
+{% if records %}
+; DNS Records
+{% for record in records %}
+{% if record.is_active %}
+{% if record.record_type == 'A' %}
+{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	A	{{ record.value }}
+{% elif record.record_type == 'AAAA' %}
+{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	AAAA	{{ record.value }}
+{% elif record.record_type == 'CNAME' %}
+{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	CNAME	{{ record.value }}.
+{% elif record.record_type == 'MX' %}
+{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	MX	{{ record.priority }}	{{ record.value }}.
+{% elif record.record_type == 'TXT' %}
+{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	TXT	"{{ record.value }}"
+{% elif record.record_type == 'SRV' %}
+{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	SRV	{{ record.priority }}	{{ record.weight }}	{{ record.port }}	{{ record.value }}.
+{% elif record.record_type == 'PTR' %}
+{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	PTR	{{ record.value }}.
+{% elif record.record_type == 'NS' %}
+{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	NS	{{ record.value }}.
+{% endif %}
+{% endif %}
+{% endfor %}
+{% else %}
+; No DNS records defined for this zone
+{% endif %}

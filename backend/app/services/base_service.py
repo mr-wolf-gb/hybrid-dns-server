@@ -141,11 +141,11 @@ class BaseService(Generic[T]):
                     db=self.db
                 )
             
-            self.db.delete(instance)
-            
             if self.is_async:
+                await self.db.delete(instance)
                 await self.db.commit()
             else:
+                self.db.delete(instance)
                 self.db.commit()
                 
             logger.info(f"Deleted {self.resource_type} with ID {instance_id}")

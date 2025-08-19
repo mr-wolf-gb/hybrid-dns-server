@@ -16,6 +16,20 @@ from .security import RPZAction
 T = TypeVar('T')
 
 
+class PaginatedResponse(BaseModel, Generic[T]):
+    """Generic paginated response schema"""
+    items: List[T]
+    total: int = Field(..., description="Total number of items")
+    page: int = Field(..., description="Current page number")
+    per_page: int = Field(..., description="Items per page")
+    pages: int = Field(..., description="Total number of pages")
+    has_next: bool = Field(..., description="Whether there is a next page")
+    has_prev: bool = Field(..., description="Whether there is a previous page")
+    
+    class Config:
+        from_attributes = True
+
+
 class DNSValidators:
     """Utility class for DNS-specific validation functions"""
     
@@ -884,6 +898,25 @@ class Zone(ZoneBase):
         }
 
 
+class ZoneQueryParams(BaseModel):
+    """Schema for zone query parameters with filtering and pagination"""
+    skip: int = Field(0, ge=0, description="Number of items to skip for pagination")
+    limit: int = Field(100, ge=1, le=1000, description="Maximum number of items to return")
+    zone_type: Optional[ZoneType] = Field(None, description="Filter by zone type")
+    active_only: bool = Field(True, description="Filter to show only active zones")
+    search: Optional[str] = Field(None, min_length=1, max_length=255, description="Search term for zone name or description")
+    sort_by: Optional[str] = Field("name", description="Field to sort by")
+    sort_order: str = Field("asc", pattern="^(asc|desc)$", description="Sort order (asc or desc)")
+    
+    @validator('sort_by')
+    def validate_sort_by(cls, v):
+        """Validate sort_by field"""
+        allowed_fields = ['name', 'zone_type', 'created_at', 'updated_at', 'serial', 'is_active']
+        if v and v not in allowed_fields:
+            raise ValueError(f'sort_by must be one of: {", ".join(allowed_fields)}')
+        return v
+
+
 # DNS Record Schemas
 class DNSRecordBase(BaseModel):
     """Base schema for DNS records with common fields"""
@@ -1422,6 +1455,40 @@ class ZoneValidationResult(BaseModel):
     valid: bool = Field(..., description="Whether the zone is valid")
     errors: List[str] = Field(default_factory=list, description="List of validation errors")
     warnings: List[str] = Field(default_factory=list, description="List of validation warnings")
+
+
+class SerialValidationResult(BaseModel):
+    """Schema for serial number validation results"""
+    valid: bool = Field(..., description="Whether the serial number is valid")
+    format: str = Field(..., description="Serial number format (YYYYMMDDNN, unknown, invalid)")
+    year: Optional[int] = Field(None, description="Year from serial number")
+    month: Optional[int] = Field(None, description="Month from serial number")
+    day: Optional[int] = Field(None, description="Day from serial number")
+    sequence: Optional[int] = Field(None, description="Sequence number from serial")
+    date_valid: Optional[bool] = Field(None, description="Whether the date portion is valid")
+    date_str: Optional[str] = Field(None, description="Date string representation")
+    error: Optional[str] = Field(None, description="Error message if invalid")
+
+
+class SerialHistoryEntry(BaseModel):
+    """Schema for serial number history entries"""
+    serial: Optional[int] = Field(None, description="Serial number")
+    updated_at: Optional[datetime] = Field(None, description="When the serial was updated")
+    updated_by: Optional[int] = Field(None, description="User who updated the serial")
+    current: bool = Field(False, description="Whether this is the current serial")
+    
+    class Config:
+        from_attributes = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+
+
+class SerialHistoryResponse(BaseModel):
+    """Schema for serial history response"""
+    zone_id: int = Field(..., description="Zone ID")
+    zone_name: str = Field(..., description="Zone name")
+    history: List[SerialHistoryEntry] = Field(..., description="Serial number history")
     
     class Config:
         from_attributes = True
@@ -1450,3 +1517,56 @@ class ValidationResult(BaseModel):
 
 
 # SystemStatus moved to system.py to avoid duplication
+
+class HealthCheckResult(BaseModel):
+    """Schema for individual health check results"""
+    server_ip: str = Field(..., description="IP address of the DNS server")
+    server_port: int = Field(default=53, description="Port of the DNS server")
+    status: str = Field(..., description="Health status: healthy, unhealthy, timeout, error")
+    response_time: Optional[int] = Field(None, description="Response time in milliseconds")
+    error_message: Optional[str] = Field(None, description="Error message if status is not healthy")
+    resolved_ips: Optional[List[str]] = Field(None, description="Resolved IP addresses for test query")
+    message: Optional[str] = Field(None, description="Additional status message")
+    checked_at: datetime = Field(..., description="Timestamp of the health check")
+    
+    class Config:
+        from_attributes = True
+
+class ForwarderHealthStatus(BaseModel):
+    """Schema for forwarder overall health status"""
+    overall_status: str = Field(..., description="Overall health status: healthy, unhealthy, degraded, unknown")
+    healthy_servers: int = Field(..., description="Number of healthy servers")
+    total_servers: int = Field(..., description="Total number of servers")
+    last_checked: Optional[datetime] = Field(None, description="Last health check timestamp")
+    server_statuses: Dict[str, Dict] = Field(default_factory=dict, description="Individual server statuses")
+    
+    class Config:
+        from_attributes = True
+
+class ForwarderTestResult(BaseModel):
+    """Schema for forwarder test results"""
+    server_ip: str = Field(..., description="IP address of the tested server")
+    server_port: int = Field(default=53, description="Port of the tested server")
+    successful_queries: int = Field(..., description="Number of successful queries")
+    total_queries: int = Field(..., description="Total number of queries attempted")
+    success_rate: float = Field(..., description="Success rate as percentage")
+    avg_response_time: Optional[float] = Field(None, description="Average response time in milliseconds")
+    query_results: List[Dict] = Field(default_factory=list, description="Individual query results")
+    
+    class Config:
+        from_attributes = True
+
+class HealthSummary(BaseModel):
+    """Schema for overall health summary"""
+    total_forwarders: int = Field(..., description="Total number of forwarders")
+    active_forwarders: int = Field(..., description="Number of active forwarders")
+    health_check_enabled: int = Field(..., description="Number of forwarders with health checking enabled")
+    healthy_forwarders: int = Field(..., description="Number of healthy forwarders")
+    unhealthy_forwarders: int = Field(..., description="Number of unhealthy forwarders")
+    degraded_forwarders: int = Field(..., description="Number of degraded forwarders")
+    unknown_forwarders: int = Field(..., description="Number of forwarders with unknown status")
+    last_updated: datetime = Field(..., description="Last update timestamp")
+    forwarder_details: List[Dict] = Field(default_factory=list, description="Detailed forwarder information")
+    
+    class Config:
+        from_attributes = True

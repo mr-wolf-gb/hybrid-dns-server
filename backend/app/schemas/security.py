@@ -226,3 +226,68 @@ class RPZRuleImportResult(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+# Category Management Schemas
+class RPZCategory(BaseModel):
+    """Schema for RPZ category information"""
+    name: str = Field(..., description="Category identifier")
+    display_name: str = Field(..., description="Human-readable category name")
+    description: str = Field(..., description="Category description")
+    total_rules: int = Field(default=0, description="Total rules in category")
+    active_rules: int = Field(default=0, description="Active rules in category")
+    rules_by_action: dict[str, int] = Field(default_factory=dict, description="Rules grouped by action")
+    rules_by_source: dict[str, int] = Field(default_factory=dict, description="Rules grouped by source")
+    
+    class Config:
+        from_attributes = True
+
+
+class RPZCategoryStatus(BaseModel):
+    """Schema for RPZ category status"""
+    category: str = Field(..., description="Category identifier")
+    status: str = Field(..., description="Category status: enabled, disabled, mixed, empty")
+    total_rules: int = Field(default=0, description="Total rules in category")
+    active_rules: int = Field(default=0, description="Active rules in category")
+    inactive_rules: int = Field(default=0, description="Inactive rules in category")
+    enabled_percentage: float = Field(default=0.0, description="Percentage of rules that are enabled")
+    
+    class Config:
+        from_attributes = True
+
+
+class RPZCategoryToggleResult(BaseModel):
+    """Schema for category enable/disable operation results"""
+    category: str = Field(..., description="Category that was toggled")
+    action: str = Field(..., description="Action performed: enabled or disabled")
+    rules_affected: int = Field(default=0, description="Number of rules that were changed")
+    errors: list[str] = Field(default_factory=list, description="Any errors that occurred")
+    
+    class Config:
+        from_attributes = True
+
+
+class RPZBulkCategorizeRequest(BaseModel):
+    """Schema for bulk categorization request"""
+    rule_ids: list[int] = Field(..., min_items=1, description="List of rule IDs to categorize")
+    new_category: str = Field(..., description="Target category for the rules")
+    
+    @validator('new_category')
+    def validate_category(cls, v):
+        """Validate category is one of the allowed values"""
+        allowed_categories = ['malware', 'phishing', 'adult', 'social-media', 'gambling', 'custom']
+        if v not in allowed_categories:
+            raise ValueError(f'Category must be one of: {", ".join(allowed_categories)}')
+        return v
+
+
+class RPZBulkCategorizeResult(BaseModel):
+    """Schema for bulk categorization operation results"""
+    total_processed: int = Field(default=0, description="Total rules processed")
+    rules_updated: int = Field(default=0, description="Number of rules successfully updated")
+    rules_failed: int = Field(default=0, description="Number of rules that failed to update")
+    new_category: str = Field(..., description="Target category")
+    errors: list[str] = Field(default_factory=list, description="Any errors that occurred")
+    
+    class Config:
+        from_attributes = True

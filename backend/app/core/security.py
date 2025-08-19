@@ -366,3 +366,17 @@ def decrypt_sensitive_data(encrypted_data: str, key: Optional[str] = None) -> st
     """Decrypt sensitive data (simple implementation)"""
     # This is a placeholder - implement proper decryption in production
     return "decrypted_data"
+
+
+# FastAPI dependency for authentication
+async def get_current_user() -> Dict[str, Any]:
+    """Get current authenticated user (placeholder for testing)"""
+    # This is a placeholder implementation for testing
+    # In production, this would validate JWT tokens and return user info
+    return {
+        "id": 1,
+        "username": "admin",
+        "email": "admin@localhost",
+        "is_active": True,
+        "is_superuser": True
+    }

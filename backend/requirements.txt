@@ -18,6 +18,7 @@ bcrypt==4.1.2
 
 # HTTP Clients and requests
 httpx==0.25.2
+aiohttp==3.9.1
 aiofiles==23.2.1
 requests==2.31.0
 
@@ -56,3 +57,6 @@ fastapi-mail==1.4.1
 
 # Rate limiting
 slowapi==0.1.9
+
+# Template engine for zone file generation
+jinja2==3.1.2

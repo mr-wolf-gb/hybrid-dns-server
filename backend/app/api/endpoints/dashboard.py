@@ -8,16 +8,20 @@ from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ...core.database import database
+from ...core.database import database, get_database_session
 from ...core.dependencies import get_current_user
 from ...services.monitoring_service import MonitoringService
 from ...services.bind_service import BindService
+from ...services.health_service import get_health_service
 
 router = APIRouter()
 
 
 @router.get("/stats")
-async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
+async def get_dashboard_stats(
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_database_session)
+):
     """Get real-time dashboard statistics"""
     
     # Get basic DNS statistics
@@ -93,7 +97,7 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
             stats["zones"]["authoritative"] = zone_stats["auth_zones"] or 0
             stats["zones"]["forward"] = zone_stats["forward_zones"] or 0
         
-        # Get forwarder counts
+        # Get forwarder counts with health status
         forwarder_stats = await database.fetch_one("""
             SELECT COUNT(*) as total_forwarders
             FROM forwarders 
@@ -102,8 +106,13 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
         
         if forwarder_stats:
             stats["forwarders"]["total"] = forwarder_stats["total_forwarders"] or 0
-            # TODO: Implement health checking to get healthy/unhealthy counts
-            stats["forwarders"]["healthy"] = forwarder_stats["total_forwarders"] or 0
+            
+            # Get health status for all forwarders
+            health_service = get_health_service()
+            health_summary = await health_service.get_forwarder_health_summary(db)
+            
+            stats["forwarders"]["healthy"] = health_summary.get("healthy_forwarders", 0)
+            stats["forwarders"]["unhealthy"] = health_summary.get("unhealthy_forwarders", 0) + health_summary.get("degraded_forwarders", 0)
         
     except Exception as e:
         # Log error but don't fail the entire request
@@ -250,4 +259,90 @@ async def get_bind_status(current_user: dict = Depends(get_current_user)):
         "config_valid": status.get("config_valid", False),
         "zones_loaded": status.get("zones_loaded", 0),
         "cache_size": status.get("cache_size", 0)
+    }
+
+
+@router.get("/health-status")
+async def get_health_status_tracking(
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_database_session)
+):
+    """Get comprehensive health status tracking for all forwarders"""
+    
+    health_service = get_health_service()
+    health_summary = await health_service.get_forwarder_health_summary(db)
+    
+    # Add additional tracking metrics
+    health_tracking = {
+        "summary": {
+            "total_forwarders": health_summary.get("total_forwarders", 0),
+            "active_forwarders": health_summary.get("active_forwarders", 0),
+            "health_check_enabled": health_summary.get("health_check_enabled", 0),
+            "healthy_forwarders": health_summary.get("healthy_forwarders", 0),
+            "unhealthy_forwarders": health_summary.get("unhealthy_forwarders", 0),
+            "degraded_forwarders": health_summary.get("degraded_forwarders", 0),
+            "unknown_forwarders": health_summary.get("unknown_forwarders", 0),
+            "last_updated": health_summary.get("last_updated")
+        },
+        "forwarder_details": health_summary.get("forwarder_details", []),
+        "health_trends": {
+            "healthy_percentage": 0.0,
+            "unhealthy_percentage": 0.0,
+            "degraded_percentage": 0.0,
+            "unknown_percentage": 0.0
+        }
+    }
+    
+    # Calculate health percentages
+    total_with_health_check = health_summary.get("health_check_enabled", 0)
+    if total_with_health_check > 0:
+        health_tracking["health_trends"]["healthy_percentage"] = (
+            health_summary.get("healthy_forwarders", 0) / total_with_health_check * 100
+        )
+        health_tracking["health_trends"]["unhealthy_percentage"] = (
+            health_summary.get("unhealthy_forwarders", 0) / total_with_health_check * 100
+        )
+        health_tracking["health_trends"]["degraded_percentage"] = (
+            health_summary.get("degraded_forwarders", 0) / total_with_health_check * 100
+        )
+        health_tracking["health_trends"]["unknown_percentage"] = (
+            health_summary.get("unknown_forwarders", 0) / total_with_health_check * 100
+        )
+    
+    return health_tracking
+
+
+@router.get("/health-alerts")
+async def get_health_alerts(
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_database_session)
+):
+    """Get health alerts for unhealthy forwarders"""
+    
+    health_service = get_health_service()
+    unhealthy_forwarders = await health_service.get_unhealthy_forwarders(db)
+    
+    alerts = []
+    for forwarder in unhealthy_forwarders:
+        alert_level = "critical" if forwarder["status"] == "unhealthy" else "warning"
+        
+        alerts.append({
+            "id": f"forwarder_{forwarder['id']}",
+            "level": alert_level,
+            "title": f"Forwarder '{forwarder['name']}' is {forwarder['status']}",
+            "message": f"Forwarder {forwarder['name']} ({forwarder['type']}) has {forwarder['healthy_servers']}/{forwarder['total_servers']} healthy servers",
+            "timestamp": forwarder["last_checked"],
+            "forwarder_id": forwarder["id"],
+            "forwarder_name": forwarder["name"],
+            "status": forwarder["status"],
+            "healthy_servers": forwarder["healthy_servers"],
+            "total_servers": forwarder["total_servers"],
+            "server_details": forwarder.get("server_statuses", {})
+        })
+    
+    return {
+        "alerts": alerts,
+        "total_alerts": len(alerts),
+        "critical_alerts": len([a for a in alerts if a["level"] == "critical"]),
+        "warning_alerts": len([a for a in alerts if a["level"] == "warning"])
     }

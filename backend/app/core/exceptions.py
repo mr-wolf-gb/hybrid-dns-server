@@ -42,6 +42,11 @@ class RPZException(DNSServerException):
     pass
 
 
+class ThreatFeedException(DNSServerException):
+    """Exception for threat feed operations"""
+    pass
+
+
 class BindException(DNSServerException):
     """Exception for BIND9 operations"""
     pass

@@ -1,0 +1,9 @@
+; Slave zone configuration for {{ zone.name }}
+; Generated automatically by Hybrid DNS Server
+; Zone Type: {{ zone.zone_type }}
+; Master servers: {{ zone.master_servers | join(', ') if zone.master_servers else 'None configured' }}
+; Last Updated: {{ zone.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+; This is a slave zone - zone data is transferred from master servers
+; No local records are maintained for slave zones
+; Zone file will be automatically created by BIND9 during zone transfer

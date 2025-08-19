@@ -77,9 +77,12 @@ class Settings(BaseSettings):
     # Monitoring and Health Checks
     MONITORING_ENABLED: bool = True
     MONITORING_INTERVAL: int = 60
-    HEALTH_CHECK_INTERVAL: int = 60  # seconds
+    HEALTH_CHECK_INTERVAL: int = 300  # seconds (5 minutes)
+    HEALTH_CHECK_TIMEOUT: int = 10  # seconds
     DNS_QUERY_TIMEOUT: int = 5  # seconds
     BIND_STATS_URL: str = "http://127.0.0.1:8053"
+    CLEANUP_INTERVAL: int = 3600  # seconds (1 hour)
+    HEALTH_RECORD_RETENTION_DAYS: int = 30
     
     # Logging
     LOG_LEVEL: str = "INFO"

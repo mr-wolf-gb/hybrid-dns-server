@@ -1,0 +1,27 @@
+[
+  {
+    "domain": "malware1.com",
+    "rpz_zone": "malware",
+    "action": "block",
+    "description": "Known malware distribution site"
+  },
+  {
+    "domain": "phishing1.com",
+    "rpz_zone": "phishing",
+    "action": "block",
+    "description": "Phishing site targeting banks"
+  },
+  {
+    "domain": "redirect-me.com",
+    "rpz_zone": "custom",
+    "action": "redirect",
+    "redirect_target": "safe-alternative.com",
+    "description": "Redirect to safe alternative"
+  },
+  {
+    "domain": "allow-this.com",
+    "rpz_zone": "whitelist",
+    "action": "passthru",
+    "description": "Explicitly allowed domain"
+  }
+]
