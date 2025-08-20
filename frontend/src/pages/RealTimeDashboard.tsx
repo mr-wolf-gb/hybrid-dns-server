@@ -14,9 +14,10 @@ import RealTimeQueryMonitor from '@/components/dashboard/RealTimeQueryMonitor'
 import RealTimeHealthMonitor from '@/components/health/RealTimeHealthMonitor'
 import LiveConfigurationMonitor from '@/components/system/LiveConfigurationMonitor'
 import RealTimeChart from '@/components/dashboard/RealTimeChart'
+import WebSocketTest from '@/components/debug/WebSocketTest'
 
 const RealTimeDashboard: React.FC = () => {
-  const [activeView, setActiveView] = useState<'overview' | 'queries' | 'health' | 'config'>('overview')
+  const [activeView, setActiveView] = useState<'overview' | 'queries' | 'health' | 'config' | 'test'>('overview')
   const [isGlobalLive, setIsGlobalLive] = useState(true)
   
   const {
@@ -54,6 +55,12 @@ const RealTimeDashboard: React.FC = () => {
       name: 'Configuration',
       icon: CogIcon,
       description: 'Live configuration changes'
+    },
+    {
+      id: 'test',
+      name: 'WebSocket Test',
+      icon: ArrowPathIcon,
+      description: 'Test WebSocket connection'
     }
   ]
 
@@ -322,6 +329,10 @@ const RealTimeDashboard: React.FC = () => {
 
         {activeView === 'config' && (
           <LiveConfigurationMonitor userId={userId} />
+        )}
+
+        {activeView === 'test' && (
+          <WebSocketTest />
         )}
       </div>
     </div>

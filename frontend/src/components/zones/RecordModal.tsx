@@ -7,13 +7,13 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   XCircleIcon,
-  InformationCircleIcon,
 } from '@heroicons/react/24/outline'
 import { recordsService } from '@/services/api'
 import { DNSRecord, RecordFormData } from '@/types'
-import { Modal, Button, Input, Select, Card, Badge } from '@/components/ui'
-import { validateDNSRecord, isValidIP, isValidDomain, isValidPort } from '@/utils'
+import { Modal, Button, Input, Select, Card } from '@/components/ui'
+import { isValidIP, isValidDomain } from '@/utils'
 import { toast } from 'react-toastify'
+import RecordTemplates from './RecordTemplates'
 
 interface RecordModalProps {
   zoneId: number
@@ -23,44 +23,7 @@ interface RecordModalProps {
   onSuccess: () => void
 }
 
-// Record templates for quick creation
-const recordTemplates = {
-  A: [
-    { name: 'Web Server', value: '192.168.1.10', ttl: 3600 },
-    { name: 'Load Balancer', value: '10.0.0.100', ttl: 300 },
-    { name: 'CDN', value: '203.0.113.1', ttl: 86400 },
-  ],
-  AAAA: [
-    { name: 'IPv6 Web Server', value: '2001:db8::1', ttl: 3600 },
-    { name: 'IPv6 Mail Server', value: '2001:db8::10', ttl: 3600 },
-  ],
-  CNAME: [
-    { name: 'WWW Alias', value: 'example.com', ttl: 3600 },
-    { name: 'FTP Alias', value: 'files.example.com', ttl: 3600 },
-    { name: 'Mail Alias', value: 'mail.example.com', ttl: 3600 },
-  ],
-  MX: [
-    { name: 'Primary Mail', value: 'mail.example.com', priority: 10, ttl: 3600 },
-    { name: 'Backup Mail', value: 'mail2.example.com', priority: 20, ttl: 3600 },
-    { name: 'Google Workspace', value: 'aspmx.l.google.com', priority: 1, ttl: 3600 },
-  ],
-  TXT: [
-    { name: 'SPF Record', value: 'v=spf1 include:_spf.google.com ~all', ttl: 3600 },
-    { name: 'DKIM Record', value: 'v=DKIM1; k=rsa; p=...', ttl: 3600 },
-    { name: 'DMARC Record', value: 'v=DMARC1; p=quarantine; rua=mailto:dmarc@example.com', ttl: 3600 },
-  ],
-  SRV: [
-    { name: 'SIP Service', value: 'sip.example.com', priority: 10, weight: 5, port: 5060, ttl: 3600 },
-    { name: 'XMPP Service', value: 'xmpp.example.com', priority: 5, weight: 0, port: 5222, ttl: 3600 },
-  ],
-  PTR: [
-    { name: 'Reverse DNS', value: 'server.example.com', ttl: 3600 },
-  ],
-  NS: [
-    { name: 'Primary NS', value: 'ns1.example.com', ttl: 86400 },
-    { name: 'Secondary NS', value: 'ns2.example.com', ttl: 86400 },
-  ],
-}
+// Record templates moved to RecordTemplates component
 
 const RecordModal: React.FC<RecordModalProps> = ({ 
   zoneId, 
@@ -70,13 +33,12 @@ const RecordModal: React.FC<RecordModalProps> = ({
   onSuccess 
 }) => {
   const isEditing = !!record
-  const [showPreview, setShowPreview] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<string>('')
 
   const {
     register,
     handleSubmit,
-    formState: { errors, isValid },
+    formState: { errors },
     watch,
     reset,
     setValue,
@@ -132,7 +94,7 @@ const RecordModal: React.FC<RecordModalProps> = ({
         })
       }
       setSelectedTemplate('')
-      setShowPreview(false)
+      // Reset preview state if needed
     }
   }, [isOpen, record, reset])
 
@@ -175,10 +137,10 @@ const RecordModal: React.FC<RecordModalProps> = ({
   })
 
   // Apply template
-  const applyTemplate = (template: any) => {
-    setValue('name', template.name.toLowerCase().replace(/\s+/g, ''))
-    setValue('value', template.value)
-    setValue('ttl', template.ttl)
+  const applyTemplate = (template: Partial<RecordFormData>) => {
+    if (template.name !== undefined) setValue('name', template.name)
+    if (template.value !== undefined) setValue('value', template.value)
+    if (template.ttl !== undefined) setValue('ttl', template.ttl)
     if (template.priority !== undefined) setValue('priority', template.priority)
     if (template.weight !== undefined) setValue('weight', template.weight)
     if (template.port !== undefined) setValue('port', template.port)
@@ -340,32 +302,11 @@ const RecordModal: React.FC<RecordModalProps> = ({
     >
       <div className="space-y-6">
         {/* Templates section */}
-        {!isEditing && recordTemplates[watchType as keyof typeof recordTemplates] && (
-          <Card className="p-4 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                Quick Templates for {watchType} Records
-              </h3>
-              <InformationCircleIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {recordTemplates[watchType as keyof typeof recordTemplates].map((template, index) => (
-                <button
-                  key={index}
-                  type="button"
-                  onClick={() => applyTemplate(template)}
-                  className="text-left p-3 rounded-lg border border-blue-200 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-800/30 transition-colors"
-                >
-                  <div className="font-medium text-sm text-blue-900 dark:text-blue-100">
-                    {template.name}
-                  </div>
-                  <div className="text-xs text-blue-600 dark:text-blue-400 font-mono mt-1">
-                    {template.value}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </Card>
+        {!isEditing && (
+          <RecordTemplates
+            recordType={watchType}
+            onApplyTemplate={applyTemplate}
+          />
         )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">

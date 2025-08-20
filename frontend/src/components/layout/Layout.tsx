@@ -8,6 +8,7 @@ import {
   CogIcon,
   ChartBarIcon,
   HeartIcon,
+  DocumentTextIcon,
   Bars3Icon,
   XMarkIcon,
   MoonIcon,
@@ -17,6 +18,8 @@ import {
 } from '@heroicons/react/24/outline'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
+import { RealTimeNotifications } from '@/components/ui/RealTimeNotifications'
+import { ConnectionStatus } from '@/components/ui/ConnectionStatus'
 import { cn } from '@/utils'
 
 const navigation = [
@@ -26,6 +29,8 @@ const navigation = [
   { name: 'Forwarders', href: '/forwarders', icon: CloudIcon },
   { name: 'Security (RPZ)', href: '/security', icon: ShieldCheckIcon },
   { name: 'Health Monitor', href: '/health', icon: HeartIcon },
+  { name: 'Advanced Analytics', href: '/analytics', icon: ChartBarIcon },
+  { name: 'Reports', href: '/reports', icon: DocumentTextIcon },
   { name: 'Events', href: '/events', icon: ChartBarIcon },
   { name: 'Query Logs', href: '/logs', icon: ChartBarIcon },
   { name: 'Settings', href: '/settings', icon: CogIcon },
@@ -147,6 +152,12 @@ const Layout: React.FC = () => {
             </div>
             
             <div className="ml-4 flex items-center md:ml-6 space-x-3">
+              {/* Real-time notifications */}
+              <RealTimeNotifications />
+              
+              {/* Connection status */}
+              <ConnectionStatus />
+              
               {/* Theme toggle */}
               <button
                 type="button"

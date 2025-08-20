@@ -16,6 +16,8 @@ const Settings = React.lazy(() => import('@/pages/Settings'))
 const HealthMonitoring = React.lazy(() => import('@/pages/HealthMonitoring'))
 const RealTimeDashboard = React.lazy(() => import('@/pages/RealTimeDashboard'))
 const Events = React.lazy(() => import('@/pages/Events'))
+const Reports = React.lazy(() => import('@/pages/Reports'))
+const Analytics = React.lazy(() => import('@/pages/Analytics'))
 
 const App: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth()
@@ -113,6 +115,22 @@ const App: React.FC = () => {
           element={
             <React.Suspense fallback={<Loading size="lg" text="Loading events..." />}>
               <Events />
+            </React.Suspense>
+          }
+        />
+        <Route
+          path="reports"
+          element={
+            <React.Suspense fallback={<Loading size="lg" text="Loading reports..." />}>
+              <Reports />
+            </React.Suspense>
+          }
+        />
+        <Route
+          path="analytics"
+          element={
+            <React.Suspense fallback={<Loading size="lg" text="Loading analytics..." />}>
+              <Analytics />
             </React.Suspense>
           }
         />

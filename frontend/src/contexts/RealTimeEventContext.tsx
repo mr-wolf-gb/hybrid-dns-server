@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode, useCallback } from 'react'
-import { useWebSocketService, ConnectionType, EventType } from '@/hooks/useWebSocket'
+import { useWebSocketService, ConnectionType, EventType } from '../hooks/useWebSocket'
 import { WebSocketMessage } from '@/services/websocketService'
+import { useAuth } from './AuthContext'
 import { toast } from 'react-toastify'
 
 interface SystemEvent {
@@ -153,18 +154,21 @@ const RealTimeEventContext = createContext<RealTimeEventContextType | undefined>
 
 interface RealTimeEventProviderProps {
   children: ReactNode
-  userId: string
   connectionType?: ConnectionType
 }
 
 export const RealTimeEventProvider: React.FC<RealTimeEventProviderProps> = ({ 
   children, 
-  userId, 
   connectionType = ConnectionType.ADMIN 
 }) => {
+  const { user } = useAuth()
+  const userId = user?.username || 'anonymous'
   const [state, dispatch] = useReducer(realTimeEventReducer, initialState)
 
-  // WebSocket connection for real-time events
+  // Only create WebSocket connection if user is authenticated
+  const shouldConnect = user && user.username && user.username !== 'anonymous'
+
+  // WebSocket connection for real-time events (only if user is authenticated)
   const {
     isConnected,
     connectionStatus,

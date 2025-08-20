@@ -50,6 +50,50 @@ export interface WebSocketActions {
   ping: () => void;
 }
 
+// Connection types enum
+export enum ConnectionType {
+  HEALTH = 'health',
+  DNS_MANAGEMENT = 'dns_management',
+  SECURITY = 'security',
+  SYSTEM = 'system',
+  ADMIN = 'admin'
+}
+
+// Event types enum
+export enum EventType {
+  // Health monitoring events
+  HEALTH_UPDATE = 'health_update',
+  HEALTH_ALERT = 'health_alert',
+  FORWARDER_STATUS_CHANGE = 'forwarder_status_change',
+  
+  // DNS zone events
+  ZONE_CREATED = 'zone_created',
+  ZONE_UPDATED = 'zone_updated',
+  ZONE_DELETED = 'zone_deleted',
+  RECORD_CREATED = 'record_created',
+  RECORD_UPDATED = 'record_updated',
+  RECORD_DELETED = 'record_deleted',
+  
+  // Security events
+  SECURITY_ALERT = 'security_alert',
+  RPZ_UPDATE = 'rpz_update',
+  THREAT_DETECTED = 'threat_detected',
+  
+  // System events
+  SYSTEM_STATUS = 'system_status',
+  BIND_RELOAD = 'bind_reload',
+  CONFIG_CHANGE = 'config_change',
+  
+  // User events
+  USER_LOGIN = 'user_login',
+  USER_LOGOUT = 'user_logout',
+  SESSION_EXPIRED = 'session_expired',
+  
+  // Connection events
+  CONNECTION_ESTABLISHED = 'connection_established',
+  SUBSCRIPTION_UPDATED = 'subscription_updated'
+}
+
 export const useWebSocket = (config: WebSocketConfig): [WebSocketState, WebSocketActions] => {
   const { token } = useAuth();
   const [state, setState] = useState<WebSocketState>({
@@ -279,5 +323,75 @@ export const useWebSocket = (config: WebSocketConfig): [WebSocketState, WebSocke
 
   return [state, actions];
 };
+
+// Enhanced WebSocket service hook
+export const useWebSocketService = (
+  connectionType: 'health' | 'dns_management' | 'security' | 'system' | 'admin',
+  userId: string,
+  options: {
+    onConnect?: () => void;
+    onDisconnect?: () => void;
+    onError?: (error: Event) => void;
+  } = {}
+) => {
+  const eventHandlersRef = useRef<Map<string, (data: any) => void>>(new Map());
+  
+  const [state, actions] = useWebSocket({
+    connectionType,
+    autoReconnect: true,
+    onMessage: (message: WebSocketMessage) => {
+      // Call registered event handlers
+      const handler = eventHandlersRef.current.get(message.type);
+      if (handler) {
+        handler(message.data);
+      }
+    },
+    onConnect: options.onConnect,
+    onDisconnect: options.onDisconnect,
+    onError: options.onError
+  });
+
+  const subscribe = useCallback((eventType: string, handler: (data: any) => void) => {
+    eventHandlersRef.current.set(eventType, handler);
+  }, []);
+
+  const unsubscribe = useCallback((eventType: string) => {
+    eventHandlersRef.current.delete(eventType);
+  }, []);
+
+  const getStats = useCallback(() => {
+    actions.sendMessage({ type: 'get_connection_stats' });
+  }, [actions]);
+
+  return {
+    isConnected: state.isConnected,
+    isConnecting: state.isConnecting,
+    connectionStatus: state.isConnected ? 'connected' : state.isConnecting ? 'connecting' : 'disconnected',
+    reconnectAttempts: state.reconnectAttempts,
+    error: state.error,
+    sendMessage: actions.sendMessage,
+    subscribe,
+    unsubscribe,
+    getStats,
+    connect: actions.connect,
+    disconnect: actions.disconnect
+  };
+};
+
+// Specialized hooks for different connection types
+export const useHealthWebSocket = (userId: string, options?: any) => 
+  useWebSocketService('health', userId, options);
+
+export const useDNSWebSocket = (userId: string, options?: any) => 
+  useWebSocketService('dns_management', userId, options);
+
+export const useSecurityWebSocket = (userId: string, options?: any) => 
+  useWebSocketService('security', userId, options);
+
+export const useSystemWebSocket = (userId: string, options?: any) => 
+  useWebSocketService('system', userId, options);
+
+export const useAdminWebSocket = (userId: string, options?: any) => 
+  useWebSocketService('admin', userId, options);
 
 export default useWebSocket;

@@ -29,7 +29,7 @@ class Event(Base):
     session_id = Column(String(100), nullable=True, index=True)  # Session that triggered the event
     severity = Column(String(20), nullable=False, default="info")  # debug, info, warning, error, critical
     tags = Column(JSON, nullable=True)  # Additional tags for filtering
-    metadata = Column(JSON, nullable=True)  # Additional metadata
+    event_metadata = Column(JSON, nullable=True)  # Additional metadata
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     processed_at = Column(DateTime, nullable=True)
     is_processed = Column(Boolean, default=False, index=True)

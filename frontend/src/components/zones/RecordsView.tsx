@@ -3,32 +3,25 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeftIcon,
   PlusIcon,
-  PencilIcon,
-  TrashIcon,
-  PlayIcon,
-  PauseIcon,
   MagnifyingGlassIcon,
-  FunnelIcon,
   XMarkIcon,
-  CheckCircleIcon,
-  ExclamationTriangleIcon,
-  XCircleIcon,
 } from '@heroicons/react/24/outline'
 import { recordsService } from '@/services/api'
 import { Zone, DNSRecord } from '@/types'
-import { Card, Button, Table, Badge } from '@/components/ui'
-import { formatDateTime, formatNumber } from '@/utils'
+import { Card, Button, Badge } from '@/components/ui'
+import { formatNumber } from '@/utils'
 import { toast } from 'react-toastify'
 import RecordModal from './RecordModal'
+import RecordList from './RecordList'
+import RecordTypeFilter from './RecordTypeFilter'
 import BulkRecordActions from './BulkRecordActions'
 
 interface RecordsViewProps {
   zone: Zone
   onBack: () => void
-  onCreateRecord: () => void
 }
 
-const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack, onCreateRecord }) => {
+const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
   const [selectedRecord, setSelectedRecord] = useState<DNSRecord | null>(null)
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -39,8 +32,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack, onCreateRecord 
   
   const queryClient = useQueryClient()
 
-  // Available record types for filtering
-  const recordTypes = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'SRV', 'PTR', 'NS'] as const
+  // Available record types for filtering (moved to RecordTypeFilter component)
 
   // Fetch records for the zone
   const { data: records, isLoading } = useQuery({
@@ -73,14 +65,9 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack, onCreateRecord 
     return filtered
   }, [records?.data, searchQuery, selectedTypes, zone.name])
 
-  // Get available types from current records
-  const availableTypes = useMemo(() => {
-    if (!records?.data) return []
-    const types = [...new Set(records.data.map(r => r.type))].sort()
-    return types
-  }, [records?.data])
+  // Available types moved to RecordTypeFilter component
 
-  // Validation function for records
+  // Validation function for records (moved to RecordList component)
   const validateRecord = (record: DNSRecord): { status: 'valid' | 'warning' | 'error', message?: string } => {
     // Basic validation rules
     if (!record.value.trim()) {
@@ -239,184 +226,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack, onCreateRecord 
     }
   }, [filteredRecords, selectedRecords])
 
-  const formatRecordValue = (record: DNSRecord): string => {
-    switch (record.type) {
-      case 'MX':
-        return `${record.priority} ${record.value}`
-      case 'SRV':
-        return `${record.priority} ${record.weight} ${record.port} ${record.value}`
-      default:
-        return record.value
-    }
-  }
-
-  const getRecordTypeColor = (type: string): string => {
-    const colors: Record<string, string> = {
-      'A': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-      'AAAA': 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200',
-      'CNAME': 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-      'MX': 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-      'TXT': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-      'SRV': 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200',
-      'PTR': 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
-      'NS': 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-    }
-    return colors[type] || 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
-  }
-
-  const getValidationIcon = (validation: { status: 'valid' | 'warning' | 'error', message?: string }) => {
-    switch (validation.status) {
-      case 'valid':
-        return <CheckCircleIcon className="h-4 w-4 text-green-500" title="Valid record" />
-      case 'warning':
-        return <ExclamationTriangleIcon className="h-4 w-4 text-yellow-500" title={validation.message} />
-      case 'error':
-        return <XCircleIcon className="h-4 w-4 text-red-500" title={validation.message} />
-    }
-  }
-
-  const columns = [
-    {
-      key: 'select',
-      header: (
-        <input
-          type="checkbox"
-          checked={selectAll}
-          onChange={handleSelectAll}
-          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-        />
-      ),
-      render: (record: DNSRecord) => (
-        <input
-          type="checkbox"
-          checked={selectedRecords.has(record.id)}
-          onChange={() => handleSelectRecord(record.id)}
-          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-        />
-      ),
-    },
-    {
-      key: 'validation',
-      header: '',
-      render: (record: DNSRecord) => {
-        const validation = validateRecord(record)
-        return (
-          <div className="flex items-center justify-center">
-            {getValidationIcon(validation)}
-          </div>
-        )
-      },
-    },
-    {
-      key: 'name',
-      header: 'Name',
-      render: (record: DNSRecord) => (
-        <div>
-          <div className="font-medium text-gray-900 dark:text-gray-100">
-            {record.name || '@'}
-          </div>
-          <div className="text-sm text-gray-500 dark:text-gray-400">
-            {record.name ? `${record.name}.${zone.name}` : zone.name}
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'type',
-      header: 'Type',
-      render: (record: DNSRecord) => (
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRecordTypeColor(record.type)}`}>
-          {record.type}
-        </span>
-      ),
-    },
-    {
-      key: 'value',
-      header: 'Value',
-      render: (record: DNSRecord) => (
-        <div className="max-w-xs">
-          <span className="font-mono text-sm break-all">
-            {formatRecordValue(record)}
-          </span>
-          {(record.type === 'MX' || record.type === 'SRV') && (
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              {record.type === 'MX' && `Priority: ${record.priority}`}
-              {record.type === 'SRV' && `Priority: ${record.priority}, Weight: ${record.weight}, Port: ${record.port}`}
-            </div>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'ttl',
-      header: 'TTL',
-      render: (record: DNSRecord) => {
-        const validation = validateRecord(record)
-        const isWarning = validation.status === 'warning' && validation.message?.includes('TTL')
-        return (
-          <span className={`font-mono text-sm ${isWarning ? 'text-yellow-600 dark:text-yellow-400' : ''}`}>
-            {formatNumber(record.ttl)}s
-          </span>
-        )
-      },
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      render: (record: DNSRecord) => (
-        <Badge variant={record.is_active ? 'success' : 'default'}>
-          {record.is_active ? 'Active' : 'Inactive'}
-        </Badge>
-      ),
-    },
-    {
-      key: 'updated_at',
-      header: 'Last Updated',
-      render: (record: DNSRecord) => (
-        <span className="text-sm text-gray-600 dark:text-gray-400">
-          {formatDateTime(record.updated_at)}
-        </span>
-      ),
-    },
-    {
-      key: 'actions',
-      header: 'Actions',
-      render: (record: DNSRecord) => (
-        <div className="flex items-center space-x-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleEditRecord(record)}
-            title="Edit record"
-          >
-            <PencilIcon className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleToggleRecord(record)}
-            title={record.is_active ? 'Deactivate' : 'Activate'}
-            loading={toggleRecordMutation.isPending}
-          >
-            {record.is_active ? (
-              <PauseIcon className="h-4 w-4" />
-            ) : (
-              <PlayIcon className="h-4 w-4" />
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleDeleteRecord(record)}
-            title="Delete record"
-            className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-          >
-            <TrashIcon className="h-4 w-4" />
-          </Button>
-        </div>
-      ),
-    },
-  ]
+  // Helper functions moved to RecordList component
 
   return (
     <div className="space-y-6">
@@ -436,14 +246,14 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack, onCreateRecord 
             DNS Records: {zone.name}
           </h1>
           <div className="flex items-center space-x-4 mt-1">
-            <Badge variant={zone.type === 'master' ? 'success' : 'info'}>
-              {zone.type}
+            <Badge variant={zone.zone_type === 'master' ? 'success' : 'info'}>
+              {zone.zone_type}
             </Badge>
             <Badge variant={zone.is_active ? 'success' : 'default'}>
               {zone.is_active ? 'Active' : 'Inactive'}
             </Badge>
             <span className="text-sm text-gray-500 dark:text-gray-400">
-              Serial: {formatNumber(zone.serial)}
+              Serial: {formatNumber(zone.serial || 0)}
             </span>
           </div>
         </div>
@@ -474,19 +284,14 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack, onCreateRecord 
               />
             </div>
             
-            <Button
-              variant="outline"
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center"
-            >
-              <FunnelIcon className="h-4 w-4 mr-2" />
-              Filters
-              {selectedTypes.length > 0 && (
-                <Badge variant="info" className="ml-2">
-                  {selectedTypes.length}
-                </Badge>
-              )}
-            </Button>
+            <RecordTypeFilter
+              records={records?.data || []}
+              selectedTypes={selectedTypes}
+              onTypeToggle={handleTypeFilter}
+              onClearFilters={clearFilters}
+              showFilters={showFilters}
+              onToggleFilters={() => setShowFilters(!showFilters)}
+            />
 
             {hasActiveFilters && (
               <Button
@@ -505,33 +310,6 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack, onCreateRecord 
             Add Record
           </Button>
         </div>
-
-        {/* Type filters */}
-        {showFilters && (
-          <Card className="p-4">
-            <div className="space-y-3">
-              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Filter by Record Type</h3>
-              <div className="flex flex-wrap gap-2">
-                {availableTypes.map(type => (
-                  <button
-                    key={type}
-                    onClick={() => handleTypeFilter(type)}
-                    className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                      selectedTypes.includes(type)
-                        ? `${getRecordTypeColor(type)} ring-2 ring-offset-2 ring-blue-500 dark:ring-offset-gray-800`
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    {type}
-                    <span className="ml-2 text-xs">
-                      {records?.data?.filter(r => r.type === type).length || 0}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </Card>
-        )}
       </div>
 
       {/* Stats */}
@@ -613,10 +391,17 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack, onCreateRecord 
             </div>
           </div>
         )}
-        <Table
-          data={filteredRecords}
-          columns={columns}
+        <RecordList
+          records={filteredRecords}
+          zone={zone}
+          selectedRecords={selectedRecords}
+          selectAll={selectAll}
           loading={isLoading}
+          onSelectRecord={handleSelectRecord}
+          onSelectAll={handleSelectAll}
+          onEditRecord={handleEditRecord}
+          onDeleteRecord={handleDeleteRecord}
+          onToggleRecord={handleToggleRecord}
           emptyMessage={
             hasActiveFilters 
               ? "No records match your current filters. Try adjusting your search or clearing filters."

@@ -28,7 +28,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <ThemeProvider>
           <AuthProvider>
             <WebSocketProvider>
-              <RealTimeEventProvider userId="current-user">
+              <RealTimeEventProvider>
                 <App />
                 <ToastContainer
                 position="top-right"

@@ -394,6 +394,173 @@ export const rpzService = {
     api.post('/rpz/bulk-import', data),
 }
 
+// Reports API
+export const reportsApi = {
+  // Templates
+  getTemplates: (): Promise<AxiosResponse<any[]>> =>
+    api.get('/reports/templates'),
+
+  getTemplate: (templateId: string): Promise<AxiosResponse<any>> =>
+    api.get(`/reports/templates/${templateId}`),
+
+  createTemplate: (data: any): Promise<AxiosResponse<any>> =>
+    api.post('/reports/templates', data),
+
+  updateTemplate: (templateId: string, data: any): Promise<AxiosResponse<any>> =>
+    api.put(`/reports/templates/${templateId}`, data),
+
+  deleteTemplate: (templateId: string): Promise<AxiosResponse<void>> =>
+    api.delete(`/reports/templates/${templateId}`),
+
+  // Schedules
+  getSchedules: (): Promise<AxiosResponse<any[]>> =>
+    api.get('/reports/schedules'),
+
+  getSchedule: (scheduleId: string): Promise<AxiosResponse<any>> =>
+    api.get(`/reports/schedules/${scheduleId}`),
+
+  createSchedule: (data: any): Promise<AxiosResponse<any>> =>
+    api.post('/reports/schedules', data),
+
+  updateSchedule: (scheduleId: string, data: any): Promise<AxiosResponse<any>> =>
+    api.put(`/reports/schedules/${scheduleId}`, data),
+
+  deleteSchedule: (scheduleId: string): Promise<AxiosResponse<void>> =>
+    api.delete(`/reports/schedules/${scheduleId}`),
+
+  runSchedule: (scheduleId: string): Promise<AxiosResponse<any>> =>
+    api.post(`/reports/schedules/${scheduleId}/run`),
+
+  // Report Generation
+  generateReport: (data: {
+    template_id: string;
+    parameters?: any;
+    start_date?: string;
+    end_date?: string;
+  }): Promise<AxiosResponse<any>> =>
+    api.post('/reports/generate', data),
+
+  exportReport: (data: {
+    template_id: string;
+    format: string;
+    parameters?: any;
+    start_date?: string;
+    end_date?: string;
+  }): Promise<AxiosResponse<any>> =>
+    api.post('/reports/export', data, { responseType: 'blob' }),
+
+  // Analytics
+  getQueryTrends: (startDate: string, endDate: string, interval?: string): Promise<AxiosResponse<any>> =>
+    api.get('/analytics/query-analytics', {
+      params: { hours: 24 } // Convert date range to hours for now
+    }),
+
+  getTopDomains: (startDate: string, endDate: string, limit?: number): Promise<AxiosResponse<any>> =>
+    api.get('/analytics/top-domains', {
+      params: { hours: 24, limit: limit || 20 }
+    }),
+
+  getClientAnalytics: (startDate: string, endDate: string): Promise<AxiosResponse<any>> =>
+    api.get('/analytics/client-analytics', {
+      params: { hours: 24 }
+    }),
+
+  getPerformanceAnalytics: (startDate: string, endDate: string): Promise<AxiosResponse<any>> =>
+    api.get('/analytics/performance', {
+      params: { hours: 24 }
+    }),
+
+  getErrorAnalytics: (startDate: string, endDate: string): Promise<AxiosResponse<any>> =>
+    api.get('/analytics/response-time-analytics', {
+      params: { hours: 24 }
+    }),
+
+  getSecurityAnalytics: (startDate: string, endDate: string): Promise<AxiosResponse<any>> =>
+    api.get('/analytics/threat-analytics', {
+      params: { days: 7 }
+    }),
+
+  getZoneAnalytics: (zoneId?: number): Promise<AxiosResponse<any>> =>
+    api.get('/analytics/query-analytics', {
+      params: { hours: 24 }
+    }),
+
+  getAnalyticsInsights: (startDate: string, endDate: string): Promise<AxiosResponse<any>> =>
+    api.get('/analytics/anomalies'),
+
+  // History and Statistics
+  getReportHistory: (limit?: number): Promise<AxiosResponse<any>> =>
+    api.get('/reports/history', {
+      params: limit ? { limit } : {}
+    }),
+
+  getReportingStatistics: (): Promise<AxiosResponse<any>> =>
+    api.get('/reports/statistics'),
+}
+
+// Analytics API
+export const analyticsService = {
+  getPerformanceMetrics: (hours?: number): Promise<AxiosResponse<any>> =>
+    api.get('/analytics/performance', {
+      params: hours ? { hours } : {}
+    }),
+
+  getQueryAnalytics: (hours?: number, useCache?: boolean): Promise<AxiosResponse<any>> =>
+    api.get('/analytics/query-analytics', {
+      params: { hours: hours || 24, use_cache: useCache !== false }
+    }),
+
+  getRealTimeAnalytics: (): Promise<AxiosResponse<any>> =>
+    api.get('/analytics/real-time'),
+
+  getTrendAnalysis: (days?: number): Promise<AxiosResponse<any>> =>
+    api.get('/analytics/trends', {
+      params: { days: days || 30 }
+    }),
+
+  getAnomalyDetection: (): Promise<AxiosResponse<any>> =>
+    api.get('/analytics/anomalies'),
+
+  getTopDomains: (hours?: number, limit?: number, includeBlocked?: boolean): Promise<AxiosResponse<any>> =>
+    api.get('/analytics/top-domains', {
+      params: { 
+        hours: hours || 24, 
+        limit: limit || 50,
+        include_blocked: includeBlocked !== false
+      }
+    }),
+
+  getClientAnalytics: (hours?: number, limit?: number): Promise<AxiosResponse<any>> =>
+    api.get('/analytics/client-analytics', {
+      params: { hours: hours || 24, limit: limit || 50 }
+    }),
+
+  getResponseTimeAnalytics: (hours?: number): Promise<AxiosResponse<any>> =>
+    api.get('/analytics/response-time-analytics', {
+      params: { hours: hours || 24 }
+    }),
+
+  getThreatAnalytics: (days?: number, category?: string): Promise<AxiosResponse<any>> =>
+    api.get('/analytics/threat-analytics', {
+      params: { 
+        days: days || 7,
+        ...(category && { category })
+      }
+    }),
+
+  clearCache: (): Promise<AxiosResponse<any>> =>
+    api.post('/analytics/cache/clear'),
+
+  exportData: (hours?: number, format?: string, includeRawLogs?: boolean): Promise<AxiosResponse<any>> =>
+    api.get('/analytics/export', {
+      params: {
+        hours: hours || 24,
+        format: format || 'json',
+        include_raw_logs: includeRawLogs || false
+      }
+    }),
+}
+
 // System API
 export const systemService = {
   getStatus: (): Promise<AxiosResponse<ApiResponse<{ status: string; version: string; uptime: number }>>> =>

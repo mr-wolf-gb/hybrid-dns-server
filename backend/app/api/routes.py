@@ -5,8 +5,9 @@ Main API routes configuration
 from fastapi import APIRouter
 
 from .endpoints import (
-    auth, backup, dashboard, dns_records, events, forwarders, forwarder_templates, health, realtime, rollback, rpz, system, users, websocket, zones
+    auth, backup, dashboard, dns_records, events, forwarders, forwarder_templates, health, realtime, reports, rollback, rpz, system, users, websocket, zones
 )
+from .routes import analytics
 
 # Create main API router
 api_router = APIRouter()
@@ -26,6 +27,8 @@ api_router.include_router(backup.router, prefix="/backup", tags=["Configuration 
 api_router.include_router(rollback.router, prefix="/rollback", tags=["Configuration Rollback"])
 api_router.include_router(system.router, prefix="/system", tags=["System Administration"])
 api_router.include_router(events.router, prefix="/events", tags=["Event Broadcasting"])
+api_router.include_router(analytics.router, prefix="/analytics", tags=["Analytics & Performance"])
+api_router.include_router(reports.router, prefix="/reports", tags=["Reports & Analytics"])
 
 # WebSocket routes
 api_router.include_router(websocket.router, prefix="/websocket", tags=["WebSocket"])

@@ -59,11 +59,13 @@ async def lifespan(app: FastAPI):
     monitoring_service = MonitoringService()
     background_service = get_background_task_service()
     event_service = get_event_service()
+    websocket_manager = get_websocket_manager()
     
     # Start background services
     asyncio.create_task(monitoring_service.start())
     await background_service.start()
     await event_service.start()
+    # WebSocket manager starts automatically when first connection is made
     
     logger.info("API server started successfully")
     
@@ -74,6 +76,9 @@ async def lifespan(app: FastAPI):
     await monitoring_service.stop()
     await background_service.stop()
     await event_service.stop()
+    # Stop WebSocket manager
+    websocket_manager = get_websocket_manager()
+    await websocket_manager.stop_broadcasting()
     logger.info("API server stopped")
 
 

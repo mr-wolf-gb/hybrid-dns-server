@@ -39,7 +39,7 @@ const BulkRecordActions: React.FC<BulkRecordActionsProps> = ({
   const [importData, setImportData] = useState('')
   const [importFormat, setImportFormat] = useState<'zone' | 'csv' | 'json'>('zone')
 
-  const queryClient = useQueryClient()
+  // Query client removed as it's not used directly here
 
   // Bulk delete mutation
   const bulkDeleteMutation = useMutation({
@@ -105,11 +105,15 @@ const BulkRecordActions: React.FC<BulkRecordActionsProps> = ({
     },
     onSuccess: (response) => {
       const result = response.data
-      if (result.errors && result.errors.length > 0) {
-        toast.warning(`Imported ${result.imported} records with ${result.errors.length} errors`)
-        console.warn('Import errors:', result.errors)
+      if (result && typeof result === 'object' && 'errors' in result && 'imported' in result) {
+        if (result.errors && result.errors.length > 0) {
+          toast.warning(`Imported ${result.imported} records with ${result.errors.length} errors`)
+          console.warn('Import errors:', result.errors)
+        } else {
+          toast.success(`Successfully imported ${result.imported} records`)
+        }
       } else {
-        toast.success(`Successfully imported ${result.imported} records`)
+        toast.success('Records imported successfully')
       }
       onRefresh()
       setShowImportModal(false)

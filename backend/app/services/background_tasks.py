@@ -11,6 +11,7 @@ from ..core.config import get_settings
 from ..core.database import get_database_session
 from ..core.logging_config import get_logger
 from .health_service import get_health_service
+from .reporting_service import reporting_service
 
 logger = get_logger(__name__)
 
@@ -38,6 +39,10 @@ class BackgroundTaskService:
         # Start periodic cleanup task
         cleanup_task = asyncio.create_task(self._periodic_cleanup())
         self._tasks.append(cleanup_task)
+        
+        # Start scheduled reports task
+        reports_task = asyncio.create_task(self._periodic_reports())
+        self._tasks.append(reports_task)
         
         logger.info("Background task service started")
     
@@ -123,6 +128,24 @@ class BackgroundTaskService:
     def is_running(self) -> bool:
         """Check if the background task service is running"""
         return self.running
+    
+    async def _periodic_reports(self):
+        """Periodic execution of scheduled reports"""
+        logger.info("Starting periodic report scheduler")
+        
+        while self.running:
+            try:
+                await reporting_service.run_scheduled_reports()
+                # Check for scheduled reports every 5 minutes
+                await asyncio.sleep(300)
+                
+            except asyncio.CancelledError:
+                logger.info("Periodic report scheduler cancelled")
+                break
+            except Exception as e:
+                logger.error(f"Error in periodic report scheduler: {e}")
+                # Wait before retrying
+                await asyncio.sleep(60)  # 1 minute
     
     async def get_service_status(self) -> dict:
         """Get status of background services"""
