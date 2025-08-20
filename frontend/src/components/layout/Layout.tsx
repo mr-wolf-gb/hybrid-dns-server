@@ -7,6 +7,7 @@ import {
   ShieldCheckIcon,
   CogIcon,
   ChartBarIcon,
+  HeartIcon,
   Bars3Icon,
   XMarkIcon,
   MoonIcon,
@@ -23,6 +24,7 @@ const navigation = [
   { name: 'DNS Zones', href: '/zones', icon: ServerIcon },
   { name: 'Forwarders', href: '/forwarders', icon: CloudIcon },
   { name: 'Security (RPZ)', href: '/security', icon: ShieldCheckIcon },
+  { name: 'Health Monitor', href: '/health', icon: HeartIcon },
   { name: 'Query Logs', href: '/logs', icon: ChartBarIcon },
   { name: 'Settings', href: '/settings', icon: CogIcon },
 ]

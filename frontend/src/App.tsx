@@ -13,6 +13,7 @@ const Forwarders = React.lazy(() => import('@/pages/Forwarders'))
 const Security = React.lazy(() => import('@/pages/Security'))
 const QueryLogs = React.lazy(() => import('@/pages/QueryLogs'))
 const Settings = React.lazy(() => import('@/pages/Settings'))
+const HealthMonitoring = React.lazy(() => import('@/pages/HealthMonitoring'))
 
 const App: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth()
@@ -86,6 +87,14 @@ const App: React.FC = () => {
           element={
             <React.Suspense fallback={<Loading size="lg" text="Loading settings..." />}>
               <Settings />
+            </React.Suspense>
+          }
+        />
+        <Route
+          path="health"
+          element={
+            <React.Suspense fallback={<Loading size="lg" text="Loading health monitoring..." />}>
+              <HealthMonitoring />
             </React.Suspense>
           }
         />

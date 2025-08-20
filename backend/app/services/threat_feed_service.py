@@ -810,3 +810,415 @@ class ThreatFeedService(BaseService[ThreatFeed]):
                 'error': f"Failed to generate effectiveness report: {str(e)}",
                 'generated_at': datetime.utcnow()
             }
+    
+    async def schedule_feed_updates(self) -> BulkThreatFeedUpdateResult:
+        """Schedule and execute updates for all feeds that are due"""
+        logger.info("Starting scheduled threat feed updates")
+        start_time = datetime.utcnow()
+        
+        try:
+            # Get feeds due for update
+            feeds_to_update = await self.get_feeds_due_for_update()
+            
+            if not feeds_to_update:
+                logger.info("No feeds due for update")
+                return BulkThreatFeedUpdateResult(
+                    total_feeds=0,
+                    successful_updates=0,
+                    failed_updates=0,
+                    update_duration=(datetime.utcnow() - start_time).total_seconds()
+                )
+            
+            logger.info(f"Found {len(feeds_to_update)} feeds due for update")
+            
+            # Update feeds using existing bulk update method
+            result = await self.update_all_feeds(force_update=False)
+            
+            logger.info(f"Scheduled updates completed: {result.successful_updates} successful, {result.failed_updates} failed")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Failed to execute scheduled updates: {str(e)}")
+            raise ThreatFeedException(f"Scheduled update failed: {str(e)}")
+    
+    async def create_custom_threat_list(self, name: str, domains: List[str], 
+                                      category: str = "custom", 
+                                      description: Optional[str] = None) -> ThreatFeed:
+        """Create a custom threat list from provided domains"""
+        logger.info(f"Creating custom threat list: {name}")
+        
+        try:
+            # Validate domains
+            valid_domains = []
+            for domain in domains:
+                domain = domain.strip().lower()
+                if domain and self.is_valid_domain(domain):
+                    valid_domains.append(domain)
+            
+            if not valid_domains:
+                raise ValidationException("No valid domains provided")
+            
+            # Create feed entry
+            feed_data = {
+                "name": name,
+                "url": f"custom://{name.lower().replace(' ', '_')}",
+                "feed_type": category,
+                "format_type": "domains",
+                "is_active": True,
+                "update_frequency": 86400,  # 24 hours
+                "description": description or f"Custom threat list with {len(valid_domains)} domains",
+                "rules_count": len(valid_domains),
+                "last_updated": datetime.utcnow(),
+                "last_update_status": "success"
+            }
+            
+            feed = await self.create_feed(feed_data)
+            
+            # Create RPZ rules for domains
+            rules_created = 0
+            
+            for domain in valid_domains:
+                try:
+                    rule_data = {
+                        "domain": domain,
+                        "rpz_zone": category,
+                        "action": "block",
+                        "source": f"custom_feed_{feed.id}",
+                        "description": f"Custom rule from {name}"
+                    }
+                    
+                    await self.rpz_service.create_rule(rule_data)
+                    rules_created += 1
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to create rule for domain {domain}: {str(e)}")
+            
+            # Update feed with actual rules count
+            await self.update_feed(feed.id, {"rules_count": rules_created})
+            
+            logger.info(f"Created custom threat list {feed.id} with {rules_created} rules")
+            return feed
+            
+        except Exception as e:
+            logger.error(f"Failed to create custom threat list: {str(e)}")
+            raise ThreatFeedException(f"Failed to create custom list: {str(e)}")
+    
+    async def update_custom_threat_list(self, feed_id: int, domains: List[str]) -> ThreatFeedUpdateResult:
+        """Update a custom threat list with new domains"""
+        logger.info(f"Updating custom threat list {feed_id}")
+        start_time = datetime.utcnow()
+        
+        try:
+            # Get feed
+            feed = await self.get_feed(feed_id)
+            if not feed:
+                raise ThreatFeedException("Feed not found")
+            
+            if not feed.url.startswith("custom://"):
+                raise ThreatFeedException("Not a custom threat list")
+            
+            # Validate domains
+            valid_domains = []
+            for domain in domains:
+                domain = domain.strip().lower()
+                if domain and self.is_valid_domain(domain):
+                    valid_domains.append(domain)
+            
+            # Get existing rules for this feed
+            existing_rules = await self.rpz_service.get_rules(
+                source=f"custom_feed_{feed_id}",
+                active_only=False,
+                limit=100000
+            )
+            existing_domains = {rule.domain for rule in existing_rules}
+            
+            new_domains = set(valid_domains)
+            
+            # Calculate changes
+            domains_to_add = new_domains - existing_domains
+            domains_to_remove = existing_domains - new_domains
+            
+            rules_added = 0
+            rules_removed = 0
+            
+            # Add new domains
+            for domain in domains_to_add:
+                try:
+                    rule_data = {
+                        "domain": domain,
+                        "rpz_zone": feed.feed_type,
+                        "action": "block",
+                        "source": f"custom_feed_{feed_id}",
+                        "description": f"Custom rule from {feed.name}"
+                    }
+                    
+                    await self.rpz_service.create_rule(rule_data)
+                    rules_added += 1
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to add rule for domain {domain}: {str(e)}")
+            
+            # Remove old domains
+            for rule in existing_rules:
+                if rule.domain in domains_to_remove:
+                    try:
+                        await self.rpz_service.delete_rule(rule.id)
+                        rules_removed += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to remove rule for domain {rule.domain}: {str(e)}")
+            
+            # Update feed
+            new_count = len(valid_domains)
+            await self.update_feed(feed_id, {
+                "rules_count": new_count,
+                "last_updated": datetime.utcnow(),
+                "last_update_status": "success"
+            })
+            
+            duration = (datetime.utcnow() - start_time).total_seconds()
+            
+            logger.info(f"Updated custom threat list {feed_id}: +{rules_added}, -{rules_removed} rules in {duration:.2f}s")
+            
+            return ThreatFeedUpdateResult(
+                feed_id=feed_id,
+                feed_name=feed.name,
+                status=UpdateStatus.SUCCESS,
+                rules_added=rules_added,
+                rules_updated=0,
+                rules_removed=rules_removed,
+                update_duration=duration
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to update custom threat list {feed_id}: {str(e)}")
+            return ThreatFeedUpdateResult(
+                feed_id=feed_id,
+                feed_name=f"Feed {feed_id}",
+                status=UpdateStatus.FAILED,
+                error_message=str(e),
+                update_duration=(datetime.utcnow() - start_time).total_seconds()
+            )
+    
+    async def get_comprehensive_statistics(self, feed_id: Optional[int] = None) -> Dict[str, Any]:
+        """Get comprehensive threat feed statistics with health metrics"""
+        try:
+            stats = {
+                "total_feeds": 0,
+                "active_feeds": 0,
+                "inactive_feeds": 0,
+                "total_rules": 0,
+                "rules_by_category": {},
+                "feeds_by_status": {},
+                "update_statistics": {
+                    "successful_updates_24h": 0,
+                    "failed_updates_24h": 0,
+                    "pending_updates": 0,
+                    "never_updated": 0
+                },
+                "health_metrics": {
+                    "overall_health_score": 0,
+                    "feeds_needing_attention": [],
+                    "recommendations": []
+                },
+                "feed_details": []
+            }
+            
+            # Get base query
+            if self.is_async:
+                if feed_id:
+                    query = select(ThreatFeed).filter(ThreatFeed.id == feed_id)
+                else:
+                    query = select(ThreatFeed)
+                result = await self.db.execute(query)
+                feeds = result.scalars().all()
+            else:
+                if feed_id:
+                    feeds = self.db.query(ThreatFeed).filter(ThreatFeed.id == feed_id).all()
+                else:
+                    feeds = self.db.query(ThreatFeed).all()
+            
+            # Calculate statistics
+            now = datetime.utcnow()
+            twenty_four_hours_ago = now - timedelta(hours=24)
+            health_issues = []
+            
+            for feed in feeds:
+                stats["total_feeds"] += 1
+                
+                if feed.is_active:
+                    stats["active_feeds"] += 1
+                else:
+                    stats["inactive_feeds"] += 1
+                
+                stats["total_rules"] += feed.rules_count
+                
+                # Rules by category
+                category = feed.feed_type
+                if category not in stats["rules_by_category"]:
+                    stats["rules_by_category"][category] = 0
+                stats["rules_by_category"][category] += feed.rules_count
+                
+                # Feeds by status
+                status = feed.last_update_status or "never"
+                if status not in stats["feeds_by_status"]:
+                    stats["feeds_by_status"][status] = 0
+                stats["feeds_by_status"][status] += 1
+                
+                # Update statistics
+                if feed.last_updated:
+                    if feed.last_updated >= twenty_four_hours_ago:
+                        if feed.last_update_status == "success":
+                            stats["update_statistics"]["successful_updates_24h"] += 1
+                        elif feed.last_update_status == "failed":
+                            stats["update_statistics"]["failed_updates_24h"] += 1
+                    
+                    if feed.last_update_status == "pending":
+                        stats["update_statistics"]["pending_updates"] += 1
+                else:
+                    stats["update_statistics"]["never_updated"] += 1
+                
+                # Health assessment
+                feed_health_issues = []
+                if not feed.is_active:
+                    feed_health_issues.append("Feed is disabled")
+                elif feed.last_update_status == "failed":
+                    feed_health_issues.append("Last update failed")
+                elif not feed.last_updated:
+                    feed_health_issues.append("Never updated")
+                elif feed.rules_count == 0:
+                    feed_health_issues.append("No rules generated")
+                
+                if feed_health_issues:
+                    stats["health_metrics"]["feeds_needing_attention"].append({
+                        "feed_id": feed.id,
+                        "feed_name": feed.name,
+                        "issues": feed_health_issues
+                    })
+                
+                # Feed details
+                next_update = None
+                if feed.is_active and feed.last_updated:
+                    next_update = feed.last_updated + timedelta(seconds=feed.update_frequency)
+                
+                stats["feed_details"].append({
+                    "id": feed.id,
+                    "name": feed.name,
+                    "feed_type": feed.feed_type,
+                    "is_active": feed.is_active,
+                    "rules_count": feed.rules_count,
+                    "last_updated": feed.last_updated,
+                    "last_update_status": feed.last_update_status,
+                    "next_update": next_update,
+                    "update_frequency": feed.update_frequency,
+                    "health_issues": feed_health_issues
+                })
+            
+            # Calculate overall health score
+            total_feeds = stats["total_feeds"]
+            if total_feeds == 0:
+                stats["health_metrics"]["overall_health_score"] = 0
+                stats["health_metrics"]["recommendations"].append("Configure at least one threat feed")
+            else:
+                health_score = 100
+                
+                # Deduct points for various issues
+                inactive_ratio = stats["inactive_feeds"] / total_feeds
+                if inactive_ratio > 0.2:  # More than 20% inactive
+                    health_score -= min(30, inactive_ratio * 100)
+                    stats["health_metrics"]["recommendations"].append("Enable more threat feeds")
+                
+                failed_ratio = stats["update_statistics"]["failed_updates_24h"] / max(1, stats["active_feeds"])
+                if failed_ratio > 0.1:  # More than 10% failed
+                    health_score -= min(25, failed_ratio * 100)
+                    stats["health_metrics"]["recommendations"].append("Fix failing threat feeds")
+                
+                never_updated_ratio = stats["update_statistics"]["never_updated"] / total_feeds
+                if never_updated_ratio > 0.1:  # More than 10% never updated
+                    health_score -= min(20, never_updated_ratio * 100)
+                    stats["health_metrics"]["recommendations"].append("Update feeds that have never been updated")
+                
+                if stats["total_rules"] < 1000:
+                    health_score -= 15
+                    stats["health_metrics"]["recommendations"].append("Add more comprehensive threat feeds")
+                
+                stats["health_metrics"]["overall_health_score"] = max(0, int(health_score))
+            
+            return stats
+            
+        except Exception as e:
+            logger.error(f"Failed to get comprehensive statistics: {str(e)}")
+            raise ThreatFeedException(f"Failed to get statistics: {str(e)}")
+    
+    async def get_feed_update_schedule(self) -> Dict[str, Any]:
+        """Get the update schedule for all active feeds"""
+        try:
+            feeds = await self.get_feeds(active_only=True, limit=1000)
+            now = datetime.utcnow()
+            
+            schedule = {
+                "current_time": now,
+                "feeds_due_now": [],
+                "upcoming_updates": [],
+                "overdue_feeds": [],
+                "schedule_summary": {
+                    "total_active_feeds": len(feeds),
+                    "feeds_due_now": 0,
+                    "feeds_overdue": 0,
+                    "next_update_in_minutes": None
+                }
+            }
+            
+            next_update_times = []
+            
+            for feed in feeds:
+                if not feed.last_updated:
+                    # Never updated - due now
+                    schedule["feeds_due_now"].append({
+                        "feed_id": feed.id,
+                        "feed_name": feed.name,
+                        "reason": "Never updated",
+                        "priority": "high"
+                    })
+                    schedule["schedule_summary"]["feeds_due_now"] += 1
+                else:
+                    next_update = feed.last_updated + timedelta(seconds=feed.update_frequency)
+                    next_update_times.append(next_update)
+                    
+                    if next_update <= now:
+                        # Overdue
+                        minutes_overdue = int((now - next_update).total_seconds() / 60)
+                        schedule["overdue_feeds"].append({
+                            "feed_id": feed.id,
+                            "feed_name": feed.name,
+                            "next_update": next_update,
+                            "minutes_overdue": minutes_overdue,
+                            "priority": "high" if minutes_overdue > 60 else "medium"
+                        })
+                        schedule["schedule_summary"]["feeds_overdue"] += 1
+                    else:
+                        # Upcoming
+                        minutes_until = int((next_update - now).total_seconds() / 60)
+                        schedule["upcoming_updates"].append({
+                            "feed_id": feed.id,
+                            "feed_name": feed.name,
+                            "next_update": next_update,
+                            "minutes_until": minutes_until,
+                            "update_frequency_hours": feed.update_frequency / 3600
+                        })
+            
+            # Find next update time
+            if next_update_times:
+                next_update = min(next_update_times)
+                if next_update > now:
+                    schedule["schedule_summary"]["next_update_in_minutes"] = int(
+                        (next_update - now).total_seconds() / 60
+                    )
+            
+            # Sort upcoming updates by time
+            schedule["upcoming_updates"].sort(key=lambda x: x["minutes_until"])
+            
+            return schedule
+            
+        except Exception as e:
+            logger.error(f"Failed to get feed update schedule: {str(e)}")
+            raise ThreatFeedException(f"Failed to get update schedule: {str(e)}")

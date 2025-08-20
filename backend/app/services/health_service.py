@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from ..core.config import get_settings
 from ..core.database import get_database_session
@@ -23,6 +23,14 @@ class HealthService:
         self.running = False
         self._health_check_task = None
         self._logger = get_health_logger()
+        self._performance_metrics = {}
+        self._alert_thresholds = {
+            "response_time_warning": 200,  # ms
+            "response_time_critical": 500,  # ms
+            "failure_rate_warning": 0.1,  # 10%
+            "failure_rate_critical": 0.3,  # 30%
+            "consecutive_failures_alert": 3
+        }
     
     async def start(self) -> None:
         """Start health monitoring service"""
@@ -102,13 +110,38 @@ class HealthService:
                     forwarders = result["items"]
                     
                     health_check_count = 0
+                    status_changes = []
+                    
                     for forwarder in forwarders:
                         if forwarder.health_check_enabled:
                             try:
+                                old_status = forwarder.health_status
                                 await forwarder_service.perform_health_check(forwarder.id)
+                                
+                                # Check if status changed
+                                updated_forwarder = await forwarder_service.get_forwarder(forwarder.id)
+                                if updated_forwarder and updated_forwarder.health_status != old_status:
+                                    status_changes.append({
+                                        "forwarder_id": forwarder.id,
+                                        "old_status": old_status,
+                                        "new_status": updated_forwarder.health_status
+                                    })
+                                
                                 health_check_count += 1
                             except Exception as e:
                                 self._logger.error(f"Error checking health for forwarder {forwarder.name}: {e}")
+                    
+                    # Broadcast status changes via WebSocket
+                    if status_changes:
+                        from ..websocket.manager import get_websocket_manager
+                        websocket_manager = get_websocket_manager()
+                        
+                        for change in status_changes:
+                            await websocket_manager.broadcast_forwarder_status_change(
+                                change["forwarder_id"],
+                                change["old_status"],
+                                change["new_status"]
+                            )
                     
                     if health_check_count > 0:
                         self._logger.debug(f"Completed health checks for {health_check_count} forwarders")
@@ -429,6 +462,383 @@ class HealthService:
     def is_running(self) -> bool:
         """Check if the health monitoring service is running"""
         return self.running and (self._health_check_task is None or not self._health_check_task.done())
+    
+    async def get_health_history_data(self, db: Session | AsyncSession, forwarder_id: Optional[int] = None, hours: int = 24) -> Dict[str, Any]:
+        """Get health history data for charts"""
+        try:
+            since = datetime.utcnow() - timedelta(hours=hours)
+            
+            if hasattr(db, 'execute'):  # AsyncSession
+                if forwarder_id:
+                    # Get history for specific forwarder
+                    result = await db.execute(
+                        select(
+                            ForwarderHealth.checked_at,
+                            ForwarderHealth.is_healthy,
+                            ForwarderHealth.response_time,
+                            ForwarderHealth.server_ip,
+                            ForwarderHealth.error_message
+                        ).filter(
+                            ForwarderHealth.forwarder_id == forwarder_id,
+                            ForwarderHealth.checked_at >= since
+                        ).order_by(ForwarderHealth.checked_at)
+                    )
+                    health_records = result.fetchall()
+                else:
+                    # Get aggregated history for all forwarders
+                    result = await db.execute(
+                        select(
+                            ForwarderHealth.checked_at,
+                            func.count(ForwarderHealth.id).label('total_checks'),
+                            func.sum(func.case((ForwarderHealth.is_healthy == True, 1), else_=0)).label('healthy_checks'),
+                            func.avg(ForwarderHealth.response_time).label('avg_response_time'),
+                            func.min(ForwarderHealth.response_time).label('min_response_time'),
+                            func.max(ForwarderHealth.response_time).label('max_response_time')
+                        ).filter(
+                            ForwarderHealth.checked_at >= since
+                        ).group_by(
+                            func.date_trunc('minute', ForwarderHealth.checked_at)
+                        ).order_by(ForwarderHealth.checked_at)
+                    )
+                    health_records = result.fetchall()
+            else:
+                # Regular Session
+                if forwarder_id:
+                    health_records = db.query(ForwarderHealth).filter(
+                        ForwarderHealth.forwarder_id == forwarder_id,
+                        ForwarderHealth.checked_at >= since
+                    ).order_by(ForwarderHealth.checked_at).all()
+                else:
+                    from sqlalchemy import func
+                    health_records = db.query(
+                        ForwarderHealth.checked_at,
+                        func.count(ForwarderHealth.id).label('total_checks'),
+                        func.sum(func.case((ForwarderHealth.is_healthy == True, 1), else_=0)).label('healthy_checks'),
+                        func.avg(ForwarderHealth.response_time).label('avg_response_time'),
+                        func.min(ForwarderHealth.response_time).label('min_response_time'),
+                        func.max(ForwarderHealth.response_time).label('max_response_time')
+                    ).filter(
+                        ForwarderHealth.checked_at >= since
+                    ).group_by(
+                        func.date_trunc('minute', ForwarderHealth.checked_at)
+                    ).order_by(ForwarderHealth.checked_at).all()
+            
+            # Process data for charts
+            chart_data = []
+            if forwarder_id:
+                # Individual forwarder data
+                for record in health_records:
+                    chart_data.append({
+                        "timestamp": record.checked_at.isoformat(),
+                        "is_healthy": record.is_healthy,
+                        "response_time": record.response_time,
+                        "server_ip": record.server_ip,
+                        "error_message": record.error_message
+                    })
+            else:
+                # Aggregated data
+                for record in health_records:
+                    success_rate = (record.healthy_checks / record.total_checks * 100) if record.total_checks > 0 else 0
+                    chart_data.append({
+                        "timestamp": record.checked_at.isoformat(),
+                        "total_checks": record.total_checks,
+                        "healthy_checks": record.healthy_checks,
+                        "success_rate": success_rate,
+                        "avg_response_time": float(record.avg_response_time) if record.avg_response_time else None,
+                        "min_response_time": float(record.min_response_time) if record.min_response_time else None,
+                        "max_response_time": float(record.max_response_time) if record.max_response_time else None
+                    })
+            
+            return {
+                "forwarder_id": forwarder_id,
+                "period_hours": hours,
+                "data_points": len(chart_data),
+                "chart_data": chart_data,
+                "generated_at": datetime.utcnow().isoformat()
+            }
+            
+        except Exception as e:
+            self._logger.error(f"Error getting health history data: {e}")
+            return {
+                "forwarder_id": forwarder_id,
+                "period_hours": hours,
+                "data_points": 0,
+                "chart_data": [],
+                "generated_at": datetime.utcnow().isoformat(),
+                "error": str(e)
+            }
+    
+    async def get_performance_metrics(self, db: Session | AsyncSession, hours: int = 24) -> Dict[str, Any]:
+        """Get comprehensive performance metrics"""
+        try:
+            since = datetime.utcnow() - timedelta(hours=hours)
+            
+            if hasattr(db, 'execute'):  # AsyncSession
+                # Get overall performance metrics
+                result = await db.execute(
+                    select(
+                        func.count(ForwarderHealth.id).label('total_checks'),
+                        func.sum(func.case((ForwarderHealth.is_healthy == True, 1), else_=0)).label('successful_checks'),
+                        func.avg(ForwarderHealth.response_time).label('avg_response_time'),
+                        func.percentile_cont(0.5).within_group(ForwarderHealth.response_time).label('median_response_time'),
+                        func.percentile_cont(0.95).within_group(ForwarderHealth.response_time).label('p95_response_time'),
+                        func.percentile_cont(0.99).within_group(ForwarderHealth.response_time).label('p99_response_time'),
+                        func.min(ForwarderHealth.response_time).label('min_response_time'),
+                        func.max(ForwarderHealth.response_time).label('max_response_time')
+                    ).filter(
+                        ForwarderHealth.checked_at >= since,
+                        ForwarderHealth.response_time.isnot(None)
+                    )
+                )
+                metrics = result.first()
+                
+                # Get per-forwarder performance
+                forwarder_result = await db.execute(
+                    select(
+                        ForwarderHealth.forwarder_id,
+                        func.count(ForwarderHealth.id).label('checks'),
+                        func.sum(func.case((ForwarderHealth.is_healthy == True, 1), else_=0)).label('successful'),
+                        func.avg(ForwarderHealth.response_time).label('avg_response_time')
+                    ).filter(
+                        ForwarderHealth.checked_at >= since
+                    ).group_by(ForwarderHealth.forwarder_id)
+                )
+                forwarder_metrics = forwarder_result.fetchall()
+            else:
+                # Regular Session
+                from sqlalchemy import func
+                metrics = db.query(
+                    func.count(ForwarderHealth.id).label('total_checks'),
+                    func.sum(func.case((ForwarderHealth.is_healthy == True, 1), else_=0)).label('successful_checks'),
+                    func.avg(ForwarderHealth.response_time).label('avg_response_time'),
+                    func.min(ForwarderHealth.response_time).label('min_response_time'),
+                    func.max(ForwarderHealth.response_time).label('max_response_time')
+                ).filter(
+                    ForwarderHealth.checked_at >= since,
+                    ForwarderHealth.response_time.isnot(None)
+                ).first()
+                
+                forwarder_metrics = db.query(
+                    ForwarderHealth.forwarder_id,
+                    func.count(ForwarderHealth.id).label('checks'),
+                    func.sum(func.case((ForwarderHealth.is_healthy == True, 1), else_=0)).label('successful'),
+                    func.avg(ForwarderHealth.response_time).label('avg_response_time')
+                ).filter(
+                    ForwarderHealth.checked_at >= since
+                ).group_by(ForwarderHealth.forwarder_id).all()
+            
+            # Calculate overall metrics
+            total_checks = metrics.total_checks if metrics else 0
+            successful_checks = metrics.successful_checks if metrics else 0
+            success_rate = (successful_checks / total_checks * 100) if total_checks > 0 else 0
+            
+            performance_data = {
+                "period_hours": hours,
+                "overall_metrics": {
+                    "total_checks": total_checks,
+                    "successful_checks": successful_checks,
+                    "success_rate": success_rate,
+                    "failure_rate": 100 - success_rate,
+                    "avg_response_time": float(metrics.avg_response_time) if metrics and metrics.avg_response_time else None,
+                    "min_response_time": float(metrics.min_response_time) if metrics and metrics.min_response_time else None,
+                    "max_response_time": float(metrics.max_response_time) if metrics and metrics.max_response_time else None,
+                },
+                "forwarder_metrics": [],
+                "performance_grade": self._calculate_performance_grade(success_rate, metrics.avg_response_time if metrics else None),
+                "generated_at": datetime.utcnow().isoformat()
+            }
+            
+            # Add percentile data if available
+            if hasattr(metrics, 'median_response_time') and metrics:
+                performance_data["overall_metrics"].update({
+                    "median_response_time": float(metrics.median_response_time) if metrics.median_response_time else None,
+                    "p95_response_time": float(metrics.p95_response_time) if metrics.p95_response_time else None,
+                    "p99_response_time": float(metrics.p99_response_time) if metrics.p99_response_time else None,
+                })
+            
+            # Process per-forwarder metrics
+            for fm in forwarder_metrics:
+                forwarder_success_rate = (fm.successful / fm.checks * 100) if fm.checks > 0 else 0
+                performance_data["forwarder_metrics"].append({
+                    "forwarder_id": fm.forwarder_id,
+                    "total_checks": fm.checks,
+                    "successful_checks": fm.successful,
+                    "success_rate": forwarder_success_rate,
+                    "avg_response_time": float(fm.avg_response_time) if fm.avg_response_time else None,
+                    "performance_grade": self._calculate_performance_grade(forwarder_success_rate, fm.avg_response_time)
+                })
+            
+            return performance_data
+            
+        except Exception as e:
+            self._logger.error(f"Error getting performance metrics: {e}")
+            return {
+                "period_hours": hours,
+                "overall_metrics": {},
+                "forwarder_metrics": [],
+                "performance_grade": "unknown",
+                "generated_at": datetime.utcnow().isoformat(),
+                "error": str(e)
+            }
+    
+    def _calculate_performance_grade(self, success_rate: float, avg_response_time: Optional[float]) -> str:
+        """Calculate a performance grade based on success rate and response time"""
+        if success_rate >= 99 and (avg_response_time is None or avg_response_time < 50):
+            return "excellent"
+        elif success_rate >= 95 and (avg_response_time is None or avg_response_time < 100):
+            return "good"
+        elif success_rate >= 90 and (avg_response_time is None or avg_response_time < 200):
+            return "fair"
+        elif success_rate >= 80:
+            return "poor"
+        else:
+            return "critical"
+    
+    async def generate_health_alerts(self, db: Session | AsyncSession) -> List[Dict[str, Any]]:
+        """Generate health alerts based on current status and thresholds"""
+        try:
+            alerts = []
+            
+            # Get unhealthy forwarders
+            unhealthy_forwarders = await self.get_unhealthy_forwarders(db)
+            
+            for forwarder in unhealthy_forwarders:
+                alert_level = "critical" if forwarder["status"] == "unhealthy" else "warning"
+                
+                # Check for consecutive failures
+                consecutive_failures = await self._get_consecutive_failures(db, forwarder["id"])
+                
+                alert = {
+                    "id": f"health_{forwarder['id']}_{int(datetime.utcnow().timestamp())}",
+                    "type": "health_status",
+                    "level": alert_level,
+                    "forwarder_id": forwarder["id"],
+                    "forwarder_name": forwarder["name"],
+                    "message": f"Forwarder '{forwarder['name']}' is {forwarder['status']}",
+                    "details": {
+                        "status": forwarder["status"],
+                        "healthy_servers": forwarder["healthy_servers"],
+                        "total_servers": forwarder["total_servers"],
+                        "consecutive_failures": consecutive_failures,
+                        "last_checked": forwarder["last_checked"]
+                    },
+                    "created_at": datetime.utcnow().isoformat(),
+                    "acknowledged": False
+                }
+                
+                # Add severity based on consecutive failures
+                if consecutive_failures >= self._alert_thresholds["consecutive_failures_alert"]:
+                    alert["level"] = "critical"
+                    alert["message"] += f" ({consecutive_failures} consecutive failures)"
+                
+                alerts.append(alert)
+            
+            # Check for performance alerts
+            performance_metrics = await self.get_performance_metrics(db, hours=1)  # Last hour
+            overall_metrics = performance_metrics.get("overall_metrics", {})
+            
+            # Response time alerts
+            avg_response_time = overall_metrics.get("avg_response_time")
+            if avg_response_time:
+                if avg_response_time >= self._alert_thresholds["response_time_critical"]:
+                    alerts.append({
+                        "id": f"performance_response_time_{int(datetime.utcnow().timestamp())}",
+                        "type": "performance",
+                        "level": "critical",
+                        "message": f"Average response time is critically high: {avg_response_time:.1f}ms",
+                        "details": {
+                            "metric": "response_time",
+                            "value": avg_response_time,
+                            "threshold": self._alert_thresholds["response_time_critical"]
+                        },
+                        "created_at": datetime.utcnow().isoformat(),
+                        "acknowledged": False
+                    })
+                elif avg_response_time >= self._alert_thresholds["response_time_warning"]:
+                    alerts.append({
+                        "id": f"performance_response_time_{int(datetime.utcnow().timestamp())}",
+                        "type": "performance",
+                        "level": "warning",
+                        "message": f"Average response time is elevated: {avg_response_time:.1f}ms",
+                        "details": {
+                            "metric": "response_time",
+                            "value": avg_response_time,
+                            "threshold": self._alert_thresholds["response_time_warning"]
+                        },
+                        "created_at": datetime.utcnow().isoformat(),
+                        "acknowledged": False
+                    })
+            
+            # Failure rate alerts
+            failure_rate = overall_metrics.get("failure_rate", 0) / 100  # Convert to decimal
+            if failure_rate >= self._alert_thresholds["failure_rate_critical"]:
+                alerts.append({
+                    "id": f"performance_failure_rate_{int(datetime.utcnow().timestamp())}",
+                    "type": "performance",
+                    "level": "critical",
+                    "message": f"Failure rate is critically high: {failure_rate*100:.1f}%",
+                    "details": {
+                        "metric": "failure_rate",
+                        "value": failure_rate,
+                        "threshold": self._alert_thresholds["failure_rate_critical"]
+                    },
+                    "created_at": datetime.utcnow().isoformat(),
+                    "acknowledged": False
+                })
+            elif failure_rate >= self._alert_thresholds["failure_rate_warning"]:
+                alerts.append({
+                    "id": f"performance_failure_rate_{int(datetime.utcnow().timestamp())}",
+                    "type": "performance",
+                    "level": "warning",
+                    "message": f"Failure rate is elevated: {failure_rate*100:.1f}%",
+                    "details": {
+                        "metric": "failure_rate",
+                        "value": failure_rate,
+                        "threshold": self._alert_thresholds["failure_rate_warning"]
+                    },
+                    "created_at": datetime.utcnow().isoformat(),
+                    "acknowledged": False
+                })
+            
+            return alerts
+            
+        except Exception as e:
+            self._logger.error(f"Error generating health alerts: {e}")
+            return []
+    
+    async def _get_consecutive_failures(self, db: Session | AsyncSession, forwarder_id: int) -> int:
+        """Get the number of consecutive failures for a forwarder"""
+        try:
+            if hasattr(db, 'execute'):  # AsyncSession
+                result = await db.execute(
+                    select(ForwarderHealth.is_healthy)
+                    .filter(ForwarderHealth.forwarder_id == forwarder_id)
+                    .order_by(ForwarderHealth.checked_at.desc())
+                    .limit(10)
+                )
+                recent_checks = [row.is_healthy for row in result.fetchall()]
+            else:
+                recent_checks = [
+                    check.is_healthy for check in 
+                    db.query(ForwarderHealth.is_healthy)
+                    .filter(ForwarderHealth.forwarder_id == forwarder_id)
+                    .order_by(ForwarderHealth.checked_at.desc())
+                    .limit(10)
+                    .all()
+                ]
+            
+            consecutive_failures = 0
+            for is_healthy in recent_checks:
+                if not is_healthy:
+                    consecutive_failures += 1
+                else:
+                    break
+            
+            return consecutive_failures
+            
+        except Exception as e:
+            self._logger.error(f"Error getting consecutive failures: {e}")
+            return 0
 
 
 # Global health service instance

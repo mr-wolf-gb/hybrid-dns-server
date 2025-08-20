@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   PlusIcon,
@@ -8,19 +8,35 @@ import {
   PauseIcon,
   ArrowPathIcon,
   ExclamationTriangleIcon,
+  FunnelIcon,
+  MagnifyingGlassIcon,
+  ChartBarIcon,
+  ShieldCheckIcon,
+  ShieldExclamationIcon,
+  ClockIcon,
+  DocumentArrowDownIcon,
+  Cog6ToothIcon,
 } from '@heroicons/react/24/outline'
-import { rpzService } from '@/services/api'
+import { rpzService, dashboardService } from '@/services/api'
 import { RPZRule } from '@/types'
-import { Card, Button, Table, Badge } from '@/components/ui'
-import { formatDateTime, getCategoryColor } from '@/utils'
+import { Card, Button, Table, Badge, Input, Select } from '@/components/ui'
+import { formatDateTime, getCategoryColor, formatNumber, formatRelativeTime } from '@/utils'
 import { toast } from 'react-toastify'
 import RPZRuleModal from '@/components/security/RPZRuleModal'
-import ThreatFeedImport from '@/components/security/ThreatFeedImport'
+import ThreatFeedManager from '@/components/security/ThreatFeedManager'
+import SecurityStats from '@/components/security/SecurityStats'
+import BulkRuleActions from '@/components/security/BulkRuleActions'
 
 const Security: React.FC = () => {
   const [selectedRule, setSelectedRule] = useState<RPZRule | null>(null)
   const [isRuleModalOpen, setIsRuleModalOpen] = useState(false)
-  const [isThreatFeedImportOpen, setIsThreatFeedImportOpen] = useState(false)
+  const [isThreatFeedManagerOpen, setIsThreatFeedManagerOpen] = useState(false)
+  const [selectedRules, setSelectedRules] = useState<number[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
+  const [actionFilter, setActionFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [showBulkActions, setShowBulkActions] = useState(false)
 
   const queryClient = useQueryClient()
 
@@ -28,6 +44,20 @@ const Security: React.FC = () => {
   const { data: rules, isLoading } = useQuery({
     queryKey: ['rpz-rules'],
     queryFn: () => rpzService.getRules(),
+  })
+
+  // Fetch security statistics
+  const { data: securityStats } = useQuery({
+    queryKey: ['security-stats'],
+    queryFn: () => rpzService.getStatistics(),
+    refetchInterval: 30000, // Refresh every 30 seconds
+  })
+
+  // Fetch blocked queries for the last 24 hours
+  const { data: blockedQueries } = useQuery({
+    queryKey: ['blocked-queries'],
+    queryFn: () => dashboardService.getQueryLogs(1, 100, 'blocked:true'),
+    refetchInterval: 60000, // Refresh every minute
   })
 
   // Delete rule mutation
@@ -59,10 +89,39 @@ const Security: React.FC = () => {
     mutationFn: rpzService.updateThreatFeeds,
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['rpz-rules'] })
+      queryClient.invalidateQueries({ queryKey: ['security-stats'] })
       toast.success(`Threat feeds updated successfully. ${response.data.data.updated} rules updated.`)
     },
     onError: () => {
       toast.error('Failed to update threat feeds')
+    },
+  })
+
+  // Bulk operations mutations
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (ruleIds: number[]) => rpzService.bulkDeleteRules(ruleIds),
+    onSuccess: (_, ruleIds) => {
+      queryClient.invalidateQueries({ queryKey: ['rpz-rules'] })
+      queryClient.invalidateQueries({ queryKey: ['security-stats'] })
+      setSelectedRules([])
+      toast.success(`Successfully deleted ${ruleIds.length} rules`)
+    },
+    onError: () => {
+      toast.error('Failed to delete selected rules')
+    },
+  })
+
+  const bulkToggleMutation = useMutation({
+    mutationFn: ({ ruleIds, isActive }: { ruleIds: number[]; isActive: boolean }) => 
+      rpzService.bulkToggleRules(ruleIds, isActive),
+    onSuccess: (_, { ruleIds, isActive }) => {
+      queryClient.invalidateQueries({ queryKey: ['rpz-rules'] })
+      queryClient.invalidateQueries({ queryKey: ['security-stats'] })
+      setSelectedRules([])
+      toast.success(`Successfully ${isActive ? 'activated' : 'deactivated'} ${ruleIds.length} rules`)
+    },
+    onError: () => {
+      toast.error('Failed to update selected rules')
     },
   })
 
@@ -90,6 +149,36 @@ const Security: React.FC = () => {
     updateThreatFeedsMutation.mutate()
   }
 
+  const handleBulkDelete = () => {
+    if (selectedRules.length === 0) return
+    
+    if (window.confirm(`Are you sure you want to delete ${selectedRules.length} selected rules?`)) {
+      bulkDeleteMutation.mutate(selectedRules)
+    }
+  }
+
+  const handleBulkToggle = (isActive: boolean) => {
+    if (selectedRules.length === 0) return
+    
+    bulkToggleMutation.mutate({ ruleIds: selectedRules, isActive })
+  }
+
+  const handleSelectRule = (ruleId: number, selected: boolean) => {
+    if (selected) {
+      setSelectedRules(prev => [...prev, ruleId])
+    } else {
+      setSelectedRules(prev => prev.filter(id => id !== ruleId))
+    }
+  }
+
+  const handleSelectAll = (selected: boolean) => {
+    if (selected) {
+      setSelectedRules(filteredRules.map(rule => rule.id))
+    } else {
+      setSelectedRules([])
+    }
+  }
+
   const getActionColor = (action: string) => {
     switch (action) {
       case 'block':
@@ -103,7 +192,45 @@ const Security: React.FC = () => {
     }
   }
 
+  // Filter and search rules
+  const filteredRules = useMemo(() => {
+    if (!rules?.data) return []
+    
+    return rules.data.filter(rule => {
+      const matchesSearch = searchTerm === '' || 
+        rule.domain.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        rule.zone.toLowerCase().includes(searchTerm.toLowerCase())
+      
+      const matchesCategory = categoryFilter === 'all' || rule.category === categoryFilter
+      const matchesAction = actionFilter === 'all' || rule.action === actionFilter
+      const matchesStatus = statusFilter === 'all' || 
+        (statusFilter === 'active' && rule.is_active) ||
+        (statusFilter === 'inactive' && !rule.is_active)
+      
+      return matchesSearch && matchesCategory && matchesAction && matchesStatus
+    })
+  }, [rules?.data, searchTerm, categoryFilter, actionFilter, statusFilter])
+
   const columns = [
+    {
+      key: 'select',
+      header: (
+        <input
+          type="checkbox"
+          checked={selectedRules.length === filteredRules.length && filteredRules.length > 0}
+          onChange={(e) => handleSelectAll(e.target.checked)}
+          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+        />
+      ),
+      render: (rule: RPZRule) => (
+        <input
+          type="checkbox"
+          checked={selectedRules.includes(rule.id)}
+          onChange={(e) => handleSelectRule(rule.id, e.target.checked)}
+          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+        />
+      ),
+    },
     {
       key: 'domain',
       header: 'Domain',
@@ -209,6 +336,10 @@ const Security: React.FC = () => {
     return acc
   }, {} as Record<string, number>)
 
+  // Get unique values for filters
+  const categories = [...new Set(rulesData.map(r => r.category))]
+  const actions = [...new Set(rulesData.map(r => r.action))]
+
   return (
     <div className="space-y-6">
       {/* Page header */}
@@ -225,9 +356,10 @@ const Security: React.FC = () => {
           <div className="flex space-x-2">
             <Button 
               variant="outline" 
-              onClick={() => setIsThreatFeedImportOpen(true)}
+              onClick={() => setIsThreatFeedManagerOpen(true)}
             >
-              Import Threat Feed
+              <Cog6ToothIcon className="h-4 w-4 mr-2" />
+              Manage Feeds
             </Button>
             <Button 
               variant="outline" 
@@ -245,18 +377,19 @@ const Security: React.FC = () => {
         </div>
       </div>
 
-      {/* Stats cards */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Enhanced Stats cards */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
         <Card className="p-6">
           <div className="flex items-center">
             <div className="flex-shrink-0">
               <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
-                <span className="text-blue-600 dark:text-blue-400 font-semibold">
-                  {rulesData.length}
-                </span>
+                <ShieldCheckIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
               </div>
             </div>
             <div className="ml-4">
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {formatNumber(rulesData.length)}
+              </div>
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
                 Total Rules
               </p>
@@ -268,12 +401,13 @@ const Security: React.FC = () => {
           <div className="flex items-center">
             <div className="flex-shrink-0">
               <div className="w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
-                <span className="text-green-600 dark:text-green-400 font-semibold">
-                  {activeRules.length}
-                </span>
+                <PlayIcon className="h-5 w-5 text-green-600 dark:text-green-400" />
               </div>
             </div>
             <div className="ml-4">
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {formatNumber(activeRules.length)}
+              </div>
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
                 Active Rules
               </p>
@@ -285,14 +419,15 @@ const Security: React.FC = () => {
           <div className="flex items-center">
             <div className="flex-shrink-0">
               <div className="w-8 h-8 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
-                <span className="text-red-600 dark:text-red-400 font-semibold">
-                  {blockRules.length}
-                </span>
+                <ShieldExclamationIcon className="h-5 w-5 text-red-600 dark:text-red-400" />
               </div>
             </div>
             <div className="ml-4">
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {formatNumber(securityStats?.data?.blocked_today || 0)}
+              </div>
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                Block Rules
+                Blocked Today
               </p>
             </div>
           </div>
@@ -302,36 +437,135 @@ const Security: React.FC = () => {
           <div className="flex items-center">
             <div className="flex-shrink-0">
               <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
-                <span className="text-purple-600 dark:text-purple-400 font-semibold">
-                  {Object.keys(categoryStats).length}
-                </span>
+                <ChartBarIcon className="h-5 w-5 text-purple-600 dark:text-purple-400" />
               </div>
             </div>
             <div className="ml-4">
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {Object.keys(categoryStats).length}
+              </div>
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
                 Categories
               </p>
             </div>
           </div>
         </Card>
-      </div>
 
-      {/* Category breakdown */}
-      <Card 
-        title="Category Breakdown" 
-        description="Number of rules by category"
-      >
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          {Object.entries(categoryStats).map(([category, count]) => (
-            <div key={category} className="text-center">
-              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {count}
-              </div>
-              <div className={`text-sm px-2 py-1 rounded-full ${getCategoryColor(category)}`}>
-                {category.replace('_', ' ')}
+        <Card className="p-6">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center">
+                <ClockIcon className="h-5 w-5 text-orange-600 dark:text-orange-400" />
               </div>
             </div>
-          ))}
+            <div className="ml-4">
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {securityStats?.data?.last_update ? formatRelativeTime(securityStats.data.last_update) : 'Never'}
+              </div>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                Last Update
+              </p>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Security Statistics */}
+      <SecurityStats 
+        categoryStats={categoryStats}
+        securityStats={securityStats?.data}
+        blockedQueries={blockedQueries?.data?.items || []}
+      />
+
+      {/* Filters and Search */}
+      <Card>
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4">
+            <div className="flex-1">
+              <div className="relative">
+                <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  type="text"
+                  placeholder="Search rules by domain or zone..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+            
+            <div className="flex space-x-2">
+              <Select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="min-w-[120px]"
+                options={[
+                  { value: 'all', label: 'All Categories' },
+                  ...categories.map(category => ({
+                    value: category,
+                    label: category.replace('_', ' ')
+                  }))
+                ]}
+              />
+
+              <Select
+                value={actionFilter}
+                onChange={(e) => setActionFilter(e.target.value)}
+                className="min-w-[100px]"
+                options={[
+                  { value: 'all', label: 'All Actions' },
+                  ...actions.map(action => ({
+                    value: action,
+                    label: action
+                  }))
+                ]}
+              />
+
+              <Select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="min-w-[100px]"
+                options={[
+                  { value: 'all', label: 'All Status' },
+                  { value: 'active', label: 'Active' },
+                  { value: 'inactive', label: 'Inactive' }
+                ]}
+              />
+
+              <Button
+                variant="outline"
+                onClick={() => setShowBulkActions(!showBulkActions)}
+                className={selectedRules.length > 0 ? 'bg-blue-50 dark:bg-blue-900/20' : ''}
+              >
+                <FunnelIcon className="h-4 w-4 mr-2" />
+                Bulk Actions {selectedRules.length > 0 && `(${selectedRules.length})`}
+              </Button>
+            </div>
+          </div>
+
+          {/* Bulk Actions */}
+          {showBulkActions && selectedRules.length > 0 && (
+            <BulkRuleActions
+              selectedCount={selectedRules.length}
+              onBulkDelete={handleBulkDelete}
+              onBulkActivate={() => handleBulkToggle(true)}
+              onBulkDeactivate={() => handleBulkToggle(false)}
+              onExport={() => {
+                // Export selected rules
+                const selectedRuleData = filteredRules.filter(rule => selectedRules.includes(rule.id))
+                const exportData = JSON.stringify(selectedRuleData, null, 2)
+                const blob = new Blob([exportData], { type: 'application/json' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `rpz-rules-${new Date().toISOString().split('T')[0]}.json`
+                a.click()
+                URL.revokeObjectURL(url)
+                toast.success(`Exported ${selectedRules.length} rules`)
+              }}
+              loading={bulkDeleteMutation.isPending || bulkToggleMutation.isPending}
+            />
+          )}
         </div>
       </Card>
 
@@ -357,11 +591,48 @@ const Security: React.FC = () => {
 
       {/* Rules table */}
       <Card>
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                Security Rules
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Showing {filteredRules.length} of {rulesData.length} rules
+              </p>
+            </div>
+            <div className="flex space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const exportData = JSON.stringify(filteredRules, null, 2)
+                  const blob = new Blob([exportData], { type: 'application/json' })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = `rpz-rules-${new Date().toISOString().split('T')[0]}.json`
+                  a.click()
+                  URL.revokeObjectURL(url)
+                  toast.success('Rules exported successfully')
+                }}
+              >
+                <DocumentArrowDownIcon className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+            </div>
+          </div>
+        </div>
+        
         <Table
-          data={rulesData}
+          data={filteredRules}
           columns={columns}
           loading={isLoading}
-          emptyMessage="No security rules configured. Create your first rule to start DNS-based threat protection."
+          emptyMessage={
+            searchTerm || categoryFilter !== 'all' || actionFilter !== 'all' || statusFilter !== 'all'
+              ? "No rules match the current filters. Try adjusting your search criteria."
+              : "No security rules configured. Create your first rule to start DNS-based threat protection."
+          }
         />
       </Card>
 
@@ -378,14 +649,15 @@ const Security: React.FC = () => {
         />
       )}
 
-      {/* Threat feed import modal */}
-      {isThreatFeedImportOpen && (
-        <ThreatFeedImport
-          isOpen={isThreatFeedImportOpen}
-          onClose={() => setIsThreatFeedImportOpen(false)}
+      {/* Threat feed manager modal */}
+      {isThreatFeedManagerOpen && (
+        <ThreatFeedManager
+          isOpen={isThreatFeedManagerOpen}
+          onClose={() => setIsThreatFeedManagerOpen(false)}
           onSuccess={() => {
-            setIsThreatFeedImportOpen(false)
+            setIsThreatFeedManagerOpen(false)
             queryClient.invalidateQueries({ queryKey: ['rpz-rules'] })
+            queryClient.invalidateQueries({ queryKey: ['security-stats'] })
           }}
         />
       )}

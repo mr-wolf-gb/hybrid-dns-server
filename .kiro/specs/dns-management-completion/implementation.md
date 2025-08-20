@@ -1000,23 +1000,23 @@ This document outlines the specific implementation tasks required to complete th
 #### Subtasks:
 1. **Forwarders Page**
    - [x] Complete `Forwarders.tsx` page, Add forwarder health indicators, Implement forwarder testing UI, Create forwarder statistics display, Add forwarder grouping
-   - [ ] Add forwarder health indicators
-   - [ ] Implement forwarder testing UI
-   - [ ] Create forwarder statistics display
-   - [ ] Add forwarder grouping
+   - [x] Add forwarder health indicators
+   - [x] Implement forwarder testing UI
+   - [x] Create forwarder statistics display
+   - [x] Add forwarder grouping
 
 2. **Forwarder Modal**
    - [x] Complete `ForwarderModal.tsx` component, Add server configuration UI, Implement domain list management, Add health check configuration, Create forwarder templates
-   - [ ] Add server configuration UI
-   - [ ] Implement domain list management
-   - [ ] Add health check configuration
-   - [ ] Create forwarder templates
+   - [x] Add server configuration UI
+   - [x] Implement domain list management
+   - [x] Add health check configuration
+   - [x] Create forwarder templates
 
 3. **Health Monitoring**
-   - [ ] Add real-time health status
-   - [ ] Create health history charts
-   - [ ] Implement health alerts
-   - [ ] Add performance metrics
+   - [x] Add real-time health status, Create health history charts, Implement health alerts, Add performance metrics
+   - [x] Create health history charts
+   - [x] Implement health alerts
+   - [x] Add performance metrics
 
 #### Files to Create/Modify:
 - `frontend/src/pages/Forwarders.tsx` (enhance existing)
@@ -1025,11 +1025,11 @@ This document outlines the specific implementation tasks required to complete th
 - `frontend/src/components/forwarders/HealthMonitor.tsx` (create new)
 
 #### Acceptance Criteria:
-- [ ] Forwarder configuration is intuitive
-- [ ] Health monitoring provides real-time status
-- [ ] Testing functionality validates setup
-- [ ] Performance metrics are clearly displayed
-- [ ] Error states are handled gracefully
+- [x] Forwarder configuration is intuitive
+- [x] Health monitoring provides real-time status
+- [x] Testing functionality validates setup
+- [x] Performance metrics are clearly displayed
+- [x] Error states are handled gracefully
 
 ### Task 4.4: Security Management UI
 
@@ -1039,24 +1039,24 @@ This document outlines the specific implementation tasks required to complete th
 
 #### Subtasks:
 1. **Security Page**
-   - [ ] Complete `Security.tsx` page
+   - [x] Complete `Security.tsx` page, Add RPZ rule management, Implement threat feed management, Create security statistics display, Add category-based filtering
    - [ ] Add RPZ rule management
    - [ ] Implement threat feed management
    - [ ] Create security statistics display
    - [ ] Add category-based filtering
 
 2. **RPZ Rule Modal**
-   - [ ] Complete `RPZRuleModal.tsx` component
+   - [x] Complete `RPZRuleModal.tsx` component, Add rule action configuration, Implement domain validation, Create rule templates, Add bulk rule import UI
    - [ ] Add rule action configuration
    - [ ] Implement domain validation
    - [ ] Create rule templates
    - [ ] Add bulk rule import UI
 
 3. **Threat Intelligence**
-   - [ ] Add threat feed configuration
-   - [ ] Implement feed update scheduling
-   - [ ] Create threat statistics
-   - [ ] Add custom threat lists
+   - [x] Add threat feed configuration, Implement feed update scheduling, Create threat statistics, Add custom threat lists
+   - [x] Implement feed update scheduling
+   - [x] Create threat statistics
+   - [x] Add custom threat lists
 
 #### Files to Create/Modify:
 - `frontend/src/pages/Security.tsx` (enhance existing)
@@ -1065,11 +1065,11 @@ This document outlines the specific implementation tasks required to complete th
 - `frontend/src/components/security/SecurityStats.tsx` (create new)
 
 #### Acceptance Criteria:
-- [ ] RPZ rule management is comprehensive
-- [ ] Threat feed integration works automatically
-- [ ] Security statistics provide insights
-- [ ] Bulk operations handle large rule sets
-- [ ] UI clearly shows security status
+- [x] RPZ rule management is comprehensive
+- [x] Threat feed integration works automatically
+- [x] Security statistics provide insights
+- [x] Bulk operations handle large rule sets
+- [x] UI clearly shows security status
 
 ## Phase 5: Advanced Features
 

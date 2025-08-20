@@ -260,6 +260,79 @@ export interface RPZRuleFormData {
   redirect_target?: string
 }
 
+export interface ThreatFeed {
+  id: number
+  name: string
+  url: string
+  category: string
+  enabled: boolean
+  auto_update: boolean
+  update_interval: number
+  last_update?: string
+  last_success?: string
+  rule_count: number
+  status: 'active' | 'error' | 'updating' | 'disabled'
+  error_message?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ThreatFeedFormData {
+  name: string
+  url: string
+  category: string
+  enabled: boolean
+  auto_update: boolean
+  update_interval: number
+}
+
+export interface SecurityStatistics {
+  blocked_today: number
+  blocked_this_week: number
+  blocked_this_month: number
+  top_blocked_domains: Array<{ domain: string; count: number; category: string }>
+  blocks_by_hour: Array<{ hour: string; count: number }>
+  threat_feed_stats: Array<{ feed: string; rules: number; last_update: string }>
+  last_update?: string
+}
+
+export interface RPZRuleTemplate {
+  id: string
+  name: string
+  description: string
+  category: string
+  action: 'block' | 'redirect' | 'passthru'
+  zone: string
+  redirect_target?: string
+  domains: string[]
+  created_at: string
+  updated_at: string
+}
+
+export interface RPZRuleTemplateFormData {
+  name: string
+  description: string
+  category: string
+  action: 'block' | 'redirect' | 'passthru'
+  zone: string
+  redirect_target?: string
+  domains: string[]
+}
+
+export interface BulkImportResult {
+  success: number
+  failed: number
+  errors: string[]
+  imported_rules: RPZRule[]
+}
+
+export interface DomainValidationResult {
+  domain: string
+  valid: boolean
+  error?: string
+  suggestion?: string
+}
+
 // Theme types
 export type Theme = 'light' | 'dark'
 

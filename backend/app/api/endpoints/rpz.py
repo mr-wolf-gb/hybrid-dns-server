@@ -2,7 +2,7 @@
 RPZ management endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, UploadFile, File, Body
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -264,6 +264,107 @@ async def toggle_threat_feed(
 ):
     """Toggle the active status of a threat feed"""
     threat_feed_service = ThreatFeedService(db)
+    
+    feed = await threat_feed_service.toggle_feed(feed_id)
+    if not feed:
+        raise HTTPException(status_code=404, detail="Threat feed not found")
+    
+    return feed
+
+
+@router.get("/threat-feeds/statistics")
+async def get_threat_feed_statistics(
+    feed_id: Optional[int] = Query(None, description="Get statistics for specific feed"),
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get comprehensive threat feed statistics"""
+    threat_feed_service = ThreatFeedService(db)
+    
+    try:
+        stats = await threat_feed_service.get_comprehensive_statistics(feed_id)
+        return stats
+    except Exception as e:
+        logger.error(f"Failed to get threat feed statistics: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/threat-feeds/schedule")
+async def get_threat_feed_schedule(
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get threat feed update schedule"""
+    threat_feed_service = ThreatFeedService(db)
+    
+    try:
+        schedule = await threat_feed_service.get_feed_update_schedule()
+        return schedule
+    except Exception as e:
+        logger.error(f"Failed to get threat feed schedule: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/threat-feeds/schedule-updates", response_model=BulkThreatFeedUpdateResult)
+async def schedule_threat_feed_updates(
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Execute scheduled updates for all feeds that are due"""
+    threat_feed_service = ThreatFeedService(db)
+    
+    try:
+        result = await threat_feed_service.schedule_feed_updates()
+        logger.info(f"Scheduled updates completed: {result.successful_updates} successful, {result.failed_updates} failed")
+        return result
+    except Exception as e:
+        logger.error(f"Failed to execute scheduled updates: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/threat-feeds/custom", response_model=ThreatFeedSchema)
+async def create_custom_threat_list(
+    name: str = Body(..., description="Name for the custom threat list"),
+    domains: List[str] = Body(..., description="List of domains to block"),
+    category: str = Body("custom", description="Category for the threat list"),
+    description: Optional[str] = Body(None, description="Description of the threat list"),
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a custom threat list from provided domains"""
+    threat_feed_service = ThreatFeedService(db)
+    
+    try:
+        feed = await threat_feed_service.create_custom_threat_list(
+            name=name,
+            domains=domains,
+            category=category,
+            description=description
+        )
+        logger.info(f"Created custom threat list {feed.id}: {feed.name}")
+        return feed
+    except Exception as e:
+        logger.error(f"Failed to create custom threat list: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/threat-feeds/{feed_id}/custom", response_model=ThreatFeedUpdateResult)
+async def update_custom_threat_list(
+    feed_id: int,
+    domains: List[str] = Body(..., description="Updated list of domains"),
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update a custom threat list with new domains"""
+    threat_feed_service = ThreatFeedService(db)
+    
+    try:
+        result = await threat_feed_service.update_custom_threat_list(feed_id, domains)
+        logger.info(f"Updated custom threat list {feed_id}: {result.status}")
+        return result
+    except Exception as e:
+        logger.error(f"Failed to update custom threat list {feed_id}: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
     
     feed = await threat_feed_service.toggle_feed(feed_id)
     if not feed:

@@ -30,6 +30,21 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
+def get_current_user_websocket(token: str) -> Optional[Dict[str, Any]]:
+    """
+    Get current user from WebSocket token
+    For now, this is a simplified version - in production you'd validate the JWT token
+    """
+    try:
+        # For development, we'll accept any non-empty token
+        # In production, you'd decode and validate the JWT token here
+        if token and len(token) > 0:
+            return {"id": token, "username": token}
+        return None
+    except Exception:
+        return None
+
+
 def generate_random_password(length: int = 12) -> str:
     """Generate a secure random password"""
     alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"

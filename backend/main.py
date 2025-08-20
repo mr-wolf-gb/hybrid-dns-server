@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
@@ -33,6 +33,7 @@ from app.core.error_setup import setup_error_handlers, create_startup_message
 from app.services.bind_service import BindService
 from app.services.monitoring_service import MonitoringService
 from app.services.background_tasks import get_background_task_service
+from app.websocket.manager import get_websocket_manager
 
 # Initialize rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -132,6 +133,37 @@ async def root():
         "docs": "/docs" if settings.DEBUG else "disabled in production"
     })
     return startup_info
+
+
+@app.websocket("/ws/health/{user_id}")
+async def websocket_health_endpoint(websocket: WebSocket, user_id: str):
+    """WebSocket endpoint for real-time health monitoring"""
+    websocket_manager = get_websocket_manager()
+    
+    try:
+        # For now, we'll accept any user_id - in production you'd validate the user
+        await websocket_manager.connect(websocket, user_id, "health")
+        
+        # Keep connection alive and handle messages
+        while True:
+            try:
+                # Wait for messages from client (ping/pong, etc.)
+                data = await websocket.receive_text()
+                
+                # Handle ping messages
+                if data == "ping":
+                    await websocket.send_text("pong")
+                    
+            except WebSocketDisconnect:
+                break
+            except Exception as e:
+                logger.error(f"WebSocket error for user {user_id}: {e}")
+                break
+                
+    except Exception as e:
+        logger.error(f"WebSocket connection error for user {user_id}: {e}")
+    finally:
+        websocket_manager.disconnect(websocket)
 
 
 @app.get("/health", include_in_schema=False)

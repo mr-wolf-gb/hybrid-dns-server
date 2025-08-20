@@ -120,3 +120,67 @@ async def get_health_tracking_alerts(
     alerts = await health_service.get_health_alerts_with_tracking(db)
     
     return alerts
+
+@router.get("/history")
+async def get_health_history(
+    forwarder_id: Optional[int] = None,
+    hours: int = 24,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get health history data for charts"""
+    if hours < 1 or hours > 168:  # Max 1 week
+        raise HTTPException(status_code=400, detail="Hours must be between 1 and 168")
+    
+    health_service = get_health_service()
+    history = await health_service.get_health_history_data(db, forwarder_id, hours)
+    
+    return history
+
+@router.get("/performance")
+async def get_performance_metrics(
+    hours: int = 24,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get comprehensive performance metrics"""
+    if hours < 1 or hours > 168:  # Max 1 week
+        raise HTTPException(status_code=400, detail="Hours must be between 1 and 168")
+    
+    health_service = get_health_service()
+    metrics = await health_service.get_performance_metrics(db, hours)
+    
+    return metrics
+
+@router.get("/alerts")
+async def get_health_alerts(
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get current health alerts"""
+    health_service = get_health_service()
+    alerts = await health_service.generate_health_alerts(db)
+    
+    return {
+        "alerts": alerts,
+        "total_alerts": len(alerts),
+        "critical_alerts": len([a for a in alerts if a["level"] == "critical"]),
+        "warning_alerts": len([a for a in alerts if a["level"] == "warning"]),
+        "generated_at": alerts[0]["created_at"] if alerts else None
+    }
+
+@router.get("/realtime/status")
+async def get_realtime_status(
+    current_user: dict = Depends(get_current_user)
+):
+    """Get real-time WebSocket connection status"""
+    from ...websocket.manager import get_websocket_manager
+    
+    websocket_manager = get_websocket_manager()
+    stats = websocket_manager.get_connection_stats()
+    
+    return {
+        "websocket_enabled": True,
+        "connection_stats": stats,
+        "endpoint": "/ws/health/{user_id}"
+    }
