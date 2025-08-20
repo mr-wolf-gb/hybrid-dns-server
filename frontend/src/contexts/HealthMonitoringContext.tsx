@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react'
-import { useWebSocket } from '@/hooks/useWebSocket'
+import { useHealthWebSocket } from '@/hooks/useWebSocket'
 
 interface HealthAlert {
   id: string
@@ -170,28 +170,8 @@ interface HealthMonitoringProviderProps {
 export const HealthMonitoringProvider: React.FC<HealthMonitoringProviderProps> = ({ children, userId }) => {
   const [state, dispatch] = useReducer(healthMonitoringReducer, initialState)
 
-  // WebSocket connection for real-time updates
-  const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/health/${userId}`
-  
-  const { isConnected, connectionStatus } = useWebSocket(wsUrl, {
-    onMessage: (message) => {
-      switch (message.type) {
-        case 'health_update':
-          dispatch({ type: 'SET_HEALTH_SUMMARY', payload: message.data })
-          break
-        
-        case 'health_alert':
-          dispatch({ type: 'ADD_ALERT', payload: message.data })
-          break
-        
-        case 'forwarder_status_change':
-          dispatch({ type: 'UPDATE_FORWARDER_STATUS', payload: message.data })
-          break
-        
-        default:
-          console.log('Unknown WebSocket message type:', message.type)
-      }
-    },
+  // WebSocket connection for real-time health updates
+  const { isConnected, connectionStatus, subscribe } = useHealthWebSocket(userId, {
     onConnect: () => {
       console.log('Health monitoring WebSocket connected')
     },
@@ -202,6 +182,21 @@ export const HealthMonitoringProvider: React.FC<HealthMonitoringProviderProps> =
       console.error('Health monitoring WebSocket error:', error)
     }
   })
+
+  // Set up event handlers
+  useEffect(() => {
+    subscribe('health_update', (data) => {
+      dispatch({ type: 'SET_HEALTH_SUMMARY', payload: data })
+    })
+
+    subscribe('health_alert', (data) => {
+      dispatch({ type: 'ADD_ALERT', payload: data })
+    })
+
+    subscribe('forwarder_status_change', (data) => {
+      dispatch({ type: 'UPDATE_FORWARDER_STATUS', payload: data })
+    })
+  }, [subscribe])
 
   // Update connection status in state
   useEffect(() => {

@@ -5,7 +5,7 @@ Main API routes configuration
 from fastapi import APIRouter
 
 from .endpoints import (
-    auth, backup, dashboard, dns_records, forwarders, forwarder_templates, health, rollback, rpz, system, users, zones
+    auth, backup, dashboard, dns_records, events, forwarders, forwarder_templates, health, realtime, rollback, rpz, system, users, websocket, zones
 )
 
 # Create main API router
@@ -21,6 +21,15 @@ api_router.include_router(forwarders.router, prefix="/forwarders", tags=["Forwar
 api_router.include_router(forwarder_templates.router, prefix="/forwarder-templates", tags=["Forwarder Templates"])
 api_router.include_router(rpz.router, prefix="/rpz", tags=["Response Policy Zones"])
 api_router.include_router(health.router, prefix="/health", tags=["Health & Monitoring"])
+api_router.include_router(realtime.router, prefix="/realtime", tags=["Real-time Updates"])
 api_router.include_router(backup.router, prefix="/backup", tags=["Configuration Backup"])
 api_router.include_router(rollback.router, prefix="/rollback", tags=["Configuration Rollback"])
 api_router.include_router(system.router, prefix="/system", tags=["System Administration"])
+api_router.include_router(events.router, prefix="/events", tags=["Event Broadcasting"])
+
+# WebSocket routes
+api_router.include_router(websocket.router, prefix="/websocket", tags=["WebSocket"])
+
+# WebSocket demo routes (for development and testing)
+from .routes import websocket_demo
+api_router.include_router(websocket_demo.router)

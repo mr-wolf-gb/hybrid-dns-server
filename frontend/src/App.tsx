@@ -14,6 +14,8 @@ const Security = React.lazy(() => import('@/pages/Security'))
 const QueryLogs = React.lazy(() => import('@/pages/QueryLogs'))
 const Settings = React.lazy(() => import('@/pages/Settings'))
 const HealthMonitoring = React.lazy(() => import('@/pages/HealthMonitoring'))
+const RealTimeDashboard = React.lazy(() => import('@/pages/RealTimeDashboard'))
+const Events = React.lazy(() => import('@/pages/Events'))
 
 const App: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth()
@@ -95,6 +97,22 @@ const App: React.FC = () => {
           element={
             <React.Suspense fallback={<Loading size="lg" text="Loading health monitoring..." />}>
               <HealthMonitoring />
+            </React.Suspense>
+          }
+        />
+        <Route
+          path="realtime"
+          element={
+            <React.Suspense fallback={<Loading size="lg" text="Loading real-time dashboard..." />}>
+              <RealTimeDashboard />
+            </React.Suspense>
+          }
+        />
+        <Route
+          path="events"
+          element={
+            <React.Suspense fallback={<Loading size="lg" text="Loading events..." />}>
+              <Events />
             </React.Suspense>
           }
         />

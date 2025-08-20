@@ -5,6 +5,7 @@ from .security import RPZRule, ThreatFeed
 from .system import SystemConfig, ACL, ACLEntry
 from .auth import User, Session
 from .monitoring import DNSLog, SystemStats, AuditLog
+from .events import Event, EventSubscription, EventDelivery, EventFilter, EventReplay
 
 __all__ = [
     # DNS Models
@@ -25,5 +26,11 @@ __all__ = [
     # Monitoring Models
     "DNSLog",
     "SystemStats",
-    "AuditLog"
+    "AuditLog",
+    # Event Models
+    "Event",
+    "EventSubscription",
+    "EventDelivery",
+    "EventFilter",
+    "EventReplay"
 ]

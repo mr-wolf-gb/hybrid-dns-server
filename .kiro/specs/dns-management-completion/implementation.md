@@ -1081,22 +1081,22 @@ This document outlines the specific implementation tasks required to complete th
 
 #### Subtasks:
 1. **WebSocket Integration**
-   - [ ] Implement WebSocket server in backend
+   - [x] Implement WebSocket server in backend, Add WebSocket client in frontend, Create real-time event system, Add connection management
    - [ ] Add WebSocket client in frontend
    - [ ] Create real-time event system
    - [ ] Add connection management
 
 2. **Live Updates**
-   - [ ] Implement real-time query monitoring
+   - [x] Implement real-time query monitoring, Add live dashboard updates, Create real-time health monitoring, Add live configuration changes
    - [ ] Add live dashboard updates
    - [ ] Create real-time health monitoring
    - [ ] Add live configuration changes
 
 3. **Event System**
-   - [ ] Create event broadcasting system
-   - [ ] Add event filtering and routing
-   - [ ] Implement event persistence
-   - [ ] Add event replay functionality
+   - [x] Create event broadcasting system, Add event filtering and routing, Implement event persistence, Add event replay functionality
+   - [x] Add event filtering and routing
+   - [x] Implement event persistence
+   - [x] Add event replay functionality
 
 #### Files to Create/Modify:
 - `backend/app/websocket/` (create new directory)

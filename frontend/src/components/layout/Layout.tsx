@@ -21,10 +21,12 @@ import { cn } from '@/utils'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: HomeIcon },
+  { name: 'Real-time Monitor', href: '/realtime', icon: ChartBarIcon },
   { name: 'DNS Zones', href: '/zones', icon: ServerIcon },
   { name: 'Forwarders', href: '/forwarders', icon: CloudIcon },
   { name: 'Security (RPZ)', href: '/security', icon: ShieldCheckIcon },
   { name: 'Health Monitor', href: '/health', icon: HeartIcon },
+  { name: 'Events', href: '/events', icon: ChartBarIcon },
   { name: 'Query Logs', href: '/logs', icon: ChartBarIcon },
   { name: 'Settings', href: '/settings', icon: CogIcon },
 ]

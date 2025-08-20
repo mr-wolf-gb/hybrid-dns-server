@@ -13,6 +13,7 @@ from typing import Dict, Optional
 from ..core.config import get_settings
 from ..core.database import database
 from ..core.logging_config import get_monitoring_logger
+from ..websocket.manager import get_websocket_manager, EventType
 
 
 class MonitoringService:
@@ -24,6 +25,12 @@ class MonitoringService:
         self.query_log_path = settings.log_dir / "query.log"
         self.rpz_log_path = settings.log_dir / "rpz.log"
         self.last_position = 0
+        self.websocket_manager = get_websocket_manager()
+        self.query_stats = {
+            'total_queries': 0,
+            'blocked_queries': 0,
+            'last_reset': datetime.utcnow()
+        }
     
     async def start(self) -> None:
         """Start monitoring service"""
@@ -120,6 +127,23 @@ class MonitoringService:
                     "blocked": blocked,
                     "response_time": 0  # Would need more detailed logging to get actual response times
                 })
+                
+                # Update real-time stats
+                self.query_stats['total_queries'] += 1
+                if blocked:
+                    self.query_stats['blocked_queries'] += 1
+                
+                # Broadcast real-time query event
+                await self._broadcast_query_event({
+                    "timestamp": timestamp.isoformat(),
+                    "client_ip": client_ip,
+                    "query_domain": query_domain,
+                    "query_type": query_type,
+                    "blocked": blocked,
+                    "total_queries_today": self.query_stats['total_queries'],
+                    "blocked_queries_today": self.query_stats['blocked_queries']
+                })
+                
             except Exception as db_error:
                 logger = get_monitoring_logger()
                 logger.warning(f"Failed to store query log in database: {db_error}")
@@ -195,6 +219,14 @@ class MonitoringService:
                 except Exception as db_error:
                     logger = get_monitoring_logger()
                     logger.warning(f"Failed to clean up old metrics: {db_error}")
+                
+                # Broadcast real-time system metrics
+                await self._broadcast_system_metrics({
+                    "cpu_usage": cpu_percent,
+                    "memory_usage": memory.percent,
+                    "disk_usage": disk.percent,
+                    "timestamp": timestamp.isoformat()
+                })
                 
                 await asyncio.sleep(60)  # Collect metrics every minute
                 
@@ -406,6 +438,55 @@ class MonitoringService:
             logger = get_monitoring_logger()
             logger.error(f"Error getting blocking trends: {e}")
             return {'daily_trends': [], 'hourly_trends': []}
+    
+    async def _broadcast_query_event(self, query_data: Dict):
+        """Broadcast real-time query event via WebSocket"""
+        try:
+            await self.websocket_manager.emit_event(
+                EventType.SYSTEM_STATUS,
+                {
+                    "type": "query_update",
+                    "data": query_data
+                }
+            )
+        except Exception as e:
+            logger = get_monitoring_logger()
+            logger.error(f"Error broadcasting query event: {e}")
+    
+    async def _broadcast_system_metrics(self, metrics_data: Dict):
+        """Broadcast real-time system metrics via WebSocket"""
+        try:
+            await self.websocket_manager.emit_event(
+                EventType.SYSTEM_STATUS,
+                {
+                    "type": "system_metrics",
+                    "data": metrics_data
+                }
+            )
+        except Exception as e:
+            logger = get_monitoring_logger()
+            logger.error(f"Error broadcasting system metrics: {e}")
+    
+    async def get_real_time_stats(self) -> Dict:
+        """Get current real-time statistics"""
+        return {
+            "total_queries": self.query_stats['total_queries'],
+            "blocked_queries": self.query_stats['blocked_queries'],
+            "block_rate": (
+                (self.query_stats['blocked_queries'] / self.query_stats['total_queries'] * 100)
+                if self.query_stats['total_queries'] > 0 else 0
+            ),
+            "last_reset": self.query_stats['last_reset'].isoformat(),
+            "uptime_seconds": (datetime.utcnow() - self.query_stats['last_reset']).total_seconds()
+        }
+    
+    async def reset_daily_stats(self):
+        """Reset daily statistics (called at midnight)"""
+        self.query_stats = {
+            'total_queries': 0,
+            'blocked_queries': 0,
+            'last_reset': datetime.utcnow()
+        }
     
     async def get_blocked_queries(self, hours: int = 24, category: Optional[str] = None, 
                                  client_ip: Optional[str] = None, domain: Optional[str] = None,
