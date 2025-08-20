@@ -120,7 +120,10 @@ class ForwarderService(BaseService[Forwarder]):
                            active_only: bool = True,
                            search: Optional[str] = None,
                            sort_by: Optional[str] = None,
-                           sort_order: str = "asc") -> Dict[str, Any]:
+                           sort_order: str = "asc",
+                           group_name: Optional[str] = None,
+                           priority_range: Optional[tuple] = None,
+                           templates_only: bool = False) -> Dict[str, Any]:
         """Get forwarders with enhanced filtering and pagination"""
         
         # Build the base query
@@ -139,6 +142,19 @@ class ForwarderService(BaseService[Forwarder]):
         
         if active_only:
             conditions.append(Forwarder.is_active == True)
+        
+        if group_name:
+            conditions.append(Forwarder.group_name == group_name)
+        
+        if priority_range:
+            min_priority, max_priority = priority_range
+            conditions.append(and_(Forwarder.priority >= min_priority, Forwarder.priority <= max_priority))
+        
+        if templates_only:
+            conditions.append(Forwarder.is_template == True)
+        else:
+            # By default, exclude templates from regular forwarder listings
+            conditions.append(Forwarder.is_template == False)
         
         # Apply search filter
         if search:
@@ -169,8 +185,8 @@ class ForwarderService(BaseService[Forwarder]):
             else:
                 query = query.order_by(asc(sort_column))
         else:
-            # Default sorting by name
-            query = query.order_by(asc(Forwarder.name))
+            # Default sorting by priority (ascending), then by name
+            query = query.order_by(asc(Forwarder.priority), asc(Forwarder.name))
         
         # Get total count
         if self.is_async:
@@ -1436,3 +1452,227 @@ class ForwarderService(BaseService[Forwarder]):
         
         logger.info(f"Cleaned up {count_to_delete} old health check records older than {days} days")
         return count_to_delete
+    
+    # Priority Management Methods
+    async def update_forwarder_priority(self, forwarder_id: int, new_priority: int) -> Optional[Forwarder]:
+        """Update the priority of a specific forwarder"""
+        logger.info(f"Updating priority for forwarder ID {forwarder_id} to {new_priority}")
+        
+        if new_priority < 1 or new_priority > 10:
+            raise ValueError("Priority must be between 1 and 10")
+        
+        return await self.update_forwarder(forwarder_id, {"priority": new_priority})
+    
+    async def get_forwarders_by_priority(self, priority: int) -> List[Forwarder]:
+        """Get all forwarders with a specific priority"""
+        result = await self.get_forwarders(priority_range=(priority, priority), limit=1000)
+        return result["items"]
+    
+    async def reorder_forwarder_priorities(self, forwarder_priorities: List[Dict[str, int]]) -> List[Forwarder]:
+        """Reorder multiple forwarders by updating their priorities"""
+        logger.info(f"Reordering priorities for {len(forwarder_priorities)} forwarders")
+        
+        updated_forwarders = []
+        for item in forwarder_priorities:
+            forwarder_id = item.get("forwarder_id")
+            new_priority = item.get("priority")
+            
+            if forwarder_id and new_priority:
+                forwarder = await self.update_forwarder_priority(forwarder_id, new_priority)
+                if forwarder:
+                    updated_forwarders.append(forwarder)
+        
+        return updated_forwarders
+    
+    # Grouping Management Methods
+    async def get_forwarder_groups(self) -> List[Dict[str, Any]]:
+        """Get all forwarder groups with statistics"""
+        logger.info("Getting forwarder groups")
+        
+        # Get all forwarders with group names
+        if self.is_async:
+            result = await self.db.execute(
+                select(Forwarder)
+                .filter(and_(Forwarder.group_name.isnot(None), Forwarder.is_template == False))
+                .order_by(Forwarder.group_name, Forwarder.group_priority)
+            )
+            forwarders = result.scalars().all()
+        else:
+            forwarders = self.db.query(Forwarder).filter(
+                and_(Forwarder.group_name.isnot(None), Forwarder.is_template == False)
+            ).order_by(Forwarder.group_name, Forwarder.group_priority).all()
+        
+        # Group forwarders by group name
+        groups = {}
+        for forwarder in forwarders:
+            group_name = forwarder.group_name
+            if group_name not in groups:
+                groups[group_name] = {
+                    "group_name": group_name,
+                    "forwarders": [],
+                    "forwarder_count": 0,
+                    "active_count": 0,
+                    "forwarder_types": set(),
+                    "priorities": []
+                }
+            
+            groups[group_name]["forwarders"].append(forwarder)
+            groups[group_name]["forwarder_count"] += 1
+            if forwarder.is_active:
+                groups[group_name]["active_count"] += 1
+            groups[group_name]["forwarder_types"].add(forwarder.forwarder_type)
+            groups[group_name]["priorities"].append(forwarder.priority)
+        
+        # Calculate group statistics
+        group_list = []
+        for group_name, group_data in groups.items():
+            # Get health status for the group
+            health_status = await self.get_group_health_status(group_name)
+            
+            group_list.append({
+                "group_name": group_name,
+                "forwarder_count": group_data["forwarder_count"],
+                "active_count": group_data["active_count"],
+                "forwarder_types": list(group_data["forwarder_types"]),
+                "avg_priority": sum(group_data["priorities"]) / len(group_data["priorities"]) if group_data["priorities"] else 0,
+                "health_status": health_status,
+                "forwarders": [
+                    {
+                        "id": f.id,
+                        "name": f.name,
+                        "forwarder_type": f.forwarder_type,
+                        "priority": f.priority,
+                        "group_priority": f.group_priority,
+                        "is_active": f.is_active
+                    }
+                    for f in group_data["forwarders"]
+                ]
+            })
+        
+        return group_list
+    
+    async def get_forwarders_in_group(self, group_name: str) -> List[Forwarder]:
+        """Get all forwarders in a specific group"""
+        result = await self.get_forwarders(group_name=group_name, limit=1000)
+        return result["items"]
+    
+    async def update_forwarder_group(self, forwarder_id: int, group_name: Optional[str], group_priority: Optional[int] = None) -> Optional[Forwarder]:
+        """Update the group assignment for a forwarder"""
+        logger.info(f"Updating group for forwarder ID {forwarder_id} to '{group_name}'")
+        
+        update_data = {"group_name": group_name}
+        if group_priority is not None:
+            if group_priority < 1 or group_priority > 10:
+                raise ValueError("Group priority must be between 1 and 10")
+            update_data["group_priority"] = group_priority
+        
+        return await self.update_forwarder(forwarder_id, update_data)
+    
+    async def move_forwarders_to_group(self, forwarder_ids: List[int], group_name: str, group_priority: Optional[int] = None) -> List[Forwarder]:
+        """Move multiple forwarders to a group"""
+        logger.info(f"Moving {len(forwarder_ids)} forwarders to group '{group_name}'")
+        
+        updated_forwarders = []
+        for forwarder_id in forwarder_ids:
+            forwarder = await self.update_forwarder_group(forwarder_id, group_name, group_priority)
+            if forwarder:
+                updated_forwarders.append(forwarder)
+        
+        return updated_forwarders
+    
+    async def remove_forwarders_from_group(self, forwarder_ids: List[int]) -> List[Forwarder]:
+        """Remove forwarders from their current groups"""
+        logger.info(f"Removing {len(forwarder_ids)} forwarders from groups")
+        
+        updated_forwarders = []
+        for forwarder_id in forwarder_ids:
+            forwarder = await self.update_forwarder_group(forwarder_id, None)
+            if forwarder:
+                updated_forwarders.append(forwarder)
+        
+        return updated_forwarders
+    
+    async def rename_forwarder_group(self, old_group_name: str, new_group_name: str) -> List[Forwarder]:
+        """Rename a forwarder group"""
+        logger.info(f"Renaming group '{old_group_name}' to '{new_group_name}'")
+        
+        # Get all forwarders in the old group
+        forwarders_in_group = await self.get_forwarders_in_group(old_group_name)
+        
+        # Update each forwarder to use the new group name
+        updated_forwarders = []
+        for forwarder in forwarders_in_group:
+            updated_forwarder = await self.update_forwarder_group(forwarder.id, new_group_name, forwarder.group_priority)
+            if updated_forwarder:
+                updated_forwarders.append(updated_forwarder)
+        
+        return updated_forwarders
+    
+    async def get_group_health_status(self, group_name: str) -> str:
+        """Get the overall health status for a group"""
+        forwarders = await self.get_forwarders_in_group(group_name)
+        
+        if not forwarders:
+            return "unknown"
+        
+        health_statuses = []
+        for forwarder in forwarders:
+            if forwarder.health_check_enabled:
+                health_status = await self.get_current_health_status(forwarder.id)
+                health_statuses.append(health_status.get("overall_status", "unknown"))
+        
+        if not health_statuses:
+            return "unknown"
+        
+        # Determine overall group health
+        if all(status == "healthy" for status in health_statuses):
+            return "healthy"
+        elif all(status in ["unhealthy", "error", "timeout"] for status in health_statuses):
+            return "unhealthy"
+        elif any(status == "healthy" for status in health_statuses):
+            return "degraded"
+        else:
+            return "unknown"
+    
+    async def get_ungrouped_forwarders(self) -> List[Forwarder]:
+        """Get all forwarders that are not assigned to any group"""
+        if self.is_async:
+            result = await self.db.execute(
+                select(Forwarder)
+                .filter(and_(Forwarder.group_name.is_(None), Forwarder.is_template == False))
+                .order_by(Forwarder.priority, Forwarder.name)
+            )
+            forwarders = result.scalars().all()
+        else:
+            forwarders = self.db.query(Forwarder).filter(
+                and_(Forwarder.group_name.is_(None), Forwarder.is_template == False)
+            ).order_by(Forwarder.priority, Forwarder.name).all()
+        
+        return forwarders
+    
+    # Template Integration Methods
+    async def create_forwarder_from_template(self, template_name: str, forwarder_data: Dict[str, Any]) -> Forwarder:
+        """Create a forwarder from a template (integration with template service)"""
+        logger.info(f"Creating forwarder from template '{template_name}'")
+        
+        # Import here to avoid circular imports
+        from .forwarder_template_service import ForwarderTemplateService
+        
+        template_service = ForwarderTemplateService(self.db)
+        
+        # Find template by name
+        templates_result = await template_service.get_templates(search=template_name, limit=1)
+        templates = templates_result["items"]
+        
+        if not templates:
+            raise ValueError(f"Template '{template_name}' not found")
+        
+        template = templates[0]
+        
+        # Generate forwarder configuration from template
+        config = await template_service.create_forwarder_from_template(template.id, forwarder_data)
+        
+        # Create the forwarder
+        forwarder = await self.create_forwarder(config)
+        
+        return forwarder

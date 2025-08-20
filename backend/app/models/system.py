@@ -70,7 +70,7 @@ class ACL(Base):
     __table_args__ = (
         CheckConstraint("acl_type IN ('trusted', 'blocked', 'management', 'dns-servers', 'monitoring', 'rate-limited', 'dynamic-threats', 'dynamic-allow', 'custom')", name='check_acl_type'),
         CheckConstraint("length(name) >= 1", name='check_acl_name_not_empty'),
-        CheckConstraint("name ~ '^[a-zA-Z0-9_-]+$'", name='check_acl_name_format'),  # Valid BIND ACL name format
+        CheckConstraint("name GLOB '[a-zA-Z0-9_-]*'", name='check_acl_name_format'),  # Valid BIND ACL name format
     )
     
     def __repr__(self):

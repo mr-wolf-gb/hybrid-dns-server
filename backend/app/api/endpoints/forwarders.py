@@ -4,7 +4,7 @@ Forwarders management endpoints with health checking
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from ...core.database import get_database_session
 from ...core.security import get_current_user
@@ -264,7 +264,7 @@ async def toggle_forwarder_status(
 ):
     """Toggle forwarder active status"""
     forwarder_service = ForwarderService(db)
-    bind_service = BindService()
+    bind_service = BindService(db)
     
     forwarder = await forwarder_service.toggle_forwarder_status(forwarder_id)
     if not forwarder:
@@ -418,3 +418,211 @@ async def get_all_forwarders_statistics(
     all_statistics = await forwarder_service.get_all_forwarders_statistics(hours)
     
     return all_statistics
+
+
+# Priority Management Endpoints
+@router.put("/{forwarder_id}/priority")
+async def update_forwarder_priority(
+    forwarder_id: int,
+    priority: int = Query(..., ge=1, le=10),
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update the priority of a specific forwarder"""
+    forwarder_service = ForwarderService(db)
+    bind_service = BindService(db)
+    
+    forwarder = await forwarder_service.update_forwarder_priority(forwarder_id, priority)
+    if not forwarder:
+        raise HTTPException(status_code=404, detail="Forwarder not found")
+    
+    # Update BIND9 configuration in background
+    background_tasks.add_task(bind_service.update_forwarder_configuration)
+    background_tasks.add_task(bind_service.reload_configuration)
+    
+    return forwarder
+
+
+@router.post("/priorities/reorder")
+async def reorder_forwarder_priorities(
+    forwarder_priorities: List[Dict[str, int]],
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Reorder multiple forwarders by updating their priorities"""
+    forwarder_service = ForwarderService(db)
+    bind_service = BindService(db)
+    
+    updated_forwarders = await forwarder_service.reorder_forwarder_priorities(forwarder_priorities)
+    
+    # Update BIND9 configuration in background
+    background_tasks.add_task(bind_service.update_forwarder_configuration)
+    background_tasks.add_task(bind_service.reload_configuration)
+    
+    return {"updated_count": len(updated_forwarders), "forwarders": updated_forwarders}
+
+
+@router.get("/priority/{priority}")
+async def get_forwarders_by_priority(
+    priority: int = Query(..., ge=1, le=10),
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all forwarders with a specific priority"""
+    forwarder_service = ForwarderService(db)
+    forwarders = await forwarder_service.get_forwarders_by_priority(priority)
+    return forwarders
+
+
+# Grouping Management Endpoints
+@router.get("/groups")
+async def get_forwarder_groups(
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all forwarder groups with statistics"""
+    forwarder_service = ForwarderService(db)
+    groups = await forwarder_service.get_forwarder_groups()
+    return groups
+
+
+@router.get("/groups/{group_name}")
+async def get_forwarders_in_group(
+    group_name: str,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all forwarders in a specific group"""
+    forwarder_service = ForwarderService(db)
+    forwarders = await forwarder_service.get_forwarders_in_group(group_name)
+    return forwarders
+
+
+@router.get("/ungrouped")
+async def get_ungrouped_forwarders(
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all forwarders that are not assigned to any group"""
+    forwarder_service = ForwarderService(db)
+    forwarders = await forwarder_service.get_ungrouped_forwarders()
+    return forwarders
+
+
+@router.put("/{forwarder_id}/group")
+async def update_forwarder_group(
+    forwarder_id: int,
+    group_name: Optional[str] = Query(None),
+    group_priority: Optional[int] = Query(None, ge=1, le=10),
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update the group assignment for a forwarder"""
+    forwarder_service = ForwarderService(db)
+    bind_service = BindService(db)
+    
+    forwarder = await forwarder_service.update_forwarder_group(forwarder_id, group_name, group_priority)
+    if not forwarder:
+        raise HTTPException(status_code=404, detail="Forwarder not found")
+    
+    # Update BIND9 configuration in background
+    background_tasks.add_task(bind_service.update_forwarder_configuration)
+    background_tasks.add_task(bind_service.reload_configuration)
+    
+    return forwarder
+
+
+@router.post("/groups/{group_name}/add")
+async def move_forwarders_to_group(
+    group_name: str,
+    forwarder_ids: List[int],
+    group_priority: Optional[int] = Query(None, ge=1, le=10),
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Move multiple forwarders to a group"""
+    forwarder_service = ForwarderService(db)
+    bind_service = BindService(db)
+    
+    updated_forwarders = await forwarder_service.move_forwarders_to_group(forwarder_ids, group_name, group_priority)
+    
+    # Update BIND9 configuration in background
+    background_tasks.add_task(bind_service.update_forwarder_configuration)
+    background_tasks.add_task(bind_service.reload_configuration)
+    
+    return {"updated_count": len(updated_forwarders), "forwarders": updated_forwarders}
+
+
+@router.post("/groups/remove")
+async def remove_forwarders_from_group(
+    forwarder_ids: List[int],
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Remove forwarders from their current groups"""
+    forwarder_service = ForwarderService(db)
+    bind_service = BindService(db)
+    
+    updated_forwarders = await forwarder_service.remove_forwarders_from_group(forwarder_ids)
+    
+    # Update BIND9 configuration in background
+    background_tasks.add_task(bind_service.update_forwarder_configuration)
+    background_tasks.add_task(bind_service.reload_configuration)
+    
+    return {"updated_count": len(updated_forwarders), "forwarders": updated_forwarders}
+
+
+@router.put("/groups/{old_group_name}/rename")
+async def rename_forwarder_group(
+    old_group_name: str,
+    new_group_name: str = Query(...),
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Rename a forwarder group"""
+    forwarder_service = ForwarderService(db)
+    bind_service = BindService(db)
+    
+    updated_forwarders = await forwarder_service.rename_forwarder_group(old_group_name, new_group_name)
+    
+    # Update BIND9 configuration in background
+    background_tasks.add_task(bind_service.update_forwarder_configuration)
+    background_tasks.add_task(bind_service.reload_configuration)
+    
+    return {"updated_count": len(updated_forwarders), "forwarders": updated_forwarders}
+
+
+# Template Management Endpoints
+@router.post("/from-template")
+async def create_forwarder_from_template(
+    template_name: str = Query(...),
+    forwarder_data: Dict[str, Any] = {},
+    background_tasks: BackgroundTasks = Depends(),
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a forwarder from a template"""
+    forwarder_service = ForwarderService(db)
+    bind_service = BindService(db)
+    
+    # Create backup before forwarder creation
+    backup_success = await bind_service.backup_before_forwarder_changes("create_from_template")
+    if not backup_success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create backup before forwarder creation"
+        )
+    
+    forwarder = await forwarder_service.create_forwarder_from_template(template_name, forwarder_data)
+    
+    # Update BIND9 configuration in background
+    background_tasks.add_task(bind_service.update_forwarder_configuration)
+    background_tasks.add_task(bind_service.reload_configuration)
+    
+    return forwarder

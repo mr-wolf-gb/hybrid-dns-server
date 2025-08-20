@@ -291,3 +291,45 @@ class RPZBulkCategorizeResult(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+class RPZBulkUpdateRequest(BaseModel):
+    """Schema for bulk update request"""
+    rule_ids: list[int] = Field(..., min_items=1, description="List of rule IDs to update")
+    updates: RPZRuleUpdate = Field(..., description="Updates to apply to all selected rules")
+
+
+class RPZBulkUpdateResult(BaseModel):
+    """Schema for bulk update operation results"""
+    total_processed: int = Field(default=0, description="Total rules processed")
+    rules_updated: int = Field(default=0, description="Number of rules successfully updated")
+    rules_failed: int = Field(default=0, description="Number of rules that failed to update")
+    errors: list[str] = Field(default_factory=list, description="Any errors that occurred")
+    
+    class Config:
+        from_attributes = True
+
+
+class RPZBulkDeleteRequest(BaseModel):
+    """Schema for bulk delete request"""
+    rule_ids: list[int] = Field(..., min_items=1, description="List of rule IDs to delete")
+    confirm: bool = Field(default=False, description="Confirmation flag for bulk delete operation")
+    
+    @validator('confirm')
+    def validate_confirmation(cls, v):
+        """Ensure confirmation is provided for bulk delete"""
+        if not v:
+            raise ValueError('Bulk delete requires explicit confirmation')
+        return v
+
+
+class RPZBulkDeleteResult(BaseModel):
+    """Schema for bulk delete operation results"""
+    total_processed: int = Field(default=0, description="Total rules processed")
+    rules_deleted: int = Field(default=0, description="Number of rules successfully deleted")
+    rules_failed: int = Field(default=0, description="Number of rules that failed to delete")
+    affected_zones: list[str] = Field(default_factory=list, description="RPZ zones that were affected")
+    errors: list[str] = Field(default_factory=list, description="Any errors that occurred")
+    
+    class Config:
+        from_attributes = True

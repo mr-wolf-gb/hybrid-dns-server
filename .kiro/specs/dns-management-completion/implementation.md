@@ -799,20 +799,32 @@ This document outlines the specific implementation tasks required to complete th
 
 #### Subtasks:
 1. **CRUD Endpoints**
-   - [ ] Implement `GET /api/forwarders` with filtering
+   - [x] Implement `GET /api/forwarders` with filtering,`POST /api/forwarders` for creation, `GET /api/forwarders/{id}` for details,`PUT /api/forwarders/{id}` for updates, `DELETE /api/forwarders/{id}` for deletion
+
+
+
+
+
+   
    - [ ] Implement `POST /api/forwarders` for creation
    - [ ] Implement `GET /api/forwarders/{id}` for details
    - [ ] Implement `PUT /api/forwarders/{id}` for updates
    - [ ] Implement `DELETE /api/forwarders/{id}` for deletion
 
 2. **Health Monitoring**
-   - [ ] Implement `GET /api/forwarders/{id}/health` for status
+   - [x] Implement `GET /api/forwarders/{id}/health` for status, `POST /api/forwarders/{id}/test` for testing, Add health history endpoints, Create health statistics endpoints
+
+
+
    - [ ] Implement `POST /api/forwarders/{id}/test` for testing
    - [ ] Add health history endpoints
    - [ ] Create health statistics endpoints
 
 3. **Management Features**
-   - [ ] Add forwarder priority management
+   - [x] Add forwarder priority management, Implement forwarder grouping, Add forwarder templates, Create forwarder statistics
+
+
+
    - [ ] Implement forwarder grouping
    - [ ] Add forwarder templates
    - [ ] Create forwarder statistics
@@ -835,25 +847,45 @@ This document outlines the specific implementation tasks required to complete th
 
 #### Subtasks:
 1. **Rule Management**
-   - [ ] Implement `GET /api/rpz/rules` with filtering
+   - [x] Implement `GET /api/rpz/rules` with filtering, `POST /api/rpz/rules` for creation, `PUT /api/rpz/rules/{id}` for updates, `DELETE /api/rpz/rules/{id}` for deletion
+
+
+
+
+
    - [ ] Implement `POST /api/rpz/rules` for creation
    - [ ] Implement `PUT /api/rpz/rules/{id}` for updates
    - [ ] Implement `DELETE /api/rpz/rules/{id}` for deletion
 
 2. **Bulk Operations**
-   - [ ] Implement `POST /api/rpz/rules/bulk-import` for bulk import
-   - [ ] Add support for multiple import formats
-   - [ ] Create bulk update operations
-   - [ ] Add bulk delete operations
+   - [x] Implement `POST /api/rpz/rules/bulk-import` for bulk import, Add support for multiple import formats, Create bulk update operations, Add bulk delete operations
+
+
+   - [x] Add support for multiple import formats
+
+   - [x] Create bulk update operations
+
+   - [x] Add bulk delete operations
+
+
 
 3. **Threat Intelligence**
-   - [ ] Implement `POST /api/rpz/threat-feeds/update` for feed updates
+   - [x] Implement `POST /api/rpz/threat-feeds/update` for feed updates, Add threat feed management endpoints, Create custom threat list management, Add threat intelligence statistics
+
+
+
+
+
+
    - [ ] Add threat feed management endpoints
    - [ ] Create custom threat list management
    - [ ] Add threat intelligence statistics
 
 4. **Reporting**
-   - [ ] Implement `GET /api/rpz/statistics` for RPZ stats
+   - [x] Implement `GET /api/rpz/statistics` for RPZ stats, Add blocked query reporting, Create threat detection reports, Add category-based statistics
+
+
+
    - [ ] Add blocked query reporting
    - [ ] Create threat detection reports
    - [ ] Add category-based statistics

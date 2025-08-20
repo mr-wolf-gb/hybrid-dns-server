@@ -257,3 +257,512 @@ class MonitoringService:
             logger = get_monitoring_logger()
             logger.error(f"Error getting top domains: {e}")
             return []
+    
+    async def get_blocked_query_stats(self, hours: int = 24) -> Dict:
+        """Get blocked query statistics for the specified time period"""
+        try:
+            from datetime import timedelta
+            since = datetime.utcnow() - timedelta(hours=hours)
+            
+            stats = await database.fetch_one("""
+                SELECT 
+                    COUNT(*) as total_queries,
+                    COUNT(*) FILTER (WHERE blocked = true) as blocked_queries,
+                    COUNT(DISTINCT client_ip) FILTER (WHERE blocked = true) as blocked_clients,
+                    COUNT(DISTINCT query_domain) FILTER (WHERE blocked = true) as blocked_domains
+                FROM dns_logs 
+                WHERE timestamp >= :since
+            """, {"since": since})
+            
+            if stats:
+                result = dict(stats)
+                # Calculate block rate percentage
+                if result['total_queries'] > 0:
+                    result['block_rate_percentage'] = round(
+                        (result['blocked_queries'] / result['total_queries']) * 100, 2
+                    )
+                else:
+                    result['block_rate_percentage'] = 0.0
+                return result
+            
+            return {
+                "total_queries": 0,
+                "blocked_queries": 0,
+                "blocked_clients": 0,
+                "blocked_domains": 0,
+                "block_rate_percentage": 0.0
+            }
+            
+        except Exception as e:
+            logger = get_monitoring_logger()
+            logger.error(f"Error getting blocked query statistics: {e}")
+            return {}
+    
+    async def get_top_blocked_domains(self, hours: int = 24, limit: int = 20, category: Optional[str] = None) -> list:
+        """Get top blocked domains"""
+        try:
+            from datetime import timedelta
+            since = datetime.utcnow() - timedelta(hours=hours)
+            
+            query = """
+                SELECT 
+                    dl.query_domain, 
+                    COUNT(*) as block_count,
+                    rr.rpz_zone as category,
+                    rr.action,
+                    MIN(dl.timestamp) as first_blocked,
+                    MAX(dl.timestamp) as last_blocked
+                FROM dns_logs dl
+                LEFT JOIN rpz_rules rr ON dl.query_domain = rr.domain
+                WHERE dl.timestamp >= :since 
+                AND dl.blocked = true
+            """
+            
+            params = {"since": since, "limit": limit}
+            
+            if category:
+                query += " AND rr.rpz_zone = :category"
+                params["category"] = category
+            
+            query += """
+                GROUP BY dl.query_domain, rr.rpz_zone, rr.action
+                ORDER BY block_count DESC
+                LIMIT :limit
+            """
+            
+            domains = await database.fetch_all(query, params)
+            
+            return [dict(domain) for domain in domains]
+            
+        except Exception as e:
+            logger = get_monitoring_logger()
+            logger.error(f"Error getting top blocked domains: {e}")
+            return []
+    
+    async def get_blocking_by_category(self, hours: int = 24) -> Dict:
+        """Get blocking statistics by RPZ category"""
+        try:
+            from datetime import timedelta
+            since = datetime.utcnow() - timedelta(hours=hours)
+            
+            categories = await database.fetch_all("""
+                SELECT 
+                    rr.rpz_zone as category,
+                    COUNT(*) as blocked_count,
+                    COUNT(DISTINCT dl.query_domain) as unique_domains,
+                    COUNT(DISTINCT dl.client_ip) as unique_clients
+                FROM dns_logs dl
+                JOIN rpz_rules rr ON dl.query_domain = rr.domain
+                WHERE dl.timestamp >= :since 
+                AND dl.blocked = true
+                GROUP BY rr.rpz_zone
+                ORDER BY blocked_count DESC
+            """, {"since": since})
+            
+            return {cat['category']: dict(cat) for cat in categories}
+            
+        except Exception as e:
+            logger = get_monitoring_logger()
+            logger.error(f"Error getting blocking by category: {e}")
+            return {}
+    
+    async def get_blocking_trends(self, days: int = 30) -> Dict:
+        """Get blocking trends over time"""
+        try:
+            from datetime import timedelta
+            since = datetime.utcnow() - timedelta(days=days)
+            
+            # Daily blocking trends
+            daily_trends = await database.fetch_all("""
+                SELECT 
+                    DATE(timestamp) as date,
+                    COUNT(*) as total_queries,
+                    COUNT(*) FILTER (WHERE blocked = true) as blocked_queries
+                FROM dns_logs 
+                WHERE timestamp >= :since
+                GROUP BY DATE(timestamp)
+                ORDER BY date
+            """, {"since": since})
+            
+            # Hourly trends for last 24 hours
+            last_24h = datetime.utcnow() - timedelta(hours=24)
+            hourly_trends = await database.fetch_all("""
+                SELECT 
+                    DATE_TRUNC('hour', timestamp) as hour,
+                    COUNT(*) as total_queries,
+                    COUNT(*) FILTER (WHERE blocked = true) as blocked_queries
+                FROM dns_logs 
+                WHERE timestamp >= :since
+                GROUP BY DATE_TRUNC('hour', timestamp)
+                ORDER BY hour
+            """, {"since": last_24h})
+            
+            return {
+                'daily_trends': [dict(trend) for trend in daily_trends],
+                'hourly_trends': [dict(trend) for trend in hourly_trends]
+            }
+            
+        except Exception as e:
+            logger = get_monitoring_logger()
+            logger.error(f"Error getting blocking trends: {e}")
+            return {'daily_trends': [], 'hourly_trends': []}
+    
+    async def get_blocked_queries(self, hours: int = 24, category: Optional[str] = None, 
+                                 client_ip: Optional[str] = None, domain: Optional[str] = None,
+                                 limit: int = 100, skip: int = 0) -> list:
+        """Get detailed blocked queries with filtering"""
+        try:
+            from datetime import timedelta
+            since = datetime.utcnow() - timedelta(hours=hours)
+            
+            query = """
+                SELECT 
+                    dl.timestamp,
+                    dl.client_ip,
+                    dl.query_domain,
+                    dl.query_type,
+                    rr.rpz_zone as category,
+                    rr.action,
+                    rr.redirect_target
+                FROM dns_logs dl
+                LEFT JOIN rpz_rules rr ON dl.query_domain = rr.domain
+                WHERE dl.timestamp >= :since 
+                AND dl.blocked = true
+            """
+            
+            params = {"since": since, "limit": limit, "skip": skip}
+            
+            if category:
+                query += " AND rr.rpz_zone = :category"
+                params["category"] = category
+            
+            if client_ip:
+                query += " AND dl.client_ip = :client_ip"
+                params["client_ip"] = client_ip
+            
+            if domain:
+                query += " AND dl.query_domain ILIKE :domain"
+                params["domain"] = f"%{domain}%"
+            
+            query += " ORDER BY dl.timestamp DESC LIMIT :limit OFFSET :skip"
+            
+            queries = await database.fetch_all(query, params)
+            
+            return [dict(query) for query in queries]
+            
+        except Exception as e:
+            logger = get_monitoring_logger()
+            logger.error(f"Error getting blocked queries: {e}")
+            return []
+    
+    async def get_blocked_query_summary(self, hours: int = 24, category: Optional[str] = None,
+                                       client_ip: Optional[str] = None, domain: Optional[str] = None) -> Dict:
+        """Get summary statistics for blocked queries with filters"""
+        try:
+            from datetime import timedelta
+            since = datetime.utcnow() - timedelta(hours=hours)
+            
+            query = """
+                SELECT 
+                    COUNT(*) as total_blocked,
+                    COUNT(DISTINCT dl.client_ip) as unique_clients,
+                    COUNT(DISTINCT dl.query_domain) as unique_domains,
+                    COUNT(DISTINCT rr.rpz_zone) as categories_triggered
+                FROM dns_logs dl
+                LEFT JOIN rpz_rules rr ON dl.query_domain = rr.domain
+                WHERE dl.timestamp >= :since 
+                AND dl.blocked = true
+            """
+            
+            params = {"since": since}
+            
+            if category:
+                query += " AND rr.rpz_zone = :category"
+                params["category"] = category
+            
+            if client_ip:
+                query += " AND dl.client_ip = :client_ip"
+                params["client_ip"] = client_ip
+            
+            if domain:
+                query += " AND dl.query_domain ILIKE :domain"
+                params["domain"] = f"%{domain}%"
+            
+            result = await database.fetch_one(query, params)
+            
+            return dict(result) if result else {}
+            
+        except Exception as e:
+            logger = get_monitoring_logger()
+            logger.error(f"Error getting blocked query summary: {e}")
+            return {}
+    
+    async def get_blocked_queries_hourly(self, hours: int = 24, category: Optional[str] = None) -> list:
+        """Get hourly breakdown of blocked queries"""
+        try:
+            from datetime import timedelta
+            since = datetime.utcnow() - timedelta(hours=hours)
+            
+            query = """
+                SELECT 
+                    DATE_TRUNC('hour', dl.timestamp) as hour,
+                    COUNT(*) as blocked_count
+                FROM dns_logs dl
+                LEFT JOIN rpz_rules rr ON dl.query_domain = rr.domain
+                WHERE dl.timestamp >= :since 
+                AND dl.blocked = true
+            """
+            
+            params = {"since": since}
+            
+            if category:
+                query += " AND rr.rpz_zone = :category"
+                params["category"] = category
+            
+            query += " GROUP BY DATE_TRUNC('hour', dl.timestamp) ORDER BY hour"
+            
+            hourly_data = await database.fetch_all(query, params)
+            
+            return [dict(hour) for hour in hourly_data]
+            
+        except Exception as e:
+            logger = get_monitoring_logger()
+            logger.error(f"Error getting hourly blocked queries: {e}")
+            return []
+    
+    async def get_threat_detection_stats(self, days: int = 30) -> Dict:
+        """Get comprehensive threat detection statistics"""
+        try:
+            from datetime import timedelta
+            since = datetime.utcnow() - timedelta(days=days)
+            
+            stats = await database.fetch_one("""
+                SELECT 
+                    COUNT(*) FILTER (WHERE blocked = true) as total_blocked,
+                    COUNT(DISTINCT query_domain) FILTER (WHERE blocked = true) as unique_domains,
+                    COUNT(DISTINCT client_ip) FILTER (WHERE blocked = true) as unique_sources,
+                    AVG(CASE WHEN blocked = true THEN 1 ELSE 0 END) * 100 as detection_rate_percent
+                FROM dns_logs 
+                WHERE timestamp >= :since
+            """, {"since": since})
+            
+            if stats:
+                result = dict(stats)
+                result['daily_average'] = result['total_blocked'] / days if days > 0 else 0
+                
+                # Get top category
+                top_category = await database.fetch_one("""
+                    SELECT rr.rpz_zone as category, COUNT(*) as count
+                    FROM dns_logs dl
+                    JOIN rpz_rules rr ON dl.query_domain = rr.domain
+                    WHERE dl.timestamp >= :since AND dl.blocked = true
+                    GROUP BY rr.rpz_zone
+                    ORDER BY count DESC
+                    LIMIT 1
+                """, {"since": since})
+                
+                result['top_category'] = top_category['category'] if top_category else 'Unknown'
+                
+                return result
+            
+            return {}
+            
+        except Exception as e:
+            logger = get_monitoring_logger()
+            logger.error(f"Error getting threat detection stats: {e}")
+            return {}
+    
+    async def get_threats_by_category(self, days: int = 30) -> Dict:
+        """Get threat statistics by category"""
+        try:
+            from datetime import timedelta
+            since = datetime.utcnow() - timedelta(days=days)
+            
+            categories = await database.fetch_all("""
+                SELECT 
+                    rr.rpz_zone as category,
+                    COUNT(*) as threat_count,
+                    COUNT(DISTINCT dl.query_domain) as unique_threats,
+                    COUNT(DISTINCT dl.client_ip) as affected_clients,
+                    rr.action as primary_action
+                FROM dns_logs dl
+                JOIN rpz_rules rr ON dl.query_domain = rr.domain
+                WHERE dl.timestamp >= :since AND dl.blocked = true
+                GROUP BY rr.rpz_zone, rr.action
+                ORDER BY threat_count DESC
+            """, {"since": since})
+            
+            return {cat['category']: dict(cat) for cat in categories}
+            
+        except Exception as e:
+            logger = get_monitoring_logger()
+            logger.error(f"Error getting threats by category: {e}")
+            return {}
+    
+    async def get_top_threat_sources(self, days: int = 30, limit: int = 50) -> list:
+        """Get top threat sources (domains that triggered most blocks)"""
+        try:
+            from datetime import timedelta
+            since = datetime.utcnow() - timedelta(days=days)
+            
+            sources = await database.fetch_all("""
+                SELECT 
+                    dl.query_domain as domain,
+                    COUNT(*) as block_count,
+                    rr.rpz_zone as category,
+                    MIN(dl.timestamp) as first_seen,
+                    MAX(dl.timestamp) as last_seen,
+                    COUNT(DISTINCT dl.client_ip) as affected_clients
+                FROM dns_logs dl
+                JOIN rpz_rules rr ON dl.query_domain = rr.domain
+                WHERE dl.timestamp >= :since AND dl.blocked = true
+                GROUP BY dl.query_domain, rr.rpz_zone
+                ORDER BY block_count DESC
+                LIMIT :limit
+            """, {"since": since, "limit": limit})
+            
+            return [dict(source) for source in sources]
+            
+        except Exception as e:
+            logger = get_monitoring_logger()
+            logger.error(f"Error getting top threat sources: {e}")
+            return []
+    
+    async def get_threat_timeline(self, days: int = 30) -> list:
+        """Get daily threat detection timeline"""
+        try:
+            from datetime import timedelta
+            since = datetime.utcnow() - timedelta(days=days)
+            
+            timeline = await database.fetch_all("""
+                SELECT 
+                    DATE(dl.timestamp) as date,
+                    COUNT(*) FILTER (WHERE dl.blocked = true) as threats_blocked,
+                    COUNT(DISTINCT dl.query_domain) FILTER (WHERE dl.blocked = true) as unique_threats,
+                    COUNT(DISTINCT dl.client_ip) FILTER (WHERE dl.blocked = true) as affected_clients
+                FROM dns_logs dl
+                WHERE dl.timestamp >= :since
+                GROUP BY DATE(dl.timestamp)
+                ORDER BY date
+            """, {"since": since})
+            
+            return [dict(day) for day in timeline]
+            
+        except Exception as e:
+            logger = get_monitoring_logger()
+            logger.error(f"Error getting threat timeline: {e}")
+            return []
+    
+    async def get_geographic_threat_distribution(self, days: int = 30) -> Dict:
+        """Get geographic distribution of threats (simplified - by IP ranges)"""
+        try:
+            from datetime import timedelta
+            since = datetime.utcnow() - timedelta(days=days)
+            
+            # Simple geographic distribution based on IP address ranges
+            # In a real implementation, you'd use a GeoIP database
+            geo_data = await database.fetch_all("""
+                SELECT 
+                    CASE 
+                        WHEN client_ip LIKE '192.168.%' THEN 'Internal Network'
+                        WHEN client_ip LIKE '10.%' THEN 'Internal Network'
+                        WHEN client_ip LIKE '172.16.%' OR client_ip LIKE '172.17.%' OR 
+                             client_ip LIKE '172.18.%' OR client_ip LIKE '172.19.%' OR
+                             client_ip LIKE '172.20.%' OR client_ip LIKE '172.21.%' OR
+                             client_ip LIKE '172.22.%' OR client_ip LIKE '172.23.%' OR
+                             client_ip LIKE '172.24.%' OR client_ip LIKE '172.25.%' OR
+                             client_ip LIKE '172.26.%' OR client_ip LIKE '172.27.%' OR
+                             client_ip LIKE '172.28.%' OR client_ip LIKE '172.29.%' OR
+                             client_ip LIKE '172.30.%' OR client_ip LIKE '172.31.%' THEN 'Internal Network'
+                        ELSE 'External Network'
+                    END as network_type,
+                    COUNT(*) as threat_count,
+                    COUNT(DISTINCT client_ip) as unique_sources
+                FROM dns_logs 
+                WHERE timestamp >= :since AND blocked = true
+                GROUP BY network_type
+            """, {"since": since})
+            
+            return {geo['network_type']: dict(geo) for geo in geo_data}
+            
+        except Exception as e:
+            logger = get_monitoring_logger()
+            logger.error(f"Error getting geographic threat distribution: {e}")
+            return {}
+    
+    async def get_detailed_threat_breakdown(self, days: int = 30) -> Dict:
+        """Get detailed threat breakdown by various dimensions"""
+        try:
+            from datetime import timedelta
+            since = datetime.utcnow() - timedelta(days=days)
+            
+            # Threats by action type
+            by_action = await database.fetch_all("""
+                SELECT 
+                    rr.action,
+                    COUNT(*) as count,
+                    COUNT(DISTINCT dl.query_domain) as unique_domains
+                FROM dns_logs dl
+                JOIN rpz_rules rr ON dl.query_domain = rr.domain
+                WHERE dl.timestamp >= :since AND dl.blocked = true
+                GROUP BY rr.action
+            """, {"since": since})
+            
+            # Threats by time of day
+            by_hour = await database.fetch_all("""
+                SELECT 
+                    EXTRACT(hour FROM timestamp) as hour,
+                    COUNT(*) as threat_count
+                FROM dns_logs 
+                WHERE timestamp >= :since AND blocked = true
+                GROUP BY EXTRACT(hour FROM timestamp)
+                ORDER BY hour
+            """, {"since": since})
+            
+            # Threats by day of week
+            by_weekday = await database.fetch_all("""
+                SELECT 
+                    EXTRACT(dow FROM timestamp) as day_of_week,
+                    COUNT(*) as threat_count
+                FROM dns_logs 
+                WHERE timestamp >= :since AND blocked = true
+                GROUP BY EXTRACT(dow FROM timestamp)
+                ORDER BY day_of_week
+            """, {"since": since})
+            
+            return {
+                'by_action': [dict(item) for item in by_action],
+                'by_hour': [dict(item) for item in by_hour],
+                'by_weekday': [dict(item) for item in by_weekday]
+            }
+            
+        except Exception as e:
+            logger = get_monitoring_logger()
+            logger.error(f"Error getting detailed threat breakdown: {e}")
+            return {}
+    
+    async def get_category_blocking_stats(self, category: str, hours: int = 24) -> Dict:
+        """Get blocking statistics for a specific category"""
+        try:
+            from datetime import timedelta
+            since = datetime.utcnow() - timedelta(hours=hours)
+            
+            stats = await database.fetch_one("""
+                SELECT 
+                    COUNT(*) as blocked_queries,
+                    COUNT(DISTINCT dl.client_ip) as blocked_clients,
+                    COUNT(DISTINCT dl.query_domain) as blocked_domains,
+                    AVG(dl.response_time) as avg_response_time
+                FROM dns_logs dl
+                JOIN rpz_rules rr ON dl.query_domain = rr.domain
+                WHERE dl.timestamp >= :since 
+                AND dl.blocked = true 
+                AND rr.rpz_zone = :category
+            """, {"since": since, "category": category})
+            
+            return dict(stats) if stats else {}
+            
+        except Exception as e:
+            logger = get_monitoring_logger()
+            logger.error(f"Error getting category blocking stats: {e}")
+            return {}

@@ -17,11 +17,23 @@ from .dns import (
     ForwarderCreate,
     ForwarderUpdate,
     Forwarder,
+    # Forwarder Template schemas
+    ForwarderTemplateBase,
+    ForwarderTemplateCreate,
+    ForwarderTemplateUpdate,
+    ForwarderTemplate,
+    ForwarderFromTemplate,
+    # Forwarder Grouping schemas
+    ForwarderGroup,
+    ForwarderGroupUpdate,
     # Forwarder Health schemas
     ForwarderHealthBase,
     ForwarderHealthCreate,
     ForwarderHealthUpdate,
     ForwarderHealth,
+    ForwarderHealthStatus,
+    ForwarderTestResult,
+    HealthSummary,
     # Response schemas
     PaginatedResponse,
     HealthCheckResult,
@@ -192,11 +204,23 @@ __all__ = [
     "ForwarderCreate",
     "ForwarderUpdate",
     "Forwarder",
+    # Forwarder Template schemas
+    "ForwarderTemplateBase",
+    "ForwarderTemplateCreate",
+    "ForwarderTemplateUpdate",
+    "ForwarderTemplate",
+    "ForwarderFromTemplate",
+    # Forwarder Grouping schemas
+    "ForwarderGroup",
+    "ForwarderGroupUpdate",
     # Forwarder Health schemas
     "ForwarderHealthBase",
     "ForwarderHealthCreate",
     "ForwarderHealthUpdate",
     "ForwarderHealth",
+    "ForwarderHealthStatus",
+    "ForwarderTestResult",
+    "HealthSummary",
     # Response schemas
     "PaginatedResponse",
     "HealthCheckResult",

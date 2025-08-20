@@ -115,6 +115,19 @@ class Forwarder(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     health_check_enabled = Column(Boolean, default=True, nullable=False)
     description = Column(String(500), nullable=True)
+    
+    # Priority management
+    priority = Column(Integer, default=5, nullable=False)  # 1-10, where 1 is highest priority
+    
+    # Grouping support
+    group_name = Column(String(100), nullable=True)  # Optional group name for organization
+    group_priority = Column(Integer, default=5, nullable=False)  # Priority within group
+    
+    # Template support
+    is_template = Column(Boolean, default=False, nullable=False)  # Whether this is a template
+    template_name = Column(String(255), nullable=True)  # Template name if is_template=True
+    created_from_template = Column(String(255), nullable=True)  # Template used to create this forwarder
+    
     # Authentication integration fields
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
@@ -131,6 +144,12 @@ class Forwarder(Base):
     __table_args__ = (
         CheckConstraint("forwarder_type IN ('active_directory', 'intranet', 'public')", name='check_forwarder_type'),
         CheckConstraint("length(name) >= 1", name='check_forwarder_name_not_empty'),
+        CheckConstraint("priority >= 1 AND priority <= 10", name='check_priority_range'),
+        CheckConstraint("group_priority >= 1 AND group_priority <= 10", name='check_group_priority_range'),
+        CheckConstraint("group_name IS NULL OR length(group_name) >= 1", name='check_group_name_not_empty'),
+        CheckConstraint("template_name IS NULL OR length(template_name) >= 1", name='check_template_name_not_empty'),
+        CheckConstraint("created_from_template IS NULL OR length(created_from_template) >= 1", name='check_created_from_template_not_empty'),
+        CheckConstraint("NOT (is_template = true AND template_name IS NULL)", name='check_template_has_name'),
         # Note: JSON array length validation will be handled at application level for cross-database compatibility
     )
     
@@ -139,6 +158,52 @@ class Forwarder(Base):
     
     def __str__(self):
         return f"Forwarder: {self.name} ({self.forwarder_type})"
+
+
+class ForwarderTemplate(Base):
+    """Forwarder Template model for storing reusable forwarder configurations"""
+    __tablename__ = "forwarder_templates"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), unique=True, nullable=False)
+    description = Column(String(500), nullable=True)
+    forwarder_type = Column(String(20), nullable=False)  # active_directory, intranet, public
+    
+    # Template configuration
+    default_domains = Column(JSON, nullable=True)  # Default domains for this template
+    default_servers = Column(JSON, nullable=True)  # Default server configurations
+    default_priority = Column(Integer, default=5, nullable=False)
+    default_group_name = Column(String(100), nullable=True)
+    default_health_check_enabled = Column(Boolean, default=True, nullable=False)
+    
+    # Template metadata
+    is_system_template = Column(Boolean, default=False, nullable=False)  # System vs user templates
+    usage_count = Column(Integer, default=0, nullable=False)  # How many times used
+    
+    # Authentication integration fields
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    
+    # User relationships for audit trail
+    creator = relationship("User", foreign_keys=[created_by], overlaps="forwarder_templates_created")
+    updater = relationship("User", foreign_keys=[updated_by], overlaps="forwarder_templates_updated")
+    
+    # Table constraints
+    __table_args__ = (
+        CheckConstraint("forwarder_type IN ('active_directory', 'intranet', 'public')", name='check_template_forwarder_type'),
+        CheckConstraint("length(name) >= 1", name='check_template_name_not_empty'),
+        CheckConstraint("default_priority >= 1 AND default_priority <= 10", name='check_template_priority_range'),
+        CheckConstraint("default_group_name IS NULL OR length(default_group_name) >= 1", name='check_template_group_name_not_empty'),
+        CheckConstraint("usage_count >= 0", name='check_template_usage_count_non_negative'),
+    )
+    
+    def __repr__(self):
+        return f"<ForwarderTemplate(id={self.id}, name='{self.name}', type='{self.forwarder_type}')>"
+    
+    def __str__(self):
+        return f"Template: {self.name} ({self.forwarder_type})"
 
 
 class ForwarderHealth(Base):
@@ -250,8 +315,21 @@ Index('idx_forwarder_health_server_status', ForwarderHealth.server_ip, Forwarder
 # Forwarder indexes for conditional forwarding
 Index('idx_forwarders_type_active', Forwarder.forwarder_type, Forwarder.is_active)
 Index('idx_forwarders_active', Forwarder.is_active)
+Index('idx_forwarders_priority', Forwarder.priority)
+Index('idx_forwarders_group_name', Forwarder.group_name)
+Index('idx_forwarders_group_priority', Forwarder.group_name, Forwarder.group_priority)
+Index('idx_forwarders_is_template', Forwarder.is_template)
+Index('idx_forwarders_template_name', Forwarder.template_name)
+Index('idx_forwarders_created_from_template', Forwarder.created_from_template)
 Index('idx_forwarders_created_by', Forwarder.created_by)
 Index('idx_forwarders_updated_by', Forwarder.updated_by)
+
+# Forwarder Template indexes
+Index('idx_forwarder_templates_name', ForwarderTemplate.name)
+Index('idx_forwarder_templates_type', ForwarderTemplate.forwarder_type)
+Index('idx_forwarder_templates_system', ForwarderTemplate.is_system_template)
+Index('idx_forwarder_templates_usage', ForwarderTemplate.usage_count)
+Index('idx_forwarder_templates_created_by', ForwarderTemplate.created_by)
 
 # DNS Record History indexes for audit and tracking
 Index('idx_dns_record_history_record_id', DNSRecordHistory.record_id)

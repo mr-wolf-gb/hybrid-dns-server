@@ -320,9 +320,34 @@ class RPZService(BaseService[RPZRule]):
         logger.info(f"Bulk import completed: {created_count} created, {error_count} errors")
         return created_count, error_count, errors
     
-    async def bulk_update_rules(self, updates: List[Tuple[int, Dict[str, Any]]]) -> Tuple[int, int, List[str]]:
-        """Bulk update RPZ rules with error handling"""
-        logger.info(f"Bulk updating {len(updates)} RPZ rules")
+    async def bulk_update_rules(self, rule_ids: List[int], update_data: Dict[str, Any]) -> Tuple[int, int, List[str]]:
+        """Bulk update RPZ rules with the same changes applied to all"""
+        logger.info(f"Bulk updating {len(rule_ids)} RPZ rules with common changes")
+        
+        updated_count = 0
+        error_count = 0
+        errors = []
+        
+        for rule_id in rule_ids:
+            try:
+                result = await self.update_rule(rule_id, update_data)
+                if result:
+                    updated_count += 1
+                else:
+                    error_count += 1
+                    errors.append(f"Rule {rule_id}: Not found")
+            except Exception as e:
+                error_count += 1
+                error_msg = f"Rule {rule_id}: {str(e)}"
+                errors.append(error_msg)
+                logger.warning(f"Failed to update rule in bulk update: {error_msg}")
+        
+        logger.info(f"Bulk update completed: {updated_count} updated, {error_count} errors")
+        return updated_count, error_count, errors
+    
+    async def bulk_update_rules_individual(self, updates: List[Tuple[int, Dict[str, Any]]]) -> Tuple[int, int, List[str]]:
+        """Bulk update RPZ rules with individual changes for each rule"""
+        logger.info(f"Bulk updating {len(updates)} RPZ rules with individual changes")
         
         updated_count = 0
         error_count = 0
@@ -505,6 +530,21 @@ class RPZService(BaseService[RPZRule]):
         """Get the RPZ zone for a specific rule"""
         rule = await self.get_by_id(rule_id)
         return rule.rpz_zone if rule else None
+    
+    async def get_zones_for_rules(self, rule_ids: List[int]) -> List[str]:
+        """Get unique RPZ zones for a list of rule IDs"""
+        if not rule_ids:
+            return []
+        
+        if self.is_async:
+            query = select(RPZRule.rpz_zone).filter(RPZRule.id.in_(rule_ids)).distinct()
+            result = await self.db.execute(query)
+            zones = [row[0] for row in result.fetchall()]
+        else:
+            zones = self.db.query(RPZRule.rpz_zone).filter(RPZRule.id.in_(rule_ids)).distinct().all()
+            zones = [zone[0] for zone in zones]
+        
+        return zones
     
     # Category Management Methods
     

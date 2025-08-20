@@ -5,7 +5,7 @@ Main API routes configuration
 from fastapi import APIRouter
 
 from .endpoints import (
-    auth, backup, dashboard, dns_records, forwarders, health, rollback, rpz, system, users, zones
+    auth, backup, dashboard, dns_records, forwarders, forwarder_templates, health, rollback, rpz, system, users, zones
 )
 
 # Create main API router
@@ -18,6 +18,7 @@ api_router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboar
 api_router.include_router(zones.router, prefix="/zones", tags=["DNS Zones"])
 api_router.include_router(dns_records.router, prefix="/records", tags=["DNS Records"])
 api_router.include_router(forwarders.router, prefix="/forwarders", tags=["Forwarders"])
+api_router.include_router(forwarder_templates.router, prefix="/forwarder-templates", tags=["Forwarder Templates"])
 api_router.include_router(rpz.router, prefix="/rpz", tags=["Response Policy Zones"])
 api_router.include_router(health.router, prefix="/health", tags=["Health & Monitoring"])
 api_router.include_router(backup.router, prefix="/backup", tags=["Configuration Backup"])

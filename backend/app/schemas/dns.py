@@ -1269,7 +1269,9 @@ class ForwarderServer(BaseModel):
     """Schema for forwarder server configuration"""
     ip: str = Field(..., description="IP address of the forwarder server")
     port: int = Field(default=53, ge=1, le=65535, description="Port number for DNS queries")
-    priority: int = Field(default=1, ge=1, le=10, description="Server priority (1 = highest)")
+    priority: int = Field(default=1, ge=1, le=10, description="Server priority within forwarder (1 = highest)")
+    weight: int = Field(default=1, ge=1, le=100, description="Server weight for load balancing")
+    enabled: bool = Field(default=True, description="Whether this server is enabled")
 
     @validator('ip')
     def validate_ip_address(cls, v):
@@ -1305,6 +1307,15 @@ class ForwarderServer(BaseModel):
             raise ValueError(f'Priority too high ({v}). Priority must be between 1 and 10, where 1 is highest priority')
         return v
     
+    @validator('weight')
+    def validate_weight_value(cls, v):
+        """Validate weight value"""
+        if v < 1:
+            raise ValueError(f'Weight too low ({v}). Weight must be between 1 and 100')
+        if v > 100:
+            raise ValueError(f'Weight too high ({v}). Weight must be between 1 and 100')
+        return v
+    
     class Config:
         from_attributes = True
 
@@ -1317,6 +1328,13 @@ class ForwarderBase(BaseModel):
     servers: List[ForwarderServer] = Field(..., min_items=1, description="List of forwarder servers")
     description: Optional[str] = Field(None, max_length=500, description="Optional forwarder description")
     health_check_enabled: bool = Field(True, description="Whether health checking is enabled")
+    
+    # Priority management
+    priority: int = Field(default=5, ge=1, le=10, description="Forwarder priority (1 = highest)")
+    
+    # Grouping support
+    group_name: Optional[str] = Field(None, max_length=100, description="Optional group name for organization")
+    group_priority: int = Field(default=5, ge=1, le=10, description="Priority within group (1 = highest)")
 
     @validator('domains')
     def validate_domains(cls, v):
@@ -1388,6 +1406,13 @@ class ForwarderUpdate(BaseModel):
     description: Optional[str] = Field(None, max_length=500, description="Forwarder description")
     health_check_enabled: Optional[bool] = Field(None, description="Whether health checking is enabled")
     is_active: Optional[bool] = Field(None, description="Whether the forwarder is active")
+    
+    # Priority management
+    priority: Optional[int] = Field(None, ge=1, le=10, description="Forwarder priority (1 = highest)")
+    
+    # Grouping support
+    group_name: Optional[str] = Field(None, max_length=100, description="Optional group name for organization")
+    group_priority: Optional[int] = Field(None, ge=1, le=10, description="Priority within group (1 = highest)")
 
     @validator('domains')
     def validate_domains(cls, v):
@@ -1401,10 +1426,124 @@ class ForwarderUpdate(BaseModel):
         return v
 
 
+# Forwarder Template Schemas
+class ForwarderTemplateBase(BaseModel):
+    """Base schema for forwarder templates"""
+    name: str = Field(..., min_length=1, max_length=255, description="Template name")
+    description: Optional[str] = Field(None, max_length=500, description="Template description")
+    forwarder_type: ForwarderType = Field(..., description="Type of forwarder")
+    
+    # Default configuration
+    default_domains: Optional[List[str]] = Field(None, description="Default domains for this template")
+    default_servers: Optional[List[ForwarderServer]] = Field(None, description="Default server configurations")
+    default_priority: int = Field(default=5, ge=1, le=10, description="Default forwarder priority")
+    default_group_name: Optional[str] = Field(None, max_length=100, description="Default group name")
+    default_health_check_enabled: bool = Field(True, description="Default health check setting")
+    
+    @validator('default_domains')
+    def validate_default_domains(cls, v):
+        """Validate default domain names"""
+        if v is not None:
+            validated_domains = []
+            for domain in v:
+                validated_domain = DNSValidators.validate_domain_name(domain, 'template')
+                validated_domains.append(validated_domain)
+            return validated_domains
+        return v
+
+
+class ForwarderTemplateCreate(ForwarderTemplateBase):
+    """Schema for creating new forwarder templates"""
+    is_system_template: bool = Field(False, description="Whether this is a system template")
+
+
+class ForwarderTemplateUpdate(BaseModel):
+    """Schema for updating existing forwarder templates"""
+    name: Optional[str] = Field(None, min_length=1, max_length=255, description="Template name")
+    description: Optional[str] = Field(None, max_length=500, description="Template description")
+    default_domains: Optional[List[str]] = Field(None, description="Default domains for this template")
+    default_servers: Optional[List[ForwarderServer]] = Field(None, description="Default server configurations")
+    default_priority: Optional[int] = Field(None, ge=1, le=10, description="Default forwarder priority")
+    default_group_name: Optional[str] = Field(None, max_length=100, description="Default group name")
+    default_health_check_enabled: Optional[bool] = Field(None, description="Default health check setting")
+    
+    @validator('default_domains')
+    def validate_default_domains(cls, v):
+        """Validate default domain names"""
+        if v is not None:
+            validated_domains = []
+            for domain in v:
+                validated_domain = DNSValidators.validate_domain_name(domain, 'template')
+                validated_domains.append(validated_domain)
+            return validated_domains
+        return v
+
+
+class ForwarderTemplate(ForwarderTemplateBase):
+    """Schema for forwarder template responses"""
+    id: int
+    is_system_template: bool
+    usage_count: int
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class ForwarderFromTemplate(BaseModel):
+    """Schema for creating a forwarder from a template"""
+    template_id: int = Field(..., description="ID of the template to use")
+    name: str = Field(..., min_length=1, max_length=255, description="Name for the new forwarder")
+    
+    # Override template defaults
+    domains: Optional[List[str]] = Field(None, description="Override default domains")
+    servers: Optional[List[ForwarderServer]] = Field(None, description="Override default servers")
+    priority: Optional[int] = Field(None, ge=1, le=10, description="Override default priority")
+    group_name: Optional[str] = Field(None, max_length=100, description="Override default group name")
+    health_check_enabled: Optional[bool] = Field(None, description="Override default health check setting")
+    description: Optional[str] = Field(None, max_length=500, description="Forwarder description")
+    
+    @validator('domains')
+    def validate_domains(cls, v):
+        """Validate domain names"""
+        if v is not None:
+            validated_domains = []
+            for domain in v:
+                validated_domain = DNSValidators.validate_domain_name(domain, 'forwarder')
+                validated_domains.append(validated_domain)
+            return validated_domains
+        return v
+
+
+# Forwarder Grouping Schemas
+class ForwarderGroup(BaseModel):
+    """Schema for forwarder group information"""
+    group_name: str = Field(..., description="Group name")
+    forwarder_count: int = Field(..., description="Number of forwarders in group")
+    active_count: int = Field(..., description="Number of active forwarders in group")
+    forwarder_types: List[str] = Field(..., description="Types of forwarders in group")
+    avg_priority: float = Field(..., description="Average priority of forwarders in group")
+    health_status: str = Field(..., description="Overall health status of group")
+
+
+class ForwarderGroupUpdate(BaseModel):
+    """Schema for updating forwarder group settings"""
+    new_group_name: Optional[str] = Field(None, max_length=100, description="New group name")
+    group_priority: Optional[int] = Field(None, ge=1, le=10, description="New group priority for all forwarders")
+
+
 class Forwarder(ForwarderBase):
     """Schema for DNS forwarder responses"""
     id: int = Field(..., description="Unique forwarder identifier")
     is_active: bool = Field(..., description="Whether the forwarder is active")
+    
+    # Template information
+    is_template: bool = Field(False, description="Whether this is a template")
+    template_name: Optional[str] = Field(None, description="Template name if this is a template")
+    created_from_template: Optional[str] = Field(None, description="Template used to create this forwarder")
+    
+    # Audit fields
     created_by: Optional[int] = Field(None, description="ID of user who created the forwarder")
     updated_by: Optional[int] = Field(None, description="ID of user who last updated the forwarder")
     created_at: datetime = Field(..., description="Forwarder creation timestamp")
@@ -1995,7 +2134,7 @@ class RecordHistoryQuery(BaseModel):
     skip: int = Field(0, ge=0, description="Number of records to skip")
     limit: int = Field(100, ge=1, le=1000, description="Maximum number of records to return")
     sort_by: str = Field("changed_at", description="Field to sort by")
-    sort_order: str = Field("desc", regex="^(asc|desc)$", description="Sort order")
+    sort_order: str = Field("desc", pattern="^(asc|desc)$", description="Sort order")
 
 class RecordHistoryResponse(BaseModel):
     """Schema for record history response"""

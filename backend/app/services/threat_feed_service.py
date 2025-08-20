@@ -709,3 +709,104 @@ class ThreatFeedService(BaseService[ThreatFeed]):
             'rules_count': feed.rules_count,
             'update_frequency': feed.update_frequency
         }
+    
+    async def get_feed_effectiveness_report(self, days: int = 30) -> Dict[str, Any]:
+        """Get effectiveness report for threat feeds based on blocking statistics"""
+        logger.info(f"Generating feed effectiveness report for last {days} days")
+        
+        try:
+            from datetime import timedelta
+            from ..core.database import database
+            
+            since = datetime.utcnow() - timedelta(days=days)
+            
+            # Get all active feeds
+            feeds = await self.get_feeds(active_only=True, limit=1000)
+            
+            feed_effectiveness = []
+            
+            for feed in feeds:
+                # Get blocking statistics for this feed's rules
+                blocking_stats = await database.fetch_one("""
+                    SELECT 
+                        COUNT(*) as blocks_generated,
+                        COUNT(DISTINCT dl.client_ip) as clients_protected,
+                        COUNT(DISTINCT dl.query_domain) as unique_threats_blocked
+                    FROM dns_logs dl
+                    JOIN rpz_rules rr ON dl.query_domain = rr.domain
+                    WHERE dl.timestamp >= :since 
+                    AND dl.blocked = true
+                    AND rr.source LIKE :source_pattern
+                """, {
+                    "since": since,
+                    "source_pattern": f"%feed_{feed.id}%"
+                })
+                
+                if blocking_stats:
+                    blocks = blocking_stats['blocks_generated'] or 0
+                    clients = blocking_stats['clients_protected'] or 0
+                    threats = blocking_stats['unique_threats_blocked'] or 0
+                else:
+                    blocks = clients = threats = 0
+                
+                # Calculate effectiveness metrics
+                rules_count = feed.rules_count or 1  # Avoid division by zero
+                effectiveness_score = min((blocks / rules_count) * 10, 100) if rules_count > 0 else 0
+                
+                feed_effectiveness.append({
+                    'feed_id': feed.id,
+                    'feed_name': feed.name,
+                    'feed_type': feed.feed_type,
+                    'rules_count': feed.rules_count,
+                    'blocks_generated': blocks,
+                    'clients_protected': clients,
+                    'unique_threats_blocked': threats,
+                    'effectiveness_score': round(effectiveness_score, 2),
+                    'blocks_per_rule': round(blocks / rules_count, 2) if rules_count > 0 else 0,
+                    'last_updated': feed.last_updated,
+                    'update_status': feed.last_update_status
+                })
+            
+            # Sort by effectiveness score
+            feed_effectiveness.sort(key=lambda x: x['effectiveness_score'], reverse=True)
+            
+            # Calculate overall statistics
+            total_feeds = len(feed_effectiveness)
+            total_rules = sum(f['rules_count'] for f in feed_effectiveness)
+            total_blocks = sum(f['blocks_generated'] for f in feed_effectiveness)
+            
+            # Find most and least effective feeds
+            most_effective = feed_effectiveness[0] if feed_effectiveness else None
+            least_effective = feed_effectiveness[-1] if feed_effectiveness else None
+            
+            return {
+                'report_period': {
+                    'days': days,
+                    'start_date': since.isoformat(),
+                    'end_date': datetime.utcnow().isoformat()
+                },
+                'overall_summary': {
+                    'total_feeds_analyzed': total_feeds,
+                    'total_rules_deployed': total_rules,
+                    'total_blocks_generated': total_blocks,
+                    'average_effectiveness_score': round(
+                        sum(f['effectiveness_score'] for f in feed_effectiveness) / total_feeds, 2
+                    ) if total_feeds > 0 else 0,
+                    'most_effective_feed': most_effective['feed_name'] if most_effective else None,
+                    'least_effective_feed': least_effective['feed_name'] if least_effective else None
+                },
+                'feed_effectiveness': feed_effectiveness,
+                'effectiveness_categories': {
+                    'highly_effective': len([f for f in feed_effectiveness if f['effectiveness_score'] >= 75]),
+                    'moderately_effective': len([f for f in feed_effectiveness if 25 <= f['effectiveness_score'] < 75]),
+                    'low_effectiveness': len([f for f in feed_effectiveness if f['effectiveness_score'] < 25])
+                },
+                'generated_at': datetime.utcnow()
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to generate feed effectiveness report: {str(e)}")
+            return {
+                'error': f"Failed to generate effectiveness report: {str(e)}",
+                'generated_at': datetime.utcnow()
+            }

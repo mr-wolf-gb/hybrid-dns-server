@@ -5,7 +5,7 @@ RPZ management endpoints
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import csv
 import io
@@ -16,8 +16,9 @@ from ...schemas.security import (
     RPZRuleCreate, RPZRuleUpdate, RPZRule as RPZRuleSchema,
     RPZRuleImportResult, RPZAction, RPZCategory, RPZCategoryStatus,
     RPZCategoryToggleResult, RPZBulkCategorizeRequest, RPZBulkCategorizeResult,
+    RPZBulkUpdateRequest, RPZBulkUpdateResult, RPZBulkDeleteRequest, RPZBulkDeleteResult,
     ThreatFeedCreate, ThreatFeedUpdate, ThreatFeed as ThreatFeedSchema,
-    ThreatFeedUpdateResult, BulkThreatFeedUpdateResult, ThreatFeedStatus
+    ThreatFeedUpdateResult, BulkThreatFeedUpdateResult, ThreatFeedStatus, UpdateStatus
 )
 from ...services.rpz_service import RPZService
 from ...services.threat_feed_service import ThreatFeedService
@@ -139,622 +140,28 @@ async def delete_rpz_rule(
     return {"message": "Rule deleted successfully"}
 
 
-@router.post("/rules/bulk-import", response_model=RPZRuleImportResult)
-async def bulk_import_rules(
-    rpz_zone: str = Query(..., description="RPZ zone category for imported rules"),
-    action: RPZAction = Query(RPZAction.BLOCK, description="Default action for imported rules"),
-    source: str = Query("bulk_import", description="Source identifier for imported rules"),
-    redirect_target: Optional[str] = Query(None, description="Redirect target (required if action is redirect)"),
-    file: UploadFile = File(..., description="File containing domains to import"),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Bulk import RPZ rules from file"""
-    logger.info(f"Starting bulk import for RPZ zone: {rpz_zone}")
-    
-    # Validate redirect target if action is redirect
-    if action == RPZAction.REDIRECT and not redirect_target:
-        raise HTTPException(
-            status_code=400, 
-            detail="Redirect target is required when action is redirect"
-        )
-    
-    # Validate file type
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No file provided")
-    
-    file_extension = file.filename.lower().split('.')[-1]
-    if file_extension not in ['txt', 'csv', 'json']:
-        raise HTTPException(
-            status_code=400, 
-            detail="Unsupported file format. Supported formats: txt, csv, json"
-        )
-    
-    try:
-        # Read file content
-        content = await file.read()
-        content_str = content.decode('utf-8')
-        
-        # Parse domains based on file type
-        domains = []
-        if file_extension == 'json':
-            domains = await _parse_json_file(content_str)
-        elif file_extension == 'csv':
-            domains = await _parse_csv_file(content_str)
-        else:  # txt
-            domains = await _parse_txt_file(content_str)
-        
-        if not domains:
-            raise HTTPException(status_code=400, detail="No valid domains found in file")
-        
-        # Prepare rule data
-        rules_data = []
-        for domain in domains:
-            rule_data = {
-                'domain': domain.strip().lower(),
-                'rpz_zone': rpz_zone,
-                'action': action.value,
-                'source': source
-            }
-            if redirect_target:
-                rule_data['redirect_target'] = redirect_target
-            
-            rules_data.append(rule_data)
-        
-        # Create backup before bulk import
-        bind_service = BindService(db)
-        backup_success = await bind_service.backup_before_rpz_changes(rpz_zone, "bulk_import")
-        if not backup_success:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to create backup before bulk import"
-            )
-        
-        # Perform bulk import
-        rpz_service = RPZService(db)
-        created_count, error_count, errors = await rpz_service.bulk_create_rules(
-            rules_data, source=source
-        )
-        
-        # Schedule BIND9 configuration update in background
-        background_tasks.add_task(_update_bind_configuration, rpz_zone)
-        
-        # Prepare result
-        result = RPZRuleImportResult(
-            total_processed=len(rules_data),
-            rules_added=created_count,
-            rules_updated=0,  # Bulk create doesn't update existing rules
-            rules_skipped=error_count,
-            errors=errors[:50]  # Limit errors to first 50 to avoid huge responses
-        )
-        
-        logger.info(f"Bulk import completed: {created_count} created, {error_count} errors")
-        return result
-        
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="File encoding not supported. Please use UTF-8.")
-    except Exception as e:
-        logger.error(f"Bulk import failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
-
-
-@router.post("/rules/bulk-import-json", response_model=RPZRuleImportResult)
-async def bulk_import_rules_json(
-    rules: List[RPZRuleCreate],
-    source: str = Query("bulk_import", description="Source identifier for imported rules"),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Bulk import RPZ rules from JSON payload"""
-    logger.info(f"Starting bulk JSON import of {len(rules)} rules")
-    
-    if not rules:
-        raise HTTPException(status_code=400, detail="No rules provided")
-    
-    if len(rules) > 10000:  # Reasonable limit
-        raise HTTPException(status_code=400, detail="Too many rules. Maximum 10,000 rules per import.")
-    
-    try:
-        # Convert Pydantic models to dictionaries
-        rules_data = []
-        for rule in rules:
-            rule_dict = rule.model_dump()
-            rule_dict['source'] = source
-            rules_data.append(rule_dict)
-        
-        # Get unique RPZ zones for backup
-        rpz_zones = list(set(rule.rpz_zone for rule in rules))
-        
-        # Create backup before bulk import for each affected zone
-        bind_service = BindService(db)
-        for zone in rpz_zones:
-            backup_success = await bind_service.backup_before_rpz_changes(zone, "bulk_import")
-            if not backup_success:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Failed to create backup before bulk import for zone {zone}"
-                )
-        
-        # Perform bulk import
-        rpz_service = RPZService(db)
-        created_count, error_count, errors = await rpz_service.bulk_create_rules(
-            rules_data, source=source
-        )
-        
-        # Schedule BIND9 configuration updates in background
-        for zone in rpz_zones:
-            background_tasks.add_task(_update_bind_configuration, zone)
-        
-        # Prepare result
-        result = RPZRuleImportResult(
-            total_processed=len(rules_data),
-            rules_added=created_count,
-            rules_updated=0,
-            rules_skipped=error_count,
-            errors=errors[:50]  # Limit errors to first 50
-        )
-        
-        logger.info(f"Bulk JSON import completed: {created_count} created, {error_count} errors")
-        return result
-        
-    except Exception as e:
-        logger.error(f"Bulk JSON import failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
-
-
-@router.get("/rules/statistics")
-async def get_rpz_statistics(
-    rpz_zone: Optional[str] = Query(None, description="Specific RPZ zone to get statistics for"),
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Get RPZ rules statistics"""
-    rpz_service = RPZService(db)
-    statistics = await rpz_service.get_zone_statistics(rpz_zone)
-    return statistics
-
-
-# Enhanced Statistics and Reporting Endpoints
-
-@router.get("/statistics/comprehensive")
-async def get_comprehensive_statistics(
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Get comprehensive RPZ statistics across all categories"""
-    rpz_service = RPZService(db)
-    statistics = await rpz_service.get_comprehensive_statistics()
-    return statistics
-
-
-@router.get("/reports/activity")
-async def get_activity_report(
-    days: int = Query(30, ge=1, le=365, description="Number of days to include in the report"),
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Get activity report for the specified number of days"""
-    rpz_service = RPZService(db)
-    report = await rpz_service.get_activity_report(days)
-    return report
-
-
-@router.get("/reports/effectiveness")
-async def get_effectiveness_report(
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Get effectiveness report showing rule distribution and coverage"""
-    rpz_service = RPZService(db)
-    report = await rpz_service.get_effectiveness_report()
-    return report
-
-
-@router.get("/reports/trends")
-async def get_trend_analysis(
-    days: int = Query(90, ge=7, le=365, description="Number of days to analyze for trends"),
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Get trend analysis for rule creation and management over time"""
-    rpz_service = RPZService(db)
-    report = await rpz_service.get_trend_analysis(days)
-    return report
-
-
-@router.get("/reports/security-impact")
-async def get_security_impact_report(
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Get security impact report showing protection coverage"""
-    rpz_service = RPZService(db)
-    report = await rpz_service.get_security_impact_report()
-    return report
-
-
-@router.get("/reports/export")
-async def export_statistics_report(
-    report_type: str = Query(
-        "comprehensive", 
-        regex="^(comprehensive|activity|effectiveness|trends|security)$",
-        description="Type of report to export"
-    ),
-    format: str = Query(
-        "json",
-        regex="^(json)$", 
-        description="Export format (currently only JSON supported)"
-    ),
-    days: Optional[int] = Query(
-        None, 
-        ge=1, 
-        le=365, 
-        description="Number of days for time-based reports (activity, trends)"
-    ),
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Export statistics report in specified format"""
-    rpz_service = RPZService(db)
-    
-    try:
-        # For time-based reports, use the days parameter if provided
-        if report_type in ['activity', 'trends'] and days:
-            if report_type == 'activity':
-                data = await rpz_service.get_activity_report(days)
-            else:  # trends
-                data = await rpz_service.get_trend_analysis(days)
-            
-            export_data = {
-                'report_type': report_type,
-                'export_format': format,
-                'exported_at': datetime.utcnow().isoformat(),
-                'data': data
-            }
-        else:
-            export_data = await rpz_service.export_statistics_report(report_type, format)
-        
-        return export_data
-        
-    except Exception as e:
-        if "Invalid report type" in str(e):
-            raise HTTPException(status_code=400, detail=str(e))
-        logger.error(f"Report export failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
-
-
-@router.get("/statistics/summary")
-async def get_statistics_summary(
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Get a quick summary of key RPZ statistics"""
-    rpz_service = RPZService(db)
-    
-    # Get basic statistics
-    overall_stats = await rpz_service.get_zone_statistics()
-    
-    # Get category count
-    categories = await rpz_service.get_available_categories()
-    active_categories = 0
-    
-    for category in categories:
-        category_rules = await rpz_service.count_rules(rpz_zone=category, active_only=True)
-        if category_rules > 0:
-            active_categories += 1
-    
-    # Get recent activity (last 7 days)
-    from datetime import datetime, timedelta
-    seven_days_ago = datetime.utcnow() - timedelta(days=7)
-    
-    if hasattr(rpz_service, 'is_async') and rpz_service.is_async:
-        from sqlalchemy import select, func
-        recent_query = select(func.count(rpz_service.model.id)).filter(
-            rpz_service.model.created_at >= seven_days_ago
-        )
-        recent_result = await rpz_service.db.execute(recent_query)
-        recent_rules = recent_result.scalar()
-    else:
-        from sqlalchemy import func
-        recent_rules = rpz_service.db.query(func.count(rpz_service.model.id)).filter(
-            rpz_service.model.created_at >= seven_days_ago
-        ).scalar()
-    
-    summary = {
-        'total_rules': overall_stats.get('total_rules', 0),
-        'active_rules': overall_stats.get('active_rules', 0),
-        'total_categories': len(categories),
-        'active_categories': active_categories,
-        'recent_activity': {
-            'rules_added_last_7_days': recent_rules
-        },
-        'top_actions': overall_stats.get('rules_by_action', {}),
-        'generated_at': datetime.utcnow().isoformat()
-    }
-    
-    return summary
-
-
-# Category Management Endpoints
-
-@router.get("/categories", response_model=List[RPZCategory])
-async def list_categories(
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Get information about all available RPZ categories"""
-    rpz_service = RPZService(db)
-    categories = await rpz_service.get_all_categories_info()
-    return categories
-
-
-@router.get("/categories/{category}", response_model=RPZCategory)
-async def get_category_info(
-    category: str,
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Get detailed information about a specific category"""
-    rpz_service = RPZService(db)
-    
-    try:
-        category_info = await rpz_service.get_category_info(category)
-        return category_info
-    except Exception as e:
-        if "Invalid category" in str(e):
-            raise HTTPException(status_code=404, detail=f"Category '{category}' not found")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/categories/{category}/status", response_model=RPZCategoryStatus)
-async def get_category_status(
-    category: str,
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Get the current status of a category"""
-    rpz_service = RPZService(db)
-    
-    try:
-        status = await rpz_service.get_category_status(category)
-        return status
-    except Exception as e:
-        if "Invalid category" in str(e):
-            raise HTTPException(status_code=404, detail=f"Category '{category}' not found")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/categories/{category}/enable", response_model=RPZCategoryToggleResult)
-async def enable_category(
-    category: str,
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Enable all rules in a category"""
-    rpz_service = RPZService(db)
-    
-    try:
-        updated_count, errors = await rpz_service.enable_category(category)
-        
-        # Schedule BIND9 configuration update in background
-        background_tasks.add_task(_update_bind_configuration, category)
-        
-        result = RPZCategoryToggleResult(
-            category=category,
-            action="enabled",
-            rules_affected=updated_count,
-            errors=errors
-        )
-        
-        return result
-        
-    except Exception as e:
-        if "Invalid category" in str(e):
-            raise HTTPException(status_code=404, detail=f"Category '{category}' not found")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/categories/{category}/disable", response_model=RPZCategoryToggleResult)
-async def disable_category(
-    category: str,
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Disable all rules in a category"""
-    rpz_service = RPZService(db)
-    
-    try:
-        updated_count, errors = await rpz_service.disable_category(category)
-        
-        # Schedule BIND9 configuration update in background
-        background_tasks.add_task(_update_bind_configuration, category)
-        
-        result = RPZCategoryToggleResult(
-            category=category,
-            action="disabled",
-            rules_affected=updated_count,
-            errors=errors
-        )
-        
-        return result
-        
-    except Exception as e:
-        if "Invalid category" in str(e):
-            raise HTTPException(status_code=404, detail=f"Category '{category}' not found")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/categories/{category}/rules", response_model=List[RPZRuleSchema])
-async def list_category_rules(
-    category: str,
-    active_only: bool = Query(True),
-    action: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """List rules in a specific category"""
-    rpz_service = RPZService(db)
-    
-    try:
-        rules = await rpz_service.get_rules_by_category(
-            category=category,
-            skip=skip,
-            limit=limit,
-            active_only=active_only,
-            action=action,
-            search=search
-        )
-        return rules
-        
-    except Exception as e:
-        if "Invalid category" in str(e):
-            raise HTTPException(status_code=404, detail=f"Category '{category}' not found")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/rules/bulk-categorize", response_model=RPZBulkCategorizeResult)
-async def bulk_categorize_rules(
-    request: RPZBulkCategorizeRequest,
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Move multiple rules to a different category"""
-    rpz_service = RPZService(db)
-    
-    try:
-        updated_count, error_count, errors = await rpz_service.bulk_categorize_rules(
-            request.rule_ids, request.new_category
-        )
-        
-        # Schedule BIND9 configuration update in background
-        background_tasks.add_task(_update_bind_configuration, request.new_category)
-        
-        result = RPZBulkCategorizeResult(
-            total_processed=len(request.rule_ids),
-            rules_updated=updated_count,
-            rules_failed=error_count,
-            new_category=request.new_category,
-            errors=errors[:50]  # Limit errors to first 50
-        )
-        
-        return result
-        
-    except Exception as e:
-        logger.error(f"Bulk categorization failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# Helper functions
-async def _parse_json_file(content: str) -> List[str]:
-    """Parse JSON file containing domains"""
-    try:
-        data = json.loads(content)
-        
-        # Handle different JSON structures
-        if isinstance(data, list):
-            # Simple list of domains
-            if all(isinstance(item, str) for item in data):
-                return data
-            # List of objects with domain field
-            elif all(isinstance(item, dict) and 'domain' in item for item in data):
-                return [item['domain'] for item in data]
-        elif isinstance(data, dict):
-            # Object with domains array
-            if 'domains' in data and isinstance(data['domains'], list):
-                return data['domains']
-            # Object with domain field
-            elif 'domain' in data:
-                return [data['domain']]
-        
-        raise ValueError("Unsupported JSON structure")
-        
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON format: {str(e)}")
-
-
-async def _parse_csv_file(content: str) -> List[str]:
-    """Parse CSV file containing domains"""
-    domains = []
-    csv_reader = csv.reader(io.StringIO(content))
-    
-    for row_num, row in enumerate(csv_reader, 1):
-        if not row:  # Skip empty rows
-            continue
-        
-        # Take the first column as domain
-        domain = row[0].strip()
-        
-        # Skip header row (if it contains common header words) and comments
-        if (domain and 
-            not domain.startswith('#') and 
-            domain.lower() not in ['domain', 'hostname', 'url', 'site']):
-            domains.append(domain)
-    
-    return domains
-
-
-async def _parse_txt_file(content: str) -> List[str]:
-    """Parse text file containing domains (one per line)"""
-    domains = []
-    
-    for line_num, line in enumerate(content.splitlines(), 1):
-        line = line.strip()
-        
-        # Skip empty lines and comments
-        if not line or line.startswith('#'):
-            continue
-        
-        # Handle hosts file format (IP domain)
-        if ' ' in line:
-            parts = line.split()
-            if len(parts) >= 2:
-                # Take the second part as domain (skip IP)
-                domain = parts[1].strip()
-                if domain and domain != 'localhost':
-                    domains.append(domain)
-        else:
-            # Simple domain list
-            domains.append(line)
-    
-    return domains
-
-
-async def _update_bind_configuration(rpz_zone: str):
-    """Background task to update BIND9 configuration"""
-    try:
-        bind_service = BindService()
-        await bind_service.update_rpz_zone_file(rpz_zone)
-        await bind_service.reload_configuration()
-        logger.info(f"BIND9 configuration updated for RPZ zone: {rpz_zone}")
-    except Exception as e:
-        logger.error(f"Failed to update BIND9 configuration for zone {rpz_zone}: {str(e)}")
-
-# ===== THREAT FEED MANAGEMENT ENDPOINTS =====
+# Threat Feed Management Endpoints
 
 @router.get("/threat-feeds", response_model=List[ThreatFeedSchema])
 async def list_threat_feeds(
-    feed_type: Optional[str] = Query(None, description="Filter by feed type"),
-    active_only: bool = Query(True, description="Only return active feeds"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
+    feed_type: Optional[str] = Query(None),
+    active_only: bool = Query(True),
+    sort_by: str = Query("created_at"),
+    sort_order: str = Query("desc"),
     db: Session = Depends(get_database_session),
     current_user: dict = Depends(get_current_user)
 ):
-    """List all threat feeds with filtering"""
+    """List all threat feeds with filtering and pagination"""
     threat_feed_service = ThreatFeedService(db)
     feeds = await threat_feed_service.get_feeds(
         skip=skip,
         limit=limit,
         feed_type=feed_type,
-        active_only=active_only
+        active_only=active_only,
+        sort_by=sort_by,
+        sort_order=sort_order
     )
     return feeds
 
@@ -770,12 +177,10 @@ async def create_threat_feed(
     
     try:
         feed = await threat_feed_service.create_feed(feed_data.model_dump())
-        logger.info(f"Created threat feed: {feed.name}")
+        logger.info(f"Created threat feed {feed.id}: {feed.name}")
         return feed
     except Exception as e:
         logger.error(f"Failed to create threat feed: {str(e)}")
-        if "already exists" in str(e):
-            raise HTTPException(status_code=409, detail=str(e))
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -810,121 +215,32 @@ async def update_threat_feed(
         if not feed:
             raise HTTPException(status_code=404, detail="Threat feed not found")
         
-        logger.info(f"Updated threat feed: {feed.name}")
+        logger.info(f"Updated threat feed {feed.id}: {feed.name}")
         return feed
     except Exception as e:
         logger.error(f"Failed to update threat feed {feed_id}: {str(e)}")
-        if "already exists" in str(e):
-            raise HTTPException(status_code=409, detail=str(e))
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete("/threat-feeds/{feed_id}")
 async def delete_threat_feed(
     feed_id: int,
-    remove_rules: bool = Query(True, description="Remove associated RPZ rules"),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
+    remove_rules: bool = Query(True, description="Whether to remove associated RPZ rules"),
     db: Session = Depends(get_database_session),
     current_user: dict = Depends(get_current_user)
 ):
     """Delete a threat feed and optionally remove associated rules"""
     threat_feed_service = ThreatFeedService(db)
     
-    try:
-        # Get feed info before deletion for logging
-        feed = await threat_feed_service.get_feed(feed_id)
-        if not feed:
-            raise HTTPException(status_code=404, detail="Threat feed not found")
-        
-        feed_name = feed.name
-        feed_type = feed.feed_type
-        
-        success = await threat_feed_service.delete_feed(feed_id, remove_rules=remove_rules)
-        
-        if not success:
-            raise HTTPException(status_code=404, detail="Threat feed not found")
-        
-        # Schedule BIND9 configuration update in background if rules were removed
-        if remove_rules:
-            background_tasks.add_task(_update_bind_configuration, feed_type)
-        
-        logger.info(f"Deleted threat feed: {feed_name}")
-        return {"message": f"Threat feed '{feed_name}' deleted successfully"}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to delete threat feed {feed_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/threat-feeds/{feed_id}/update", response_model=ThreatFeedUpdateResult)
-async def update_threat_feed_from_source(
-    feed_id: int,
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Update a specific threat feed from its source"""
-    threat_feed_service = ThreatFeedService(db)
-    
-    # Get the feed
-    feed = await threat_feed_service.get_feed(feed_id)
-    if not feed:
+    success = await threat_feed_service.delete_feed(feed_id, remove_rules=remove_rules)
+    if not success:
         raise HTTPException(status_code=404, detail="Threat feed not found")
     
-    if not feed.is_active:
-        raise HTTPException(status_code=400, detail="Cannot update inactive threat feed")
-    
-    try:
-        # Update the feed
-        result = await threat_feed_service.update_feed_from_source(feed)
-        
-        # Schedule BIND9 configuration update in background if successful
-        if result.status == "success":
-            background_tasks.add_task(_update_bind_configuration, feed.feed_type)
-        
-        logger.info(f"Updated threat feed {feed.name}: {result.status}")
-        return result
-        
-    except Exception as e:
-        logger.error(f"Failed to update threat feed {feed_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/threat-feeds/update-all", response_model=BulkThreatFeedUpdateResult)
-async def update_all_threat_feeds(
-    force_update: bool = Query(False, description="Force update all feeds regardless of schedule"),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Update all active threat feeds"""
-    threat_feed_service = ThreatFeedService(db)
-    
-    try:
-        # Update all feeds
-        result = await threat_feed_service.update_all_feeds(force_update=force_update)
-        
-        # Schedule BIND9 configuration updates for all affected zones
-        if result.successful_updates > 0:
-            # Get all active feed types for BIND9 update
-            feeds = await threat_feed_service.get_feeds(active_only=True, limit=1000)
-            feed_types = list(set(feed.feed_type for feed in feeds))
-            
-            for feed_type in feed_types:
-                background_tasks.add_task(_update_bind_configuration, feed_type)
-        
-        logger.info(f"Bulk threat feed update completed: {result.successful_updates} successful, {result.failed_updates} failed")
-        return result
-        
-    except Exception as e:
-        logger.error(f"Bulk threat feed update failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"message": "Threat feed deleted successfully"}
 
 
 @router.post("/threat-feeds/{feed_id}/test")
-async def test_threat_feed_connectivity(
+async def test_threat_feed(
     feed_id: int,
     db: Session = Depends(get_database_session),
     current_user: dict = Depends(get_current_user)
@@ -932,24 +248,15 @@ async def test_threat_feed_connectivity(
     """Test connectivity to a threat feed without updating rules"""
     threat_feed_service = ThreatFeedService(db)
     
-    # Get the feed
     feed = await threat_feed_service.get_feed(feed_id)
     if not feed:
         raise HTTPException(status_code=404, detail="Threat feed not found")
     
-    try:
-        # Test connectivity
-        result = await threat_feed_service.test_feed_connectivity(feed)
-        
-        logger.info(f"Tested threat feed {feed.name}: {'success' if result['success'] else 'failed'}")
-        return result
-        
-    except Exception as e:
-        logger.error(f"Failed to test threat feed {feed_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    test_result = await threat_feed_service.test_feed_connectivity(feed)
+    return test_result
 
 
-@router.post("/threat-feeds/{feed_id}/toggle")
+@router.post("/threat-feeds/{feed_id}/toggle", response_model=ThreatFeedSchema)
 async def toggle_threat_feed(
     feed_id: int,
     db: Session = Depends(get_database_session),
@@ -958,22 +265,11 @@ async def toggle_threat_feed(
     """Toggle the active status of a threat feed"""
     threat_feed_service = ThreatFeedService(db)
     
-    try:
-        feed = await threat_feed_service.toggle_feed(feed_id)
-        if not feed:
-            raise HTTPException(status_code=404, detail="Threat feed not found")
-        
-        status = "enabled" if feed.is_active else "disabled"
-        logger.info(f"Threat feed {feed.name} {status}")
-        
-        return {
-            "message": f"Threat feed '{feed.name}' {status} successfully",
-            "feed": feed
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to toggle threat feed {feed_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    feed = await threat_feed_service.toggle_feed(feed_id)
+    if not feed:
+        raise HTTPException(status_code=404, detail="Threat feed not found")
+    
+    return feed
 
 
 @router.get("/threat-feeds/{feed_id}/status", response_model=ThreatFeedStatus)
@@ -985,19 +281,90 @@ async def get_threat_feed_status(
     """Get detailed status information for a threat feed"""
     threat_feed_service = ThreatFeedService(db)
     
-    try:
-        status = await threat_feed_service.get_feed_health_status(feed_id)
+    feed = await threat_feed_service.get_feed(feed_id)
+    if not feed:
+        raise HTTPException(status_code=404, detail="Threat feed not found")
+    
+    # Get health status
+    health_info = await threat_feed_service.get_feed_health_status(feed_id)
+    
+    # Create status response
+    status = ThreatFeedStatus(
+        id=feed.id,
+        name=feed.name,
+        is_active=feed.is_active,
+        last_updated=feed.last_updated,
+        last_update_status=feed.last_update_status,
+        last_update_error=feed.last_update_error,
+        rules_count=feed.rules_count,
+        next_update=health_info.get('next_update')
+    )
+    
+    return status
+
+
+@router.post("/threat-feeds/update", response_model=BulkThreatFeedUpdateResult)
+async def update_all_threat_feeds(
+    force_update: bool = Query(False, description="Force update all feeds regardless of schedule"),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update all active threat feeds"""
+    threat_feed_service = ThreatFeedService(db)
+    bind_service = BindService(db)
+    
+    logger.info(f"Bulk threat feed update requested (force={force_update})")
+    
+    # Update all feeds
+    result = await threat_feed_service.update_all_feeds(force_update=force_update)
+    
+    # Schedule BIND9 configuration updates for all affected zones
+    if result.successful_updates > 0:
+        # Get unique feed types that were updated successfully
+        updated_feed_types = set()
+        for feed_result in result.feed_results:
+            if feed_result.status == UpdateStatus.SUCCESS:
+                # Get the feed to determine its type
+                feed = await threat_feed_service.get_feed(feed_result.feed_id)
+                if feed:
+                    updated_feed_types.add(feed.feed_type)
         
-        if 'error' in status:
-            raise HTTPException(status_code=404, detail=status['error'])
-        
-        return status
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get threat feed status {feed_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Schedule BIND9 updates for each affected zone
+        for feed_type in updated_feed_types:
+            background_tasks.add_task(_update_bind_configuration, feed_type)
+    
+    return result
+
+
+@router.post("/threat-feeds/{feed_id}/update", response_model=ThreatFeedUpdateResult)
+async def update_single_threat_feed(
+    feed_id: int,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update a single threat feed from its source"""
+    threat_feed_service = ThreatFeedService(db)
+    bind_service = BindService(db)
+    
+    feed = await threat_feed_service.get_feed(feed_id)
+    if not feed:
+        raise HTTPException(status_code=404, detail="Threat feed not found")
+    
+    if not feed.is_active:
+        raise HTTPException(status_code=400, detail="Cannot update inactive threat feed")
+    
+    logger.info(f"Manual update requested for threat feed: {feed.name}")
+    
+    # Update the feed
+    result = await threat_feed_service.update_feed_from_source(feed)
+    
+    # Schedule BIND9 configuration update in background if successful
+    if result.status == UpdateStatus.SUCCESS:
+        background_tasks.add_task(_update_bind_configuration, feed.feed_type)
+    
+    return result
 
 
 @router.get("/threat-feeds/statistics")
@@ -1007,42 +374,822 @@ async def get_threat_feed_statistics(
 ):
     """Get comprehensive threat feed statistics"""
     threat_feed_service = ThreatFeedService(db)
-    
-    try:
-        statistics = await threat_feed_service.get_feed_statistics()
-        return statistics
-        
-    except Exception as e:
-        logger.error(f"Failed to get threat feed statistics: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    statistics = await threat_feed_service.get_feed_statistics()
+    return statistics
 
 
-@router.get("/threat-feeds/due-for-update")
-async def get_feeds_due_for_update(
+@router.get("/threat-feeds/{feed_id}/health")
+async def get_threat_feed_health(
+    feed_id: int,
     db: Session = Depends(get_database_session),
     current_user: dict = Depends(get_current_user)
 ):
-    """Get threat feeds that are due for update"""
+    """Get health status for a specific threat feed"""
     threat_feed_service = ThreatFeedService(db)
     
+    health_status = await threat_feed_service.get_feed_health_status(feed_id)
+    
+    if 'error' in health_status:
+        raise HTTPException(status_code=404, detail=health_status['error'])
+    
+    return health_status
+
+
+# Custom Threat List Management Endpoints
+
+@router.get("/custom-lists", response_model=List[ThreatFeedSchema])
+async def list_custom_threat_lists(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    active_only: bool = Query(True),
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """List custom threat lists (feeds with type 'custom')"""
+    threat_feed_service = ThreatFeedService(db)
+    feeds = await threat_feed_service.get_feeds(
+        skip=skip,
+        limit=limit,
+        feed_type="custom",
+        active_only=active_only,
+        sort_by="name",
+        sort_order="asc"
+    )
+    return feeds
+
+
+@router.post("/custom-lists", response_model=ThreatFeedSchema)
+async def create_custom_threat_list(
+    name: str = Query(..., description="Name of the custom threat list"),
+    description: Optional[str] = Query(None, description="Description of the custom threat list"),
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a new custom threat list (local feed without URL)"""
+    threat_feed_service = ThreatFeedService(db)
+    
+    # Create a custom feed with a placeholder URL
+    feed_data = {
+        'name': name,
+        'url': 'http://localhost/custom',  # Placeholder URL for custom lists
+        'feed_type': 'custom',
+        'format_type': 'domains',
+        'update_frequency': 86400,  # Daily
+        'description': description or f"Custom threat list: {name}",
+        'is_active': True
+    }
+    
     try:
-        feeds = await threat_feed_service.get_feeds_due_for_update()
+        feed = await threat_feed_service.create_feed(feed_data)
+        logger.info(f"Created custom threat list {feed.id}: {feed.name}")
+        return feed
+    except Exception as e:
+        logger.error(f"Failed to create custom threat list: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/custom-lists/{list_id}/domains")
+async def add_domains_to_custom_list(
+    list_id: int,
+    domains: List[str] = Query(..., description="List of domains to add to the custom list"),
+    action: RPZAction = Query(RPZAction.BLOCK, description="Action to apply to the domains"),
+    redirect_target: Optional[str] = Query(None, description="Redirect target (required if action is redirect)"),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Add domains to a custom threat list"""
+    threat_feed_service = ThreatFeedService(db)
+    rpz_service = RPZService(db)
+    
+    # Verify the custom list exists and is of type 'custom'
+    feed = await threat_feed_service.get_feed(list_id)
+    if not feed:
+        raise HTTPException(status_code=404, detail="Custom threat list not found")
+    
+    if feed.feed_type != 'custom':
+        raise HTTPException(status_code=400, detail="This operation is only allowed for custom threat lists")
+    
+    # Validate redirect target if action is redirect
+    if action == RPZAction.REDIRECT and not redirect_target:
+        raise HTTPException(
+            status_code=400, 
+            detail="Redirect target is required when action is redirect"
+        )
+    
+    # Prepare rule data
+    rules_data = []
+    for domain in domains:
+        rule_data = {
+            'domain': domain.strip().lower(),
+            'rpz_zone': 'custom',
+            'action': action.value,
+            'source': f"custom_list_{list_id}",
+            'description': f"Custom list: {feed.name}"
+        }
+        if redirect_target:
+            rule_data['redirect_target'] = redirect_target
+        
+        rules_data.append(rule_data)
+    
+    try:
+        # Create the rules
+        created_count, error_count, errors = await rpz_service.bulk_create_rules(
+            rules_data, 
+            source=f"custom_list_{list_id}"
+        )
+        
+        # Update the feed's rule count
+        await threat_feed_service.update_feed(list_id, {
+            'rules_count': feed.rules_count + created_count
+        })
+        
+        # Schedule BIND9 configuration update in background
+        background_tasks.add_task(_update_bind_configuration, 'custom')
         
         return {
-            "feeds_due_for_update": len(feeds),
-            "feeds": [
-                {
-                    "id": feed.id,
-                    "name": feed.name,
-                    "feed_type": feed.feed_type,
-                    "last_updated": feed.last_updated,
-                    "update_frequency": feed.update_frequency,
-                    "last_update_status": feed.last_update_status
-                }
-                for feed in feeds
-            ]
+            'message': f'Added {created_count} domains to custom list',
+            'domains_added': created_count,
+            'domains_failed': error_count,
+            'errors': errors[:10] if errors else []  # Limit errors to first 10
         }
         
     except Exception as e:
-        logger.error(f"Failed to get feeds due for update: {str(e)}")
+        logger.error(f"Failed to add domains to custom list {list_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/custom-lists/{list_id}/domains")
+async def remove_domains_from_custom_list(
+    list_id: int,
+    domains: List[str] = Query(..., description="List of domains to remove from the custom list"),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Remove domains from a custom threat list"""
+    threat_feed_service = ThreatFeedService(db)
+    rpz_service = RPZService(db)
+    
+    # Verify the custom list exists and is of type 'custom'
+    feed = await threat_feed_service.get_feed(list_id)
+    if not feed:
+        raise HTTPException(status_code=404, detail="Custom threat list not found")
+    
+    if feed.feed_type != 'custom':
+        raise HTTPException(status_code=400, detail="This operation is only allowed for custom threat lists")
+    
+    try:
+        # Get rules for these domains from this custom list
+        rules_to_delete = []
+        for domain in domains:
+            rules = await rpz_service.get_rules(
+                search=domain.strip().lower(),
+                source=f"custom_list_{list_id}",
+                active_only=False,
+                limit=1
+            )
+            if rules:
+                rules_to_delete.extend([rule.id for rule in rules])
+        
+        if not rules_to_delete:
+            return {
+                'message': 'No matching domains found in custom list',
+                'domains_removed': 0,
+                'domains_failed': len(domains)
+            }
+        
+        # Delete the rules
+        deleted_count, error_count, errors = await rpz_service.bulk_delete_rules(rules_to_delete)
+        
+        # Update the feed's rule count
+        await threat_feed_service.update_feed(list_id, {
+            'rules_count': max(0, feed.rules_count - deleted_count)
+        })
+        
+        # Schedule BIND9 configuration update in background
+        background_tasks.add_task(_update_bind_configuration, 'custom')
+        
+        return {
+            'message': f'Removed {deleted_count} domains from custom list',
+            'domains_removed': deleted_count,
+            'domains_failed': error_count,
+            'errors': errors[:10] if errors else []  # Limit errors to first 10
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to remove domains from custom list {list_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/custom-lists/{list_id}/domains", response_model=List[RPZRuleSchema])
+async def list_custom_list_domains(
+    list_id: int,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    search: Optional[str] = Query(None, description="Search for specific domains"),
+    active_only: bool = Query(True),
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """List domains in a custom threat list"""
+    threat_feed_service = ThreatFeedService(db)
+    rpz_service = RPZService(db)
+    
+    # Verify the custom list exists and is of type 'custom'
+    feed = await threat_feed_service.get_feed(list_id)
+    if not feed:
+        raise HTTPException(status_code=404, detail="Custom threat list not found")
+    
+    if feed.feed_type != 'custom':
+        raise HTTPException(status_code=400, detail="This operation is only allowed for custom threat lists")
+    
+    # Get rules for this custom list
+    rules = await rpz_service.get_rules(
+        source=f"custom_list_{list_id}",
+        search=search,
+        active_only=active_only,
+        skip=skip,
+        limit=limit
+    )
+    
+    return rules
+
+
+# Threat Intelligence Statistics Endpoints
+
+@router.get("/intelligence/statistics")
+async def get_threat_intelligence_statistics(
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get comprehensive threat intelligence statistics"""
+    threat_feed_service = ThreatFeedService(db)
+    rpz_service = RPZService(db)
+    
+    # Get threat feed statistics
+    feed_stats = await threat_feed_service.get_feed_statistics()
+    
+    # Get RPZ statistics
+    rpz_stats = await rpz_service.get_comprehensive_statistics()
+    
+    # Combine statistics
+    intelligence_stats = {
+        'threat_feeds': feed_stats,
+        'rpz_rules': rpz_stats,
+        'protection_coverage': {
+            'total_domains_protected': feed_stats.get('total_rules_from_feeds', 0),
+            'active_threat_feeds': feed_stats.get('active_feeds', 0),
+            'custom_lists': feed_stats.get('feeds_by_type', {}).get('custom', 0),
+            'external_feeds': sum(
+                count for feed_type, count in feed_stats.get('feeds_by_type', {}).items() 
+                if feed_type != 'custom'
+            )
+        },
+        'update_health': {
+            'feeds_up_to_date': feed_stats.get('update_status_counts', {}).get('success', 0),
+            'feeds_with_errors': feed_stats.get('update_status_counts', {}).get('failed', 0),
+            'feeds_never_updated': feed_stats.get('update_status_counts', {}).get('never', 0),
+            'feeds_due_for_update': feed_stats.get('feeds_due_for_update', 0)
+        },
+        'generated_at': datetime.utcnow()
+    }
+    
+    return intelligence_stats
+
+
+@router.get("/intelligence/coverage-report")
+async def get_threat_coverage_report(
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get detailed threat coverage report"""
+    threat_feed_service = ThreatFeedService(db)
+    rpz_service = RPZService(db)
+    
+    # Get all active feeds
+    feeds = await threat_feed_service.get_feeds(active_only=True, limit=1000)
+    
+    # Build coverage report
+    coverage_report = {
+        'total_feeds': len(feeds),
+        'feeds_by_type': {},
+        'coverage_by_category': {},
+        'feed_health': {
+            'healthy': 0,
+            'unhealthy': 0,
+            'never_updated': 0,
+            'updating': 0
+        },
+        'total_domains_protected': 0,
+        'feeds_detail': []
+    }
+    
+    for feed in feeds:
+        # Count by type
+        feed_type = feed.feed_type
+        if feed_type not in coverage_report['feeds_by_type']:
+            coverage_report['feeds_by_type'][feed_type] = 0
+        coverage_report['feeds_by_type'][feed_type] += 1
+        
+        # Count by category (RPZ zone)
+        if feed_type not in coverage_report['coverage_by_category']:
+            coverage_report['coverage_by_category'][feed_type] = {
+                'feeds': 0,
+                'domains': 0
+            }
+        coverage_report['coverage_by_category'][feed_type]['feeds'] += 1
+        coverage_report['coverage_by_category'][feed_type]['domains'] += feed.rules_count
+        
+        # Health status
+        if feed.last_update_status == UpdateStatus.SUCCESS:
+            coverage_report['feed_health']['healthy'] += 1
+        elif feed.last_update_status == UpdateStatus.FAILED:
+            coverage_report['feed_health']['unhealthy'] += 1
+        elif feed.last_update_status == UpdateStatus.PENDING:
+            coverage_report['feed_health']['updating'] += 1
+        else:
+            coverage_report['feed_health']['never_updated'] += 1
+        
+        # Total domains
+        coverage_report['total_domains_protected'] += feed.rules_count
+        
+        # Feed detail
+        coverage_report['feeds_detail'].append({
+            'id': feed.id,
+            'name': feed.name,
+            'type': feed.feed_type,
+            'domains': feed.rules_count,
+            'last_updated': feed.last_updated,
+            'status': feed.last_update_status,
+            'is_active': feed.is_active
+        })
+    
+    coverage_report['generated_at'] = datetime.utcnow()
+    
+    return coverage_report
+
+
+@router.get("/intelligence/feed-performance")
+async def get_feed_performance_metrics(
+    days: int = Query(30, ge=1, le=365, description="Number of days to analyze"),
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get performance metrics for threat feeds over time"""
+    threat_feed_service = ThreatFeedService(db)
+    
+    # Get all feeds
+    feeds = await threat_feed_service.get_feeds(active_only=False, limit=1000)
+    
+    # Calculate performance metrics
+    performance_metrics = {
+        'analysis_period_days': days,
+        'total_feeds_analyzed': len(feeds),
+        'performance_summary': {
+            'average_rules_per_feed': 0,
+            'most_productive_feed': None,
+            'least_productive_feed': None,
+            'feeds_with_recent_updates': 0,
+            'feeds_with_stale_data': 0
+        },
+        'feed_performance': [],
+        'generated_at': datetime.utcnow()
+    }
+    
+    if feeds:
+        # Calculate averages and find extremes
+        total_rules = sum(feed.rules_count for feed in feeds)
+        performance_metrics['performance_summary']['average_rules_per_feed'] = total_rules / len(feeds)
+        
+        # Find most and least productive feeds
+        active_feeds = [f for f in feeds if f.is_active and f.rules_count > 0]
+        if active_feeds:
+            most_productive = max(active_feeds, key=lambda f: f.rules_count)
+            least_productive = min(active_feeds, key=lambda f: f.rules_count)
+            
+            performance_metrics['performance_summary']['most_productive_feed'] = {
+                'name': most_productive.name,
+                'rules_count': most_productive.rules_count
+            }
+            performance_metrics['performance_summary']['least_productive_feed'] = {
+                'name': least_productive.name,
+                'rules_count': least_productive.rules_count
+            }
+        
+        # Analyze update freshness
+        from datetime import timedelta
+        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        
+        for feed in feeds:
+            # Check if feed has recent updates
+            if feed.last_updated and feed.last_updated >= cutoff_date:
+                performance_metrics['performance_summary']['feeds_with_recent_updates'] += 1
+            elif feed.last_updated and feed.last_updated < cutoff_date:
+                performance_metrics['performance_summary']['feeds_with_stale_data'] += 1
+            
+            # Add individual feed performance
+            performance_metrics['feed_performance'].append({
+                'id': feed.id,
+                'name': feed.name,
+                'type': feed.feed_type,
+                'is_active': feed.is_active,
+                'rules_count': feed.rules_count,
+                'last_updated': feed.last_updated,
+                'last_update_status': feed.last_update_status,
+                'update_frequency_hours': feed.update_frequency / 3600,
+                'days_since_update': (
+                    (datetime.utcnow() - feed.last_updated).days 
+                    if feed.last_updated else None
+                )
+            })
+    
+    return performance_metrics
+
+
+# Background task helper function
+async def _update_bind_configuration(rpz_zone: str):
+    """Background task to update BIND9 configuration for a specific RPZ zone"""
+    try:
+        from ...services.bind_service import BindService
+        from ...core.database import get_database_session
+        
+        # Get a database session for the background task
+        db = next(get_database_session())
+        bind_service = BindService(db)
+        
+        logger.info(f"Updating BIND9 configuration for RPZ zone: {rpz_zone}")
+        
+        # Update RPZ zone file
+        await bind_service.update_rpz_zone_file(rpz_zone)
+        
+        # Reload BIND9 configuration
+        await bind_service.reload_configuration()
+        
+        logger.info(f"Successfully updated BIND9 configuration for RPZ zone: {rpz_zone}")
+        
+    except Exception as e:
+        logger.error(f"Failed to update BIND9 configuration for RPZ zone {rpz_zone}: {str(e)}")
+
+
+# RPZ Statistics and Reporting Endpoints
+
+@router.get("/statistics")
+async def get_rpz_statistics(
+    category: Optional[str] = Query(None, description="Filter statistics by RPZ category/zone"),
+    include_trends: bool = Query(True, description="Include trend analysis"),
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get comprehensive RPZ statistics including blocked queries and threat detection"""
+    rpz_service = RPZService(db)
+    
+    try:
+        # Get comprehensive RPZ statistics
+        rpz_stats = await rpz_service.get_comprehensive_statistics()
+        
+        # Get category-specific statistics if requested
+        if category:
+            category_stats = await rpz_service.get_zone_statistics(rpz_zone=category)
+            rpz_stats['category_focus'] = category_stats
+        
+        # Get blocked query statistics from monitoring service
+        from ...services.monitoring_service import MonitoringService
+        monitoring_service = MonitoringService()
+        
+        # Get blocked query statistics for different time periods
+        blocked_stats = {
+            'last_24_hours': await monitoring_service.get_blocked_query_stats(hours=24),
+            'last_7_days': await monitoring_service.get_blocked_query_stats(hours=168),
+            'last_30_days': await monitoring_service.get_blocked_query_stats(hours=720)
+        }
+        
+        # Get top blocked domains
+        top_blocked = await monitoring_service.get_top_blocked_domains(hours=168, limit=20)
+        
+        # Get blocking effectiveness by category
+        category_effectiveness = await monitoring_service.get_blocking_by_category(hours=168)
+        
+        # Combine all statistics
+        comprehensive_stats = {
+            'rpz_rules': rpz_stats,
+            'blocked_queries': blocked_stats,
+            'top_blocked_domains': top_blocked,
+            'category_effectiveness': category_effectiveness,
+            'protection_summary': {
+                'total_active_rules': rpz_stats.get('overall', {}).get('active_rules', 0),
+                'categories_enabled': len([cat for cat in rpz_stats.get('categories', []) if cat.get('active_rules', 0) > 0]),
+                'total_blocked_last_24h': blocked_stats.get('last_24_hours', {}).get('blocked_queries', 0),
+                'block_rate_percentage': round(
+                    (blocked_stats.get('last_24_hours', {}).get('blocked_queries', 0) / 
+                     max(blocked_stats.get('last_24_hours', {}).get('total_queries', 1), 1)) * 100, 2
+                )
+            }
+        }
+        
+        # Add trend analysis if requested
+        if include_trends:
+            trend_data = await monitoring_service.get_blocking_trends(days=30)
+            comprehensive_stats['trends'] = trend_data
+        
+        comprehensive_stats['generated_at'] = datetime.utcnow()
+        
+        return comprehensive_stats
+        
+    except Exception as e:
+        logger.error(f"Failed to get RPZ statistics: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve RPZ statistics: {str(e)}")
+
+
+@router.get("/blocked-queries")
+async def get_blocked_query_report(
+    hours: int = Query(24, ge=1, le=8760, description="Number of hours to analyze (max 1 year)"),
+    category: Optional[str] = Query(None, description="Filter by RPZ category"),
+    client_ip: Optional[str] = Query(None, description="Filter by client IP address"),
+    domain: Optional[str] = Query(None, description="Filter by domain pattern"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of results"),
+    skip: int = Query(0, ge=0, description="Number of results to skip"),
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get detailed blocked query report with filtering options"""
+    from ...services.monitoring_service import MonitoringService
+    
+    try:
+        monitoring_service = MonitoringService()
+        
+        # Get blocked queries with filters
+        blocked_queries = await monitoring_service.get_blocked_queries(
+            hours=hours,
+            category=category,
+            client_ip=client_ip,
+            domain=domain,
+            limit=limit,
+            skip=skip
+        )
+        
+        # Get summary statistics for the filtered results
+        summary_stats = await monitoring_service.get_blocked_query_summary(
+            hours=hours,
+            category=category,
+            client_ip=client_ip,
+            domain=domain
+        )
+        
+        # Get hourly breakdown for the time period
+        hourly_breakdown = await monitoring_service.get_blocked_queries_hourly(
+            hours=min(hours, 168),  # Limit hourly breakdown to 1 week max
+            category=category
+        )
+        
+        return {
+            'query_results': blocked_queries,
+            'summary': summary_stats,
+            'hourly_breakdown': hourly_breakdown,
+            'filters_applied': {
+                'hours': hours,
+                'category': category,
+                'client_ip': client_ip,
+                'domain': domain,
+                'limit': limit,
+                'skip': skip
+            },
+            'generated_at': datetime.utcnow()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get blocked query report: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve blocked query report: {str(e)}")
+
+
+@router.get("/threat-detection-report")
+async def get_threat_detection_report(
+    days: int = Query(30, ge=1, le=365, description="Number of days to analyze"),
+    include_details: bool = Query(True, description="Include detailed threat breakdown"),
+    format: str = Query("json", regex="^(json|csv)$", description="Response format"),
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Generate comprehensive threat detection report"""
+    from ...services.monitoring_service import MonitoringService
+    from ...services.threat_feed_service import ThreatFeedService
+    
+    try:
+        monitoring_service = MonitoringService()
+        threat_feed_service = ThreatFeedService(db)
+        rpz_service = RPZService(db)
+        
+        # Get threat detection statistics
+        threat_stats = await monitoring_service.get_threat_detection_stats(days=days)
+        
+        # Get threat feed effectiveness
+        feed_effectiveness = await threat_feed_service.get_feed_effectiveness_report(days=days)
+        
+        # Get category-based threat detection
+        category_threats = await monitoring_service.get_threats_by_category(days=days)
+        
+        # Get top threat sources (domains/IPs that triggered most blocks)
+        top_threat_sources = await monitoring_service.get_top_threat_sources(days=days, limit=50)
+        
+        # Get threat timeline (daily breakdown)
+        threat_timeline = await monitoring_service.get_threat_timeline(days=days)
+        
+        # Get geographic threat distribution if available
+        geo_threats = await monitoring_service.get_geographic_threat_distribution(days=days)
+        
+        report_data = {
+            'report_period': {
+                'days': days,
+                'start_date': (datetime.utcnow() - timedelta(days=days)).isoformat(),
+                'end_date': datetime.utcnow().isoformat()
+            },
+            'executive_summary': {
+                'total_threats_blocked': threat_stats.get('total_blocked', 0),
+                'unique_threat_domains': threat_stats.get('unique_domains', 0),
+                'threat_sources_identified': threat_stats.get('unique_sources', 0),
+                'most_active_threat_category': threat_stats.get('top_category', 'Unknown'),
+                'average_daily_blocks': threat_stats.get('daily_average', 0),
+                'threat_detection_rate': threat_stats.get('detection_rate_percent', 0)
+            },
+            'threat_categories': category_threats,
+            'feed_effectiveness': feed_effectiveness,
+            'threat_timeline': threat_timeline,
+            'top_threat_sources': top_threat_sources,
+            'geographic_distribution': geo_threats
+        }
+        
+        # Add detailed breakdown if requested
+        if include_details:
+            detailed_threats = await monitoring_service.get_detailed_threat_breakdown(days=days)
+            report_data['detailed_breakdown'] = detailed_threats
+        
+        report_data['generated_at'] = datetime.utcnow()
+        
+        # Return CSV format if requested
+        if format == "csv":
+            csv_data = await _generate_threat_report_csv(report_data)
+            from fastapi.responses import Response
+            return Response(
+                content=csv_data,
+                media_type="text/csv",
+                headers={"Content-Disposition": f"attachment; filename=threat_report_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"}
+            )
+        
+        return report_data
+        
+    except Exception as e:
+        logger.error(f"Failed to generate threat detection report: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate threat detection report: {str(e)}")
+
+
+@router.get("/category-statistics")
+async def get_category_based_statistics(
+    include_inactive: bool = Query(False, description="Include statistics for inactive categories"),
+    time_period: int = Query(24, ge=1, le=8760, description="Time period in hours for query statistics"),
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get detailed statistics broken down by RPZ categories"""
+    rpz_service = RPZService(db)
+    
+    try:
+        from ...services.monitoring_service import MonitoringService
+        monitoring_service = MonitoringService()
+        
+        # Get all categories
+        categories = await rpz_service.get_available_categories()
+        category_statistics = []
+        
+        for category in categories:
+            # Get basic category info
+            category_info = await rpz_service.get_category_info(category)
+            
+            # Get category status
+            category_status = await rpz_service.get_category_status(category)
+            
+            # Skip inactive categories if not requested
+            if not include_inactive and category_status['status'] in ['disabled', 'empty']:
+                continue
+            
+            # Get blocking statistics for this category
+            blocking_stats = await monitoring_service.get_category_blocking_stats(
+                category=category, 
+                hours=time_period
+            )
+            
+            # Get top blocked domains in this category
+            top_blocked_in_category = await monitoring_service.get_top_blocked_domains(
+                hours=time_period,
+                category=category,
+                limit=10
+            )
+            
+            # Combine all statistics for this category
+            category_stat = {
+                'category': category,
+                'display_name': category_info['display_name'],
+                'description': category_info['description'],
+                'rule_statistics': {
+                    'total_rules': category_info['total_rules'],
+                    'active_rules': category_info['active_rules'],
+                    'rules_by_action': category_info['rules_by_action'],
+                    'rules_by_source': category_info['rules_by_source']
+                },
+                'status': category_status,
+                'blocking_performance': blocking_stats,
+                'top_blocked_domains': top_blocked_in_category,
+                'effectiveness_score': _calculate_category_effectiveness(
+                    category_info, blocking_stats
+                )
+            }
+            
+            category_statistics.append(category_stat)
+        
+        # Calculate overall statistics
+        total_active_rules = sum(cat['rule_statistics']['active_rules'] for cat in category_statistics)
+        total_blocks = sum(cat['blocking_performance'].get('blocked_queries', 0) for cat in category_statistics)
+        
+        overall_summary = {
+            'total_categories': len(category_statistics),
+            'total_active_rules': total_active_rules,
+            'total_blocks_period': total_blocks,
+            'most_effective_category': max(
+                category_statistics, 
+                key=lambda x: x['effectiveness_score']
+            )['category'] if category_statistics else None,
+            'least_effective_category': min(
+                category_statistics, 
+                key=lambda x: x['effectiveness_score']
+            )['category'] if category_statistics else None
+        }
+        
+        return {
+            'time_period_hours': time_period,
+            'include_inactive': include_inactive,
+            'overall_summary': overall_summary,
+            'category_statistics': category_statistics,
+            'generated_at': datetime.utcnow()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get category-based statistics: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve category-based statistics: {str(e)}")
+
+
+# Helper functions
+
+def _calculate_category_effectiveness(category_info: Dict, blocking_stats: Dict) -> float:
+    """Calculate effectiveness score for a category (0-100)"""
+    try:
+        active_rules = category_info.get('active_rules', 0)
+        blocked_queries = blocking_stats.get('blocked_queries', 0)
+        
+        if active_rules == 0:
+            return 0.0
+        
+        # Simple effectiveness calculation: blocks per rule
+        blocks_per_rule = blocked_queries / active_rules
+        
+        # Normalize to 0-100 scale (assuming 10 blocks per rule is excellent)
+        effectiveness = min(blocks_per_rule * 10, 100)
+        
+        return round(effectiveness, 2)
+        
+    except Exception:
+        return 0.0
+
+
+async def _generate_threat_report_csv(report_data: Dict) -> str:
+    """Generate CSV format for threat detection report"""
+    import csv
+    import io
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write header
+    writer.writerow(['Threat Detection Report'])
+    writer.writerow(['Generated:', report_data['generated_at']])
+    writer.writerow(['Period:', f"{report_data['report_period']['days']} days"])
+    writer.writerow([])
+    
+    # Executive summary
+    writer.writerow(['Executive Summary'])
+    summary = report_data['executive_summary']
+    for key, value in summary.items():
+        writer.writerow([key.replace('_', ' ').title(), value])
+    writer.writerow([])
+    
+    # Top threat sources
+    writer.writerow(['Top Threat Sources'])
+    writer.writerow(['Domain', 'Blocks', 'Category', 'First Seen', 'Last Seen'])
+    for threat in report_data.get('top_threat_sources', []):
+        writer.writerow([
+            threat.get('domain', ''),
+            threat.get('block_count', 0),
+            threat.get('category', ''),
+            threat.get('first_seen', ''),
+            threat.get('last_seen', '')
+        ])
+    
+    return output.getvalue()
