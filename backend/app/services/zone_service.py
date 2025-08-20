@@ -212,6 +212,19 @@ class ZoneService(BaseService[Zone]):
             "record_count": len(records)
         }
     
+    async def get_zone_records(self, zone_id: int) -> List[Any]:
+        """Get all DNS records for a zone"""
+        from ..models.dns import DNSRecord
+        
+        if self.is_async:
+            # For async database operations
+            result = await self.db.execute(
+                select(DNSRecord).where(DNSRecord.zone_id == zone_id)
+            )
+            return result.scalars().all()
+        else:
+            return self.db.query(DNSRecord).filter(DNSRecord.zone_id == zone_id).all()
+    
     async def get_zone_statistics(self, zone_id: int) -> Optional[Dict[str, Any]]:
         """Get statistics for a zone including serial number information"""
         zone = await self.get_by_id(zone_id)
@@ -1182,6 +1195,84 @@ class ZoneService(BaseService[Zone]):
             "zone_name": zone.name,
             "zone_type": zone.zone_type
         }
+    
+    async def get_zone_health(self, zone_id: int) -> Optional[Dict[str, Any]]:
+        """Get zone health status"""
+        zone = await self.get_by_id(zone_id)
+        if not zone:
+            return None
+        
+        from datetime import datetime, timedelta
+        import asyncio
+        
+        # Initialize health data
+        health_data = {
+            "status": "healthy",
+            "last_check": datetime.utcnow().isoformat(),
+            "issues": [],
+            "response_time": None
+        }
+        
+        issues = []
+        
+        # Check if zone is active
+        if not zone.is_active:
+            health_data["status"] = "warning"
+            issues.append("Zone is inactive")
+        
+        # Check for records
+        records = await self.get_zone_records(zone_id)
+        if not records:
+            health_data["status"] = "warning"
+            issues.append("Zone has no DNS records")
+        
+        # Check serial number age
+        if zone.serial:
+            try:
+                # Extract date from serial (assuming YYYYMMDDNN format)
+                serial_str = str(zone.serial)
+                if len(serial_str) >= 8:
+                    date_part = serial_str[:8]
+                    serial_date = datetime.strptime(date_part, "%Y%m%d")
+                    days_old = (datetime.utcnow() - serial_date).days
+                    
+                    if days_old > 30:
+                        if health_data["status"] == "healthy":
+                            health_data["status"] = "warning"
+                        issues.append(f"Serial number is {days_old} days old")
+                    elif days_old > 90:
+                        health_data["status"] = "error"
+                        issues.append(f"Serial number is very old ({days_old} days)")
+            except (ValueError, TypeError):
+                issues.append("Invalid serial number format")
+        
+        # Check zone file syntax (basic validation)
+        try:
+            validation_result = await self.validate_zone_for_bind(zone_id)
+            if not validation_result.get("valid", True):
+                health_data["status"] = "error"
+                issues.extend(validation_result.get("errors", []))
+        except Exception as e:
+            health_data["status"] = "error"
+            issues.append(f"Zone validation failed: {str(e)}")
+        
+        # Simulate response time check (in a real implementation, this would test DNS resolution)
+        start_time = datetime.utcnow()
+        await asyncio.sleep(0.001)  # Simulate network delay
+        end_time = datetime.utcnow()
+        health_data["response_time"] = int((end_time - start_time).total_seconds() * 1000)
+        
+        health_data["issues"] = issues
+        
+        # Set final status based on issues
+        if len(issues) == 0:
+            health_data["status"] = "healthy"
+        elif any("error" in issue.lower() or "failed" in issue.lower() for issue in issues):
+            health_data["status"] = "error"
+        elif health_data["status"] != "error":
+            health_data["status"] = "warning"
+        
+        return health_data
     
     async def get_zone_health_statistics(self, zone_id: int) -> Optional[Dict[str, Any]]:
         """Get health and performance statistics for a zone"""

@@ -7,18 +7,30 @@ import {
   PlayIcon,
   PauseIcon,
   CheckCircleIcon,
-  ExclamationCircleIcon,
+  ArrowPathIcon,
+  Cog6ToothIcon,
+  ChartBarIcon,
+  ViewColumnsIcon,
+  Squares2X2Icon,
 } from '@heroicons/react/24/outline'
 import { forwardersService } from '@/services/api'
 import { Forwarder } from '@/types'
 import { Card, Button, Table, Badge } from '@/components/ui'
-import { formatDateTime, getStatusColor } from '@/utils'
+import { formatDateTime } from '@/utils'
 import { toast } from 'react-toastify'
 import ForwarderModal from '@/components/forwarders/ForwarderModal'
+import ForwarderTestModal from '@/components/forwarders/ForwarderTestModal'
+import ForwarderHealthIndicator from '@/components/forwarders/ForwarderHealthIndicator'
+import ForwarderStatistics from '@/components/forwarders/ForwarderStatistics'
+import ForwarderGrouping from '@/components/forwarders/ForwarderGrouping'
 
 const Forwarders: React.FC = () => {
   const [selectedForwarder, setSelectedForwarder] = useState<Forwarder | null>(null)
   const [isForwarderModalOpen, setIsForwarderModalOpen] = useState(false)
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false)
+  const [testForwarder, setTestForwarder] = useState<Forwarder | null>(null)
+  const [viewMode, setViewMode] = useState<'table' | 'grouped' | 'statistics'>('table')
+  const [selectedForwarders, setSelectedForwarders] = useState<Set<number>>(new Set())
 
   const queryClient = useQueryClient()
 
@@ -55,12 +67,40 @@ const Forwarders: React.FC = () => {
   // Test forwarder mutation
   const testForwarderMutation = useMutation({
     mutationFn: forwardersService.testForwarder,
-    onSuccess: (response, forwarderId) => {
+    onSuccess: (response) => {
       const result = response.data.data
       toast.success(`Forwarder test successful - Response time: ${result.response_time}ms`)
+      queryClient.invalidateQueries({ queryKey: ['forwarders'] })
     },
     onError: () => {
       toast.error('Forwarder test failed')
+    },
+  })
+
+  // Bulk test forwarders mutation
+  const bulkTestMutation = useMutation({
+    mutationFn: forwardersService.bulkTestForwarders,
+    onSuccess: (response) => {
+      const results = response.data.data
+      const successful = results.filter(r => r.status === 'success').length
+      toast.success(`Bulk test completed: ${successful}/${results.length} forwarders healthy`)
+      queryClient.invalidateQueries({ queryKey: ['forwarders'] })
+    },
+    onError: () => {
+      toast.error('Bulk test failed')
+    },
+  })
+
+  // Refresh health status mutation
+  const refreshHealthMutation = useMutation({
+    mutationFn: forwardersService.refreshHealthStatus,
+    onSuccess: (response) => {
+      const updated = response.data.data.updated
+      toast.success(`Health status refreshed for ${updated} forwarders`)
+      queryClient.invalidateQueries({ queryKey: ['forwarders'] })
+    },
+    onError: () => {
+      toast.error('Failed to refresh health status')
     },
   })
 
@@ -85,7 +125,47 @@ const Forwarders: React.FC = () => {
   }
 
   const handleTestForwarder = (forwarder: Forwarder) => {
+    setTestForwarder(forwarder)
+    setIsTestModalOpen(true)
+  }
+
+  const handleQuickTest = (forwarder: Forwarder) => {
     testForwarderMutation.mutate(forwarder.id)
+  }
+
+  const handleBulkTest = () => {
+    if (selectedForwarders.size === 0) {
+      toast.error('Please select forwarders to test')
+      return
+    }
+    bulkTestMutation.mutate(Array.from(selectedForwarders))
+  }
+
+  const handleRefreshHealth = () => {
+    refreshHealthMutation.mutate()
+  }
+
+  const handleForwarderSelect = (forwarder: Forwarder) => {
+    setSelectedForwarder(forwarder)
+    setIsForwarderModalOpen(true)
+  }
+
+  const toggleForwarderSelection = (forwarderId: number) => {
+    const newSelection = new Set(selectedForwarders)
+    if (newSelection.has(forwarderId)) {
+      newSelection.delete(forwarderId)
+    } else {
+      newSelection.add(forwarderId)
+    }
+    setSelectedForwarders(newSelection)
+  }
+
+  const selectAllForwarders = () => {
+    if (selectedForwarders.size === forwarderData.length) {
+      setSelectedForwarders(new Set())
+    } else {
+      setSelectedForwarders(new Set(forwarderData.map(f => f.id)))
+    }
   }
 
   const getTypeColor = (type: string) => {
@@ -114,7 +194,30 @@ const Forwarders: React.FC = () => {
     }
   }
 
+  const forwarderData = forwarders?.data || []
+  const activeForwarders = forwarderData.filter(f => f.is_active)
+  const healthyForwarders = forwarderData.filter(f => f.health_status === 'healthy')
+
   const columns = [
+    {
+      key: 'select',
+      header: (
+        <input
+          type="checkbox"
+          checked={selectedForwarders.size === forwarderData.length && forwarderData.length > 0}
+          onChange={selectAllForwarders}
+          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+        />
+      ),
+      render: (forwarder: Forwarder) => (
+        <input
+          type="checkbox"
+          checked={selectedForwarders.has(forwarder.id)}
+          onChange={() => toggleForwarderSelection(forwarder.id)}
+          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+        />
+      ),
+    },
     {
       key: 'name',
       header: 'Name',
@@ -164,21 +267,7 @@ const Forwarders: React.FC = () => {
       key: 'health',
       header: 'Health',
       render: (forwarder: Forwarder) => (
-        <div className="flex items-center space-x-2">
-          {forwarder.health_status === 'healthy' ? (
-            <CheckCircleIcon className="h-5 w-5 text-green-500" />
-          ) : (
-            <ExclamationCircleIcon className="h-5 w-5 text-red-500" />
-          )}
-          <Badge 
-            variant={
-              forwarder.health_status === 'healthy' ? 'success' : 
-              forwarder.health_status === 'unhealthy' ? 'danger' : 'default'
-            }
-          >
-            {forwarder.health_status}
-          </Badge>
-        </div>
+        <ForwarderHealthIndicator forwarder={forwarder} showDetails />
       ),
     },
     {
@@ -206,12 +295,20 @@ const Forwarders: React.FC = () => {
       key: 'actions',
       header: 'Actions',
       render: (forwarder: Forwarder) => (
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-1">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => handleTestForwarder(forwarder)}
-            title="Test forwarder"
+            title="Detailed test"
+          >
+            <Cog6ToothIcon className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleQuickTest(forwarder)}
+            title="Quick test"
             loading={testForwarderMutation.isPending}
           >
             <CheckCircleIcon className="h-4 w-4" />
@@ -251,10 +348,6 @@ const Forwarders: React.FC = () => {
     },
   ]
 
-  const forwarderData = forwarders?.data || []
-  const activeForwarders = forwarderData.filter(f => f.is_active)
-  const healthyForwarders = forwarderData.filter(f => f.health_status === 'healthy')
-
   return (
     <div className="space-y-6">
       {/* Page header */}
@@ -268,10 +361,62 @@ const Forwarders: React.FC = () => {
               Manage conditional DNS forwarding rules for different domains
             </p>
           </div>
-          <Button onClick={handleCreateForwarder}>
-            <PlusIcon className="h-4 w-4 mr-2" />
-            Add Forwarder
-          </Button>
+          <div className="flex items-center space-x-3">
+            {/* View Mode Toggle */}
+            <div className="flex items-center space-x-1 border border-gray-300 dark:border-gray-600 rounded-lg p-1">
+              <Button
+                variant={viewMode === 'table' ? 'primary' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('table')}
+              >
+                <ViewColumnsIcon className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'grouped' ? 'primary' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('grouped')}
+              >
+                <Squares2X2Icon className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'statistics' ? 'primary' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('statistics')}
+              >
+                <ChartBarIcon className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Bulk Actions */}
+            {selectedForwarders.size > 0 && (
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleBulkTest}
+                  loading={bulkTestMutation.isPending}
+                >
+                  <CheckCircleIcon className="h-4 w-4 mr-1" />
+                  Test Selected ({selectedForwarders.size})
+                </Button>
+              </div>
+            )}
+
+            {/* Refresh Health */}
+            <Button
+              variant="outline"
+              onClick={handleRefreshHealth}
+              loading={refreshHealthMutation.isPending}
+            >
+              <ArrowPathIcon className="h-4 w-4 mr-2" />
+              Refresh Health
+            </Button>
+
+            <Button onClick={handleCreateForwarder}>
+              <PlusIcon className="h-4 w-4 mr-2" />
+              Add Forwarder
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -346,15 +491,28 @@ const Forwarders: React.FC = () => {
         </Card>
       </div>
 
-      {/* Forwarders table */}
-      <Card>
-        <Table
-          data={forwarderData}
-          columns={columns}
-          loading={isLoading}
-          emptyMessage="No forwarders configured. Create your first forwarder to get started."
+      {/* Main Content */}
+      {viewMode === 'statistics' ? (
+        <ForwarderStatistics forwarders={forwarderData} />
+      ) : viewMode === 'grouped' ? (
+        <ForwarderGrouping
+          forwarders={forwarderData}
+          onForwarderSelect={handleForwarderSelect}
+          onForwarderEdit={handleEditForwarder}
+          onForwarderTest={handleTestForwarder}
+          onForwarderToggle={handleToggleForwarder}
+          onForwarderDelete={handleDeleteForwarder}
         />
-      </Card>
+      ) : (
+        <Card>
+          <Table
+            data={forwarderData}
+            columns={columns}
+            loading={isLoading}
+            emptyMessage="No forwarders configured. Create your first forwarder to get started."
+          />
+        </Card>
+      )}
 
       {/* Forwarder modal */}
       {isForwarderModalOpen && (
@@ -365,6 +523,18 @@ const Forwarders: React.FC = () => {
           onSuccess={() => {
             setIsForwarderModalOpen(false)
             queryClient.invalidateQueries({ queryKey: ['forwarders'] })
+          }}
+        />
+      )}
+
+      {/* Test modal */}
+      {isTestModalOpen && testForwarder && (
+        <ForwarderTestModal
+          forwarder={testForwarder}
+          isOpen={isTestModalOpen}
+          onClose={() => {
+            setIsTestModalOpen(false)
+            setTestForwarder(null)
           }}
         />
       )}

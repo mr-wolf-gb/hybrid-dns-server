@@ -17,6 +17,7 @@ import {
   ZoneFormData,
   RecordFormData,
   ForwarderFormData,
+  ForwarderTemplate,
   RPZRuleFormData,
 } from '@/types'
 
@@ -133,8 +134,20 @@ export const dashboardService = {
 
 // Zones API
 export const zonesService = {
-  getZones: (): Promise<AxiosResponse<Zone[]>> =>
-    api.get('/zones'),
+  getZones: (params?: {
+    skip?: number
+    limit?: number
+    zone_type?: string
+    active_only?: boolean
+  }): Promise<AxiosResponse<Zone[]>> => {
+    const searchParams = new URLSearchParams()
+    if (params?.skip !== undefined) searchParams.append('skip', params.skip.toString())
+    if (params?.limit !== undefined) searchParams.append('limit', params.limit.toString())
+    if (params?.zone_type) searchParams.append('zone_type', params.zone_type)
+    if (params?.active_only !== undefined) searchParams.append('active_only', params.active_only.toString())
+    
+    return api.get(`/zones?${searchParams.toString()}`)
+  },
 
   getZone: (id: number): Promise<AxiosResponse<Zone>> =>
     api.get(`/zones/${id}`),
@@ -153,6 +166,27 @@ export const zonesService = {
 
   reloadZone: (id: number): Promise<AxiosResponse<ApiResponse<boolean>>> =>
     api.post(`/zones/${id}/reload`),
+
+  validateZone: (id: number): Promise<AxiosResponse<{ valid: boolean; errors: string[]; warnings: string[] }>> =>
+    api.post(`/zones/${id}/validate`),
+
+  validateZoneConfiguration: (id: number): Promise<AxiosResponse<{ valid: boolean; errors: string[]; warnings: string[] }>> =>
+    api.post(`/zones/${id}/validate/configuration`),
+
+  validateZoneRecords: (id: number): Promise<AxiosResponse<{ valid: boolean; errors: string[]; warnings: string[] }>> =>
+    api.post(`/zones/${id}/validate/records`),
+
+  getZoneStatistics: (id: number): Promise<AxiosResponse<{ record_count: number; last_modified: string; serial: number; health_status: string; last_check: string }>> =>
+    api.get(`/zones/${id}/statistics`),
+
+  getZoneHealth: (id: number): Promise<AxiosResponse<{ status: string; last_check: string; issues: string[]; response_time?: number }>> =>
+    api.get(`/zones/${id}/health`),
+
+  exportZone: (id: number, format?: string): Promise<AxiosResponse<string>> =>
+    api.get(`/zones/${id}/export${format ? `?format=${format}` : ''}`),
+
+  importZone: (data: { name: string; zone_data: string; format?: string }): Promise<AxiosResponse<Zone>> =>
+    api.post('/zones/import', data),
 }
 
 // DNS Records API
@@ -174,6 +208,26 @@ export const recordsService = {
 
   toggleRecord: (zone_id: number, record_id: number): Promise<AxiosResponse<DNSRecord>> =>
     api.post(`/zones/${zone_id}/records/${record_id}/toggle`),
+
+  // Bulk operations
+  bulkCreateRecords: (zone_id: number, records: RecordFormData[]): Promise<AxiosResponse<DNSRecord[]>> =>
+    api.post(`/zones/${zone_id}/records/bulk`, { records }),
+
+  bulkUpdateRecords: (zone_id: number, record_ids: number[], data: Partial<RecordFormData>): Promise<AxiosResponse<DNSRecord[]>> =>
+    api.put(`/zones/${zone_id}/records/bulk`, { record_ids, ...data }),
+
+  bulkDeleteRecords: (zone_id: number, record_ids: number[]): Promise<AxiosResponse<void>> =>
+    api.delete(`/zones/${zone_id}/records/bulk`, { data: { record_ids } }),
+
+  bulkToggleRecords: (zone_id: number, record_ids: number[], is_active: boolean): Promise<AxiosResponse<DNSRecord[]>> =>
+    api.post(`/zones/${zone_id}/records/bulk/toggle`, { record_ids, is_active }),
+
+  // Import/Export
+  exportRecords: (zone_id: number, format?: 'json' | 'csv' | 'zone'): Promise<AxiosResponse<string>> =>
+    api.get(`/zones/${zone_id}/records/export${format ? `?format=${format}` : ''}`),
+
+  importRecords: (zone_id: number, data: { records: RecordFormData[], format?: string }): Promise<AxiosResponse<{ imported: number, errors: string[] }>> =>
+    api.post(`/zones/${zone_id}/records/import`, data),
 }
 
 // Forwarders API
@@ -196,8 +250,36 @@ export const forwardersService = {
   toggleForwarder: (id: number): Promise<AxiosResponse<Forwarder>> =>
     api.post(`/forwarders/${id}/toggle`),
 
-  testForwarder: (id: number): Promise<AxiosResponse<ApiResponse<{ status: string; response_time: number }>>> =>
-    api.post(`/forwarders/${id}/test`),
+  testForwarder: (id: number, params?: { domain?: string; record_type?: string; timeout?: number }): Promise<AxiosResponse<ApiResponse<{ status: string; response_time: number }>>> =>
+    api.post(`/forwarders/${id}/test`, params),
+
+  getForwarderStatistics: (id: number): Promise<AxiosResponse<{ query_count: number; success_rate: number; avg_response_time: number; last_24h_queries: number }>> =>
+    api.get(`/forwarders/${id}/statistics`),
+
+  getForwarderHealth: (id: number): Promise<AxiosResponse<{ status: string; last_check: string; response_time?: number; issues: string[] }>> =>
+    api.get(`/forwarders/${id}/health`),
+
+  bulkTestForwarders: (forwarder_ids: number[]): Promise<AxiosResponse<ApiResponse<Array<{ id: number; status: string; response_time: number; error?: string }>>>> =>
+    api.post('/forwarders/bulk/test', { forwarder_ids }),
+
+  bulkToggleForwarders: (forwarder_ids: number[], is_active: boolean): Promise<AxiosResponse<Forwarder[]>> =>
+    api.post('/forwarders/bulk/toggle', { forwarder_ids, is_active }),
+
+  refreshHealthStatus: (): Promise<AxiosResponse<ApiResponse<{ updated: number }>>> =>
+    api.post('/forwarders/health/refresh'),
+
+  // Templates
+  getTemplates: (): Promise<AxiosResponse<ForwarderTemplate[]>> =>
+    api.get('/forwarders/templates'),
+
+  createTemplate: (data: Omit<ForwarderTemplate, 'id'>): Promise<AxiosResponse<ForwarderTemplate>> =>
+    api.post('/forwarders/templates', data),
+
+  updateTemplate: (id: string, data: Partial<ForwarderTemplate>): Promise<AxiosResponse<ForwarderTemplate>> =>
+    api.put(`/forwarders/templates/${id}`, data),
+
+  deleteTemplate: (id: string): Promise<AxiosResponse<void>> =>
+    api.delete(`/forwarders/templates/${id}`),
 }
 
 // RPZ API

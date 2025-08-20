@@ -32,18 +32,21 @@ export interface Setup2FAResponse {
 export interface Zone {
   id: number
   name: string
-  type: 'master' | 'slave' | 'forward'
-  master_server?: string
+  zone_type: 'master' | 'slave' | 'forward'
+  master_servers?: string[]
+  forwarders?: string[]
   file_path?: string
   is_active: boolean
-  serial: number
+  serial?: number
   refresh: number
   retry: number
   expire: number
   minimum: number
-  ttl: number
+  email: string
+  description?: string
   created_at: string
   updated_at: string
+  record_count?: number
 }
 
 export interface DNSRecord {
@@ -72,6 +75,17 @@ export interface Forwarder {
   is_active: boolean
   health_status: 'healthy' | 'unhealthy' | 'unknown'
   last_health_check?: string
+  response_time?: number
+  query_count?: number
+  success_rate?: number
+  domains?: string[]
+  health_check_enabled?: boolean
+  health_check_interval?: number
+  health_check_timeout?: number
+  health_check_retries?: number
+  priority?: number
+  weight?: number
+  description?: string
   created_at: string
   updated_at: string
 }
@@ -151,16 +165,48 @@ export interface PaginatedResponse<T> {
   pages: number
 }
 
+// Validation types
+export interface ValidationResult {
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+}
+
+export interface ZoneStatistics {
+  record_count: number
+  last_modified: string
+  serial: number
+  health_status: string
+  last_check: string
+}
+
+export interface ZoneHealth {
+  status: 'healthy' | 'warning' | 'error' | 'unknown'
+  last_check: string
+  issues: string[]
+  response_time?: number
+}
+
 // Form types
 export interface ZoneFormData {
   name: string
-  type: 'master' | 'slave' | 'forward'
-  master_server?: string
-  ttl: number
+  zone_type: 'master' | 'slave' | 'forward'
+  master_servers: string[]
+  forwarders: string[]
+  email: string
+  description?: string
   refresh: number
   retry: number
   expire: number
   minimum: number
+}
+
+export interface ZoneTemplate {
+  id: string
+  name: string
+  description: string
+  zone_type: 'master' | 'slave' | 'forward'
+  defaults: Partial<ZoneFormData>
 }
 
 export interface RecordFormData {
@@ -179,6 +225,31 @@ export interface ForwarderFormData {
   servers: string[]
   type: 'ad' | 'intranet' | 'public'
   forward_policy: 'first' | 'only'
+  domains?: string[]
+  health_check_enabled?: boolean
+  health_check_interval?: number
+  health_check_timeout?: number
+  health_check_retries?: number
+  priority?: number
+  weight?: number
+  description?: string
+}
+
+export interface ForwarderTemplate {
+  id: string
+  name: string
+  description: string
+  type: 'ad' | 'intranet' | 'public'
+  defaults: Partial<ForwarderFormData>
+  is_system?: boolean
+}
+
+export interface ServerConfig {
+  ip: string
+  port?: number
+  priority?: number
+  weight?: number
+  is_active?: boolean
 }
 
 export interface RPZRuleFormData {

@@ -304,6 +304,22 @@ async def get_zone_statistics(
     return statistics
 
 
+@router.get("/{zone_id}/health")
+async def get_zone_health(
+    zone_id: int,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get zone health status"""
+    zone_service = ZoneService(db)
+    
+    health = await zone_service.get_zone_health(zone_id)
+    if not health:
+        raise HTTPException(status_code=404, detail="Zone not found")
+    
+    return health
+
+
 @router.get("/{zone_id}/statistics/health")
 async def get_zone_health_statistics(
     zone_id: int,

@@ -1,5 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, AlertTriangle, CheckCircle, RotateCcw, Info, Trash2 } from 'lucide-react';
+import { 
+  ClockIcon as Clock, 
+  ExclamationTriangleIcon as AlertTriangle, 
+  CheckCircleIcon as CheckCircle, 
+  ArrowPathIcon as RotateCcw, 
+  InformationCircleIcon as Info,
+  TrashIcon as Trash2 
+} from '@heroicons/react/24/outline';
 
 interface RollbackCandidate {
   backup_id: string;
@@ -102,7 +109,7 @@ const RollbackManager: React.FC = () => {
       }
     } catch (error) {
       console.error('Rollback failed:', error);
-      alert(`Rollback failed: ${error.message}`);
+      alert(`Rollback failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsRollingBack(false);
     }

@@ -4,7 +4,7 @@ import Loading from './Loading'
 
 interface Column<T> {
   key: string
-  header: string
+  header: string | ReactNode
   render?: (item: T, index: number) => ReactNode
   sortable?: boolean
   className?: string
@@ -58,7 +58,7 @@ function Table<T extends Record<string, any>>({
                   onClick={() => column.sortable && onSort && onSort(column.key)}
                 >
                   <div className="flex items-center space-x-1">
-                    <span>{column.header}</span>
+                    {typeof column.header === 'string' ? <span>{column.header}</span> : column.header}
                     {column.sortable && onSort && (
                       <div className="flex flex-col">
                         <svg
