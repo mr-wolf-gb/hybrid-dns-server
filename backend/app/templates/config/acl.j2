@@ -1,0 +1,229 @@
+//
+// ACCESS CONTROL LISTS (ACL) CONFIGURATION
+// Generated automatically by Hybrid DNS Server
+// Generated at: {{ generated_at }}
+// Configuration version: {{ config_version | default('1.0') }}
+//
+
+{% if acls %}
+{% for acl in acls %}
+{% if acl.is_active %}
+// ============================================================================
+// {{ acl.name | upper }} ACL
+// ============================================================================
+{% if acl.description %}// Description: {{ acl.description }}
+{% endif %}// Type: {{ acl.acl_type | upper }}
+// Created: {{ acl.created_at.strftime('%Y-%m-%d %H:%M:%S') if acl.created_at else 'Unknown' }}
+// Last Updated: {{ acl.updated_at.strftime('%Y-%m-%d %H:%M:%S') if acl.updated_at else 'Unknown' }}
+
+acl "{{ acl.name }}" {
+{% for entry in acl.entries %}
+{% if entry.is_active %}
+    {{ entry.address }}{% if entry.comment %}; // {{ entry.comment }}{% else %};{% endif %}
+
+{% endif %}
+{% endfor %}
+};
+
+{% endif %}
+{% endfor %}
+{% else %}
+// No ACLs configured - using default BIND9 built-in ACLs
+// Built-in ACLs available: any, none, localhost, localnets
+{% endif %}
+
+// ============================================================================
+// PREDEFINED ACLS FOR COMMON NETWORK CONFIGURATIONS
+// ============================================================================
+
+{% if include_predefined_acls | default(true) %}
+// Internal Networks ACL (RFC 1918 Private Networks)
+acl "internal-networks" {
+    127.0.0.0/8;        // Loopback
+    10.0.0.0/8;         // Class A private
+    172.16.0.0/12;      // Class B private  
+    192.168.0.0/16;     // Class C private
+    ::1;                // IPv6 loopback
+    fc00::/7;           // IPv6 unique local addresses
+};
+
+// Trusted Networks ACL (customize for your environment)
+acl "trusted-networks" {
+    127.0.0.1;          // Localhost
+    {% if trusted_networks %}
+    {% for network in trusted_networks %}
+    {{ network }};      // {{ network.get('comment', 'Trusted network') }}
+    {% endfor %}
+    {% else %}
+    192.168.0.0/16;     // Default private network - customize as needed
+    10.0.0.0/8;         // Default private network - customize as needed
+    {% endif %}
+};
+
+// Management Networks ACL (for administrative access)
+acl "management-networks" {
+    127.0.0.1;          // Localhost
+    {% if management_networks %}
+    {% for network in management_networks %}
+    {{ network }};      // {{ network.get('comment', 'Management network') }}
+    {% endfor %}
+    {% else %}
+    192.168.1.0/24;     // Default management network - customize as needed
+    {% endif %}
+};
+
+// DNS Servers ACL (for zone transfers and notifications)
+acl "dns-servers" {
+    127.0.0.1;          // Localhost
+    {% if dns_servers %}
+    {% for server in dns_servers %}
+    {{ server }};       // {{ server.get('comment', 'DNS server') }}
+    {% endfor %}
+    {% else %}
+    // Add your secondary DNS servers here
+    // 192.168.1.100;   // Secondary DNS server
+    // 192.168.1.101;   // Tertiary DNS server
+    {% endif %}
+};
+
+// Monitoring Systems ACL (for statistics and monitoring)
+acl "monitoring-systems" {
+    127.0.0.1;          // Localhost
+    {% if monitoring_systems %}
+    {% for system in monitoring_systems %}
+    {{ system }};       // {{ system.get('comment', 'Monitoring system') }}
+    {% endfor %}
+    {% else %}
+    // Add your monitoring systems here
+    // 192.168.1.200;   // Monitoring server
+    {% endif %}
+};
+
+{% endif %}
+
+// ============================================================================
+// SECURITY ACLS FOR THREAT PROTECTION
+// ============================================================================
+
+{% if include_security_acls | default(true) %}
+// Blocked Networks ACL (known malicious networks)
+acl "blocked-networks" {
+    {% if blocked_networks %}
+    {% for network in blocked_networks %}
+    !{{ network }};     // {{ network.get('comment', 'Blocked network') }}
+    {% endfor %}
+    {% else %}
+    // Add known malicious networks here
+    // !192.0.2.0/24;   // Example blocked network
+    {% endif %}
+};
+
+// Rate Limited Networks ACL (networks subject to rate limiting)
+acl "rate-limited-networks" {
+    {% if rate_limited_networks %}
+    {% for network in rate_limited_networks %}
+    {{ network }};      // {{ network.get('comment', 'Rate limited network') }}
+    {% endfor %}
+    {% else %}
+    // Add networks that should be rate limited here
+    // 0.0.0.0/0;       // All networks (global rate limiting)
+    {% endif %}
+};
+
+{% endif %}
+
+// ============================================================================
+// DYNAMIC ACLS (Updated by threat intelligence feeds)
+// ============================================================================
+
+{% if include_dynamic_acls | default(false) %}
+// Dynamic Threat ACL (updated by threat feeds)
+acl "dynamic-threats" {
+    {% if dynamic_threats %}
+    {% for threat in dynamic_threats %}
+    !{{ threat.address }};  // {{ threat.source | default('Threat feed') }}: {{ threat.description | default('Malicious IP') }}
+    {% endfor %}
+    {% else %}
+    // Dynamic threats will be populated by threat intelligence feeds
+    {% endif %}
+};
+
+// Dynamic Allow ACL (whitelist from threat feeds)
+acl "dynamic-allow" {
+    {% if dynamic_allow %}
+    {% for allow in dynamic_allow %}
+    {{ allow.address }};    // {{ allow.source | default('Allow list') }}: {{ allow.description | default('Allowed IP') }}
+    {% endfor %}
+    {% else %}
+    // Dynamic allow list will be populated by threat intelligence feeds
+    {% endif %}
+};
+
+{% endif %}
+
+// ============================================================================
+// USAGE EXAMPLES AND DOCUMENTATION
+// ============================================================================
+
+/*
+ACL Usage Examples:
+
+1. Query Access Control:
+   allow-query { trusted-networks; };
+
+2. Recursion Control:
+   allow-recursion { internal-networks; };
+
+3. Zone Transfer Control:
+   allow-transfer { dns-servers; };
+
+4. Update Control:
+   allow-update { management-networks; };
+
+5. Cache Access Control:
+   allow-query-cache { trusted-networks; };
+
+6. Statistics Access:
+   allow { monitoring-systems; };
+
+7. Combining ACLs:
+   allow-query { trusted-networks; !blocked-networks; };
+
+8. Using with Response Policy Zones:
+   response-policy { 
+       zone "rpz.malware" policy given;
+   } recursive-only no qname-wait-recurse no;
+   
+   // Apply RPZ only to specific networks
+   match-clients { internal-networks; !management-networks; };
+
+ACL Best Practices:
+
+1. Use descriptive names for ACLs
+2. Document the purpose of each ACL
+3. Regularly review and update ACL entries
+4. Use the most specific network ranges possible
+5. Test ACL changes in a development environment first
+6. Monitor logs for access denied messages
+7. Use negation (!) carefully to avoid unintended blocks
+8. Keep management networks separate from user networks
+9. Implement defense in depth with multiple ACL layers
+10. Document any exceptions or special cases
+
+Security Considerations:
+
+1. Never allow unrestricted access (any) for sensitive operations
+2. Regularly audit ACL configurations
+3. Monitor for unauthorized access attempts
+4. Use separate ACLs for different security zones
+5. Implement rate limiting for external networks
+6. Keep threat intelligence ACLs updated
+7. Test failover scenarios with ACL restrictions
+8. Document emergency access procedures
+9. Use logging to track ACL-based decisions
+10. Coordinate ACL changes with network security team
+*/
+
+// ============================================================================
+// END OF ACCESS CONTROL LISTS CONFIGURATION
+// ============================================================================

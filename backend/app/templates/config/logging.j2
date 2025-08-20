@@ -1,0 +1,338 @@
+//
+// LOGGING CONFIGURATION
+// Generated automatically by Hybrid DNS Server
+// Generated at: {{ generated_at }}
+// Configuration version: {{ config_version | default('1.0') }}
+//
+
+// ============================================================================
+// LOGGING CHANNELS CONFIGURATION
+// ============================================================================
+
+logging {
+{% if channels %}
+{% for channel in channels %}
+{% if channel.enabled | default(true) %}
+    // {{ channel.name | upper }} Channel
+    {% if channel.description %}// Description: {{ channel.description }}
+    {% endif %}channel {{ channel.name }} {
+        {% if channel.type == 'file' %}file "{{ channel.file_path }}"{% if channel.versions %} versions {{ channel.versions }}{% endif %}{% if channel.size %} size {{ channel.size }}{% endif %};
+        {% elif channel.type == 'syslog' %}syslog {{ channel.facility | default('daemon') }};
+        {% elif channel.type == 'stderr' %}stderr;
+        {% elif channel.type == 'null' %}null;
+        {% endif %}severity {{ channel.severity | default('info') }};
+        {% if channel.print_time | default(true) %}print-time yes;
+        {% else %}print-time no;
+        {% endif %}{% if channel.print_severity | default(true) %}print-severity yes;
+        {% else %}print-severity no;
+        {% endif %}{% if channel.print_category | default(true) %}print-category yes;
+        {% else %}print-category no;
+        {% endif %}{% if channel.print_module | default(false) %}print-module yes;
+        {% endif %}{% if channel.buffered | default(false) %}buffered yes;
+        {% endif %}};
+
+{% endif %}
+{% endfor %}
+{% else %}
+    // Default logging channels
+    
+    // General system log
+    channel default_file {
+        file "{{ log_dir | default('/var/log/bind') }}/named.log" versions {{ default_versions | default(10) }} size {{ default_size | default('20m') }};
+        severity {{ default_severity | default('info') }};
+        print-time yes;
+        print-severity yes;
+        print-category yes;
+    };
+    
+    // DNS query log
+    channel query_file {
+        file "{{ log_dir | default('/var/log/bind') }}/query.log" versions {{ query_versions | default(10) }} size {{ query_size | default('50m') }};
+        severity info;
+        print-time yes;
+    };
+    
+    // Security events log
+    channel security_file {
+        file "{{ log_dir | default('/var/log/bind') }}/security.log" versions {{ security_versions | default(10) }} size {{ security_size | default('20m') }};
+        severity info;
+        print-time yes;
+        print-severity yes;
+    };
+    
+    // RPZ (Response Policy Zone) log
+    channel rpz_file {
+        file "{{ log_dir | default('/var/log/bind') }}/rpz.log" versions {{ rpz_versions | default(10) }} size {{ rpz_size | default('50m') }};
+        severity info;
+        print-time yes;
+    };
+    
+    // Zone transfer log
+    channel xfer_file {
+        file "{{ log_dir | default('/var/log/bind') }}/xfer.log" versions {{ xfer_versions | default(5) }} size {{ xfer_size | default('10m') }};
+        severity info;
+        print-time yes;
+        print-severity yes;
+    };
+    
+    // Update log (for dynamic updates)
+    channel update_file {
+        file "{{ log_dir | default('/var/log/bind') }}/update.log" versions {{ update_versions | default(5) }} size {{ update_size | default('10m') }};
+        severity info;
+        print-time yes;
+        print-severity yes;
+    };
+    
+    // Network events log
+    channel network_file {
+        file "{{ log_dir | default('/var/log/bind') }}/network.log" versions {{ network_versions | default(5) }} size {{ network_size | default('10m') }};
+        severity info;
+        print-time yes;
+        print-severity yes;
+    };
+    
+    // Configuration events log
+    channel config_file {
+        file "{{ log_dir | default('/var/log/bind') }}/config.log" versions {{ config_versions | default(5) }} size {{ config_size | default('10m') }};
+        severity info;
+        print-time yes;
+        print-severity yes;
+    };
+    
+    // Rate limiting log
+    channel rate_limit_file {
+        file "{{ log_dir | default('/var/log/bind') }}/rate-limit.log" versions {{ rate_limit_versions | default(5) }} size {{ rate_limit_size | default('20m') }};
+        severity info;
+        print-time yes;
+        print-severity yes;
+    };
+    
+    // DNSSEC log
+    channel dnssec_file {
+        file "{{ log_dir | default('/var/log/bind') }}/dnssec.log" versions {{ dnssec_versions | default(5) }} size {{ dnssec_size | default('10m') }};
+        severity info;
+        print-time yes;
+        print-severity yes;
+    };
+
+{% if enable_debug_logging | default(false) %}
+    // Debug log (only enabled when debug mode is active)
+    channel debug_file {
+        file "{{ log_dir | default('/var/log/bind') }}/debug.log" versions 3 size 50m;
+        severity debug;
+        print-time yes;
+        print-severity yes;
+        print-category yes;
+        print-module yes;
+    };
+{% endif %}
+
+{% if enable_syslog | default(false) %}
+    // Syslog channel for system integration
+    channel syslog_channel {
+        syslog {{ syslog_facility | default('daemon') }};
+        severity {{ syslog_severity | default('info') }};
+        print-time no;  // syslog adds its own timestamp
+        print-severity yes;
+        print-category yes;
+    };
+{% endif %}
+
+{% if enable_null_channel | default(true) %}
+    // Null channel to discard unwanted messages
+    channel null_channel {
+        null;
+    };
+{% endif %}
+
+{% endif %}
+
+    // ========================================================================
+    // CATEGORY TO CHANNEL MAPPINGS
+    // ========================================================================
+
+{% if categories %}
+{% for category in categories %}
+{% if category.enabled | default(true) %}
+    // {{ category.name | upper }} Category
+    {% if category.description %}// Description: {{ category.description }}
+    {% endif %}category {{ category.name }} { 
+        {% for channel in category.channels %}{{ channel }}; {% endfor %}
+    };
+
+{% endif %}
+{% endfor %}
+{% else %}
+    // Default category mappings
+    
+    // General categories
+    category default { default_file; {% if enable_syslog | default(false) %}syslog_channel; {% endif %} };
+    category general { default_file; {% if enable_syslog | default(false) %}syslog_channel; {% endif %} };
+    category config { config_file; {% if enable_syslog | default(false) %}syslog_channel; {% endif %} };
+    
+    // Query logging
+    {% if enable_query_logging | default(true) %}category queries { query_file; };
+    {% else %}category queries { null_channel; };
+    {% endif %}
+    
+    // Security categories
+    category security { security_file; {% if enable_syslog | default(false) %}syslog_channel; {% endif %} };
+    category client { security_file; };
+    category network { network_file; };
+    
+    // RPZ categories
+    {% if enable_rpz_logging | default(true) %}category rpz { rpz_file; };
+    {% else %}category rpz { null_channel; };
+    {% endif %}
+    
+    // Zone transfer and updates
+    category xfer-in { xfer_file; };
+    category xfer-out { xfer_file; };
+    category notify { xfer_file; };
+    category update { update_file; };
+    category update-security { security_file; };
+    
+    // DNSSEC categories
+    {% if enable_dnssec_logging | default(true) %}category dnssec { dnssec_file; };
+    category trust-anchor-telemetry { dnssec_file; };
+    {% else %}category dnssec { null_channel; };
+    category trust-anchor-telemetry { null_channel; };
+    {% endif %}
+    
+    // Rate limiting
+    {% if enable_rate_limit_logging | default(true) %}category rate-limit { rate_limit_file; };
+    {% else %}category rate-limit { null_channel; };
+    {% endif %}
+    
+    // Performance and statistics
+    {% if enable_performance_logging | default(false) %}category queries { query_file; };
+    category query-errors { query_file; };
+    {% endif %}
+    
+    // Resolver categories
+    category resolver { default_file; };
+    category cname { default_file; };
+    category delegation-only { default_file; };
+    category lame-servers { default_file; };
+    
+    // Database categories
+    category database { default_file; };
+    category eventlib { default_file; };
+    category packet { default_file; };
+    
+{% if enable_debug_logging | default(false) %}
+    // Debug categories (only when debug is enabled)
+    category unmatched { debug_file; };
+    category dispatch { debug_file; };
+    category nsid { debug_file; };
+{% else %}
+    // Suppress debug categories in production
+    category unmatched { null_channel; };
+    category dispatch { null_channel; };
+    category nsid { null_channel; };
+{% endif %}
+
+    // Suppress noisy categories by default
+    {% if suppress_noisy_categories | default(true) %}category edns-disabled { null_channel; };
+    category ecs { null_channel; };
+    category mapped { null_channel; };
+    category spill { null_channel; };
+    {% endif %}
+
+{% endif %}
+};
+
+// ============================================================================
+// LOGGING CONFIGURATION NOTES AND BEST PRACTICES
+// ============================================================================
+
+/*
+Logging Configuration Overview:
+
+This logging configuration provides comprehensive DNS server logging with
+the following features:
+
+1. STRUCTURED LOGGING:
+   - Separate log files for different types of events
+   - Configurable log rotation and retention
+   - Timestamped entries with severity levels
+
+2. LOG CATEGORIES:
+   - default: General server operations
+   - queries: DNS query logging (can be high volume)
+   - security: Security-related events and access control
+   - rpz: Response Policy Zone actions (blocked domains)
+   - xfer: Zone transfers and notifications
+   - update: Dynamic DNS updates
+   - network: Network-related events
+   - config: Configuration changes and reloads
+   - rate-limit: Rate limiting actions
+   - dnssec: DNSSEC validation and signing
+
+3. LOG ROTATION:
+   - Automatic rotation based on file size
+   - Configurable number of archived versions
+   - Prevents disk space exhaustion
+
+4. PERFORMANCE CONSIDERATIONS:
+   - Query logging can generate high volume
+   - Use null channel to disable unwanted categories
+   - Consider log aggregation for production environments
+
+5. SECURITY MONITORING:
+   - Security events logged separately
+   - RPZ actions tracked for threat analysis
+   - Rate limiting events for abuse detection
+
+Log File Locations:
+{% if log_dir %}
+- Main log: {{ log_dir }}/named.log
+- Query log: {{ log_dir }}/query.log
+- Security log: {{ log_dir }}/security.log
+- RPZ log: {{ log_dir }}/rpz.log
+- Transfer log: {{ log_dir }}/xfer.log
+- Update log: {{ log_dir }}/update.log
+- Network log: {{ log_dir }}/network.log
+- Config log: {{ log_dir }}/config.log
+- Rate limit log: {{ log_dir }}/rate-limit.log
+- DNSSEC log: {{ log_dir }}/dnssec.log
+{% if enable_debug_logging | default(false) %}- Debug log: {{ log_dir }}/debug.log
+{% endif %}{% else %}
+- Default location: /var/log/bind/
+{% endif %}
+
+Monitoring Integration:
+- Logs can be parsed by monitoring systems
+- Structured format enables automated analysis
+- Security events can trigger alerts
+- Performance metrics available in query logs
+
+Configuration Management:
+- This file is generated automatically
+- Manual changes will be overwritten
+- Use the web interface to modify logging settings
+- Test configuration changes before applying
+
+Troubleshooting:
+- Check file permissions on log directory
+- Verify disk space availability
+- Monitor log rotation effectiveness
+- Review category mappings for completeness
+
+Performance Tuning:
+- Disable query logging in high-traffic environments
+- Use syslog for centralized logging
+- Adjust log levels based on requirements
+- Monitor log file growth rates
+
+Security Considerations:
+- Protect log files from unauthorized access
+- Monitor for log tampering
+- Implement log integrity checking
+- Consider encrypted log storage
+- Regular log analysis for security events
+*/
+
+// ============================================================================
+// END OF LOGGING CONFIGURATION
+// ============================================================================

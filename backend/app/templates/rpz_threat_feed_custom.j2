@@ -1,0 +1,228 @@
+; Custom Threat Feed RPZ Zone Template
+; Generated automatically by Hybrid DNS Server
+; Feed Name: {{ feed_name | default('Custom Feed') }}
+; Feed Source: {{ feed_source | default('custom') }}
+; Feed URL: {{ feed_url | default('N/A') }}
+; Total Custom Domains: {{ rules|length }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Last Feed Update: {{ feed_last_updated.strftime('%Y-%m-%d %H:%M:%S') if feed_last_updated else 'Never' }}
+; Zone Generated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+$TTL {{ ttl | default(300) }}
+$ORIGIN {{ feed_zone | default('custom') }}.rpz.
+
+; SOA Record for Custom Threat Feed RPZ Zone
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
+		{{ refresh | default(1800) }}		; Refresh interval (30 minutes - frequent updates for custom feeds)
+		{{ retry | default(600) }}		; Retry interval (10 minutes)
+		{{ expire | default(604800) }}		; Expire time (1 week)
+		{{ minimum | default(300) }}		; Minimum TTL (5 minutes)
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+; Custom Threat Feed Information
+; Feed Type: Custom Domain Filtering
+; Feed Description: {{ feed_description | default('Custom domain feed for organization-specific filtering') }}
+; Update Frequency: {{ feed_update_frequency | default('hourly') }}
+; Feed Format: {{ feed_format | default('domain-list') }}
+; Feed Reliability: {{ feed_reliability | default('high') }}
+; Custom Categories: Organization-specific, Policy-based, Incident Response, Temporary Blocks
+
+{% if rules %}
+; Custom Domain Rules ({{ rules|length }} total, {{ active_rules_count | default(0) }} active)
+
+{% set policy_blocks = [] %}
+{% set incident_response = [] %}
+{% set temporary_blocks = [] %}
+{% set compliance_blocks = [] %}
+{% set business_blocks = [] %}
+{% set security_blocks = [] %}
+{% set other_custom = [] %}
+
+{# Group custom rules by purpose/category #}
+{% for rule in rules %}
+{% if rule.is_active %}
+{% set custom_category = rule.custom_category | default('other') | lower %}
+{% set rule_purpose = rule.rule_purpose | default('') | lower %}
+{% if custom_category == 'policy' or 'policy' in rule_purpose %}
+{% set _ = policy_blocks.append(rule) %}
+{% elif custom_category == 'incident' or 'incident' in rule_purpose or 'emergency' in rule_purpose %}
+{% set _ = incident_response.append(rule) %}
+{% elif custom_category == 'temporary' or 'temporary' in rule_purpose or 'temp' in rule_purpose %}
+{% set _ = temporary_blocks.append(rule) %}
+{% elif custom_category == 'compliance' or 'compliance' in rule_purpose or 'regulatory' in rule_purpose %}
+{% set _ = compliance_blocks.append(rule) %}
+{% elif custom_category == 'business' or 'business' in rule_purpose or 'productivity' in rule_purpose %}
+{% set _ = business_blocks.append(rule) %}
+{% elif custom_category == 'security' or 'security' in rule_purpose or 'threat' in rule_purpose %}
+{% set _ = security_blocks.append(rule) %}
+{% else %}
+{% set _ = other_custom.append(rule) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+{# Incident Response Blocks - Highest Priority #}
+{% if incident_response %}
+; ========================================
+; INCIDENT RESPONSE BLOCKS ({{ incident_response|length }} rules)
+; Emergency blocks for active security incidents
+; PRIORITY: CRITICAL - IMMEDIATE BLOCKING
+; ========================================
+{% for rule in incident_response | sort(attribute='domain') %}
+{% if rule.incident_description %}; Incident: {{ rule.incident_description }}{% endif %}
+{% if rule.incident_id %}; Incident ID: {{ rule.incident_id }}{% endif %}
+{% if rule.severity_level %}; Severity: {{ rule.severity_level }}{% endif %}
+{% if rule.incident_date %}; Incident Date: {{ rule.incident_date.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.expiry_date %}; Expires: {{ rule.expiry_date.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.custom_id %} ; Custom ID: {{ rule.custom_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Security Blocks #}
+{% if security_blocks %}
+; ========================================
+; SECURITY BLOCKS ({{ security_blocks|length }} rules)
+; Custom security-related domain blocks
+; PRIORITY: HIGH
+; ========================================
+{% for rule in security_blocks | sort(attribute='domain') %}
+{% if rule.security_description %}; Security: {{ rule.security_description }}{% endif %}
+{% if rule.threat_type %}; Threat Type: {{ rule.threat_type }}{% endif %}
+{% if rule.detection_method %}; Detection: {{ rule.detection_method }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.custom_id %} ; Custom ID: {{ rule.custom_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Compliance Blocks #}
+{% if compliance_blocks %}
+; ========================================
+; COMPLIANCE BLOCKS ({{ compliance_blocks|length }} rules)
+; Regulatory and compliance-required blocks
+; PRIORITY: HIGH
+; ========================================
+{% for rule in compliance_blocks | sort(attribute='domain') %}
+{% if rule.compliance_description %}; Compliance: {{ rule.compliance_description }}{% endif %}
+{% if rule.regulation_type %}; Regulation: {{ rule.regulation_type }}{% endif %}
+{% if rule.compliance_authority %}; Authority: {{ rule.compliance_authority }}{% endif %}
+{% if rule.effective_date %}; Effective: {{ rule.effective_date.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.custom_id %} ; Custom ID: {{ rule.custom_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Policy Blocks #}
+{% if policy_blocks %}
+; ========================================
+; POLICY BLOCKS ({{ policy_blocks|length }} rules)
+; Organization policy-based domain blocks
+; PRIORITY: MEDIUM-HIGH
+; ========================================
+{% for rule in policy_blocks | sort(attribute='domain') %}
+{% if rule.policy_description %}; Policy: {{ rule.policy_description }}{% endif %}
+{% if rule.policy_name %}; Policy Name: {{ rule.policy_name }}{% endif %}
+{% if rule.policy_version %}; Policy Version: {{ rule.policy_version }}{% endif %}
+{% if rule.effective_date %}; Effective: {{ rule.effective_date.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.custom_id %} ; Custom ID: {{ rule.custom_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Business Blocks #}
+{% if business_blocks %}
+; ========================================
+; BUSINESS BLOCKS ({{ business_blocks|length }} rules)
+; Business and productivity-related blocks
+; PRIORITY: MEDIUM
+; ========================================
+{% for rule in business_blocks | sort(attribute='domain') %}
+{% if rule.business_description %}; Business: {{ rule.business_description }}{% endif %}
+{% if rule.business_category %}; Category: {{ rule.business_category }}{% endif %}
+{% if rule.productivity_impact %}; Impact: {{ rule.productivity_impact }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.custom_id %} ; Custom ID: {{ rule.custom_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Temporary Blocks #}
+{% if temporary_blocks %}
+; ========================================
+; TEMPORARY BLOCKS ({{ temporary_blocks|length }} rules)
+; Time-limited domain blocks
+; PRIORITY: MEDIUM (Check expiry dates)
+; ========================================
+{% for rule in temporary_blocks | sort(attribute='domain') %}
+{% if rule.temporary_description %}; Temporary: {{ rule.temporary_description }}{% endif %}
+{% if rule.block_reason %}; Reason: {{ rule.block_reason }}{% endif %}
+{% if rule.start_date %}; Start Date: {{ rule.start_date.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.expiry_date %}; Expires: {{ rule.expiry_date.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.custom_id %} ; Custom ID: {{ rule.custom_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Other Custom Blocks #}
+{% if other_custom %}
+; ========================================
+; OTHER CUSTOM BLOCKS ({{ other_custom|length }} rules)
+; Miscellaneous custom domain blocks
+; PRIORITY: MEDIUM
+; ========================================
+{% for rule in other_custom | sort(attribute='domain') %}
+{% if rule.custom_description %}; Custom: {{ rule.custom_description }}{% endif %}
+{% if rule.custom_category %}; Category: {{ rule.custom_category }}{% endif %}
+{% if rule.block_reason %}; Reason: {{ rule.block_reason }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.custom_id %} ; Custom ID: {{ rule.custom_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% else %}
+; No custom filtering rules available
+; Feed may be empty or all rules are inactive
+{% endif %}
+
+; Custom Feed Statistics:
+; Total Rules: {{ rules|length }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Incident Response: {{ incident_response|length if incident_response else 0 }}
+; Security Blocks: {{ security_blocks|length if security_blocks else 0 }}
+; Compliance Blocks: {{ compliance_blocks|length if compliance_blocks else 0 }}
+; Policy Blocks: {{ policy_blocks|length if policy_blocks else 0 }}
+; Business Blocks: {{ business_blocks|length if business_blocks else 0 }}
+; Temporary Blocks: {{ temporary_blocks|length if temporary_blocks else 0 }}
+; Other Custom: {{ other_custom|length if other_custom else 0 }}
+
+; Feed Metadata:
+; Feed Source: {{ feed_source | default('custom') }}
+; Feed URL: {{ feed_url | default('N/A') }}
+; Feed Format: {{ feed_format | default('domain-list') }}
+; Last Updated: {{ feed_last_updated.strftime('%Y-%m-%d %H:%M:%S') if feed_last_updated else 'Never' }}
+; Next Update: {{ feed_next_update.strftime('%Y-%m-%d %H:%M:%S') if feed_next_update else 'Unknown' }}
+; Update Frequency: {{ feed_update_frequency | default('hourly') }}
+; Feed Reliability: {{ feed_reliability | default('high') }}
+
+; Custom Filtering Notice:
+; This zone contains organization-specific custom domain blocks.
+; Rules may be based on security policies, compliance requirements, or business needs.
+; Temporary blocks should be reviewed regularly for expiration.
+
+; Management Notice:
+; Custom rules can be managed through the web interface or API.
+; Incident response rules take highest priority for immediate blocking.
+; Review and update custom categories based on organizational needs.
+
+; Template Information:
+; Template: rpz_threat_feed_custom.j2
+; Generated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+; Zone: {{ feed_zone | default('custom') }}.rpz
+
+; End of Custom Threat Feed RPZ zone file

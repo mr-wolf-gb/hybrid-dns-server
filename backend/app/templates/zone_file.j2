@@ -1,19 +1,20 @@
 ; Zone file for {{ zone.name }}
 ; Generated automatically by Hybrid DNS Server
-; Zone Type: {{ zone.zone_type }}
-; Serial: {{ zone.serial }}
-; Last Updated: {{ zone.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+; Zone Type: {{ get_zone_type_description(zone.zone_type) }}
+; Serial: {{ zone.serial | format_serial }}
+; Last Updated: {{ format_timestamp(zone.updated_at) }}
+; Default TTL: {{ zone.minimum | format_duration }}
 
 $TTL {{ zone.minimum }}
 $ORIGIN {{ zone.name }}.
 
 ; SOA Record
 @	IN	SOA	{{ zone.name | ensure_trailing_dot }} {{ zone.email | format_email_for_soa }} (
-		{{ zone.serial }}	; Serial number (YYYYMMDDNN)
-		{{ zone.refresh }}	; Refresh interval ({{ zone.refresh }}s)
-		{{ zone.retry }}	; Retry interval ({{ zone.retry }}s)
-		{{ zone.expire }}	; Expire time ({{ zone.expire }}s)
-		{{ zone.minimum }}	; Minimum TTL ({{ zone.minimum }}s)
+		{{ zone.serial | format_serial }}	; Serial number (YYYYMMDDNN)
+		{{ zone.refresh | format_ttl }}	; Refresh interval ({{ zone.refresh | format_duration }})
+		{{ zone.retry | format_ttl }}	; Retry interval ({{ zone.retry | format_duration }})
+		{{ zone.expire | format_ttl }}	; Expire time ({{ zone.expire | format_duration }})
+		{{ zone.minimum | format_ttl }}	; Minimum TTL ({{ zone.minimum | format_duration }})
 		)
 
 {% if records %}

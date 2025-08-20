@@ -1,23 +1,30 @@
 ; RPZ Zone file for {{ rpz_zone }}
 ; Generated automatically by Hybrid DNS Server
-; Category: {{ rpz_zone }}
-; Total Rules: {{ rules|length }}
+; Zone Name: {{ rpz_zone }}
+; Zone Description: {{ zone_description | default('Response Policy Zone') }}
+; Total Rules: {{ rules|length if rules else 0 }}
+; Active Rules: {{ active_rules_count | default(0) }}
 ; Last Updated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
 
-$TTL 300
+$TTL {{ ttl | default(300) }}
 $ORIGIN {{ rpz_zone }}.rpz.
 
 ; SOA Record for RPZ zone
 @	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
 		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
-		3600		; Refresh interval (1 hour)
-		1800		; Retry interval (30 minutes)
-		604800		; Expire time (1 week)
-		300		; Minimum TTL (5 minutes)
+		{{ refresh | default(3600) }}		; Refresh interval (1 hour)
+		{{ retry | default(1800) }}		; Retry interval (30 minutes)
+		{{ expire | default(604800) }}		; Expire time (1 week)
+		{{ minimum | default(300) }}		; Minimum TTL (5 minutes)
 		)
 
 ; Name Server Record
 @	IN	NS	{{ primary_ns | default('localhost.') }}
+
+; RPZ Zone Information
+; Zone Purpose: {{ zone_purpose | default('DNS security and content filtering') }}
+; Zone Type: {{ zone_type | default('master') }}
+; Default Action: {{ default_action | default('block') }}
 
 {% if rules %}
 ; RPZ Rules ({{ rules|length }} total)

@@ -1,0 +1,241 @@
+//
+// STATISTICS CONFIGURATION
+// Generated automatically by Hybrid DNS Server
+// Generated at: {{ generated_at }}
+// Configuration version: {{ config_version | default('1.0') }}
+//
+
+// ============================================================================
+// STATISTICS CHANNELS CONFIGURATION
+// ============================================================================
+
+statistics-channels {
+{% if statistics_channels %}
+{% for channel in statistics_channels %}
+{% if channel.enabled | default(true) %}
+    // {{ channel.name | upper }} Statistics Channel
+    {% if channel.description %}// Description: {{ channel.description }}
+    {% endif %}inet {{ channel.address | default('127.0.0.1') }} port {{ channel.port | default(8053) }} allow { 
+        {% for allowed_ip in channel.allowed_ips %}{{ allowed_ip }}; {% endfor %}
+    };
+{% endif %}
+{% endfor %}
+{% else %}
+    // Default statistics channels
+    
+    // Local statistics access (localhost only)
+    inet 127.0.0.1 port {{ local_stats_port | default(8053) }} allow { 
+        127.0.0.1; 
+        ::1; 
+    };
+    
+{% if enable_network_stats | default(false) %}
+    // Network statistics access (internal networks)
+    {% if management_networks %}
+    {% for network in management_networks %}
+    inet {{ network.interface | default('*') }} port {{ network.port | default(8053) }} allow { 
+        {% for allowed_network in network.allowed_networks %}{{ allowed_network }}; {% endfor %}
+    };
+    {% endfor %}
+    {% else %}
+    inet * port {{ network_stats_port | default(8053) }} allow { 
+        {% for network in trusted_networks | default(['127.0.0.1', '192.168.0.0/16', '10.0.0.0/8', '172.16.0.0/12']) %}{{ network }}; {% endfor %}
+    };
+    {% endif %}
+{% endif %}
+
+{% if enable_monitoring_stats | default(false) %}
+    // Monitoring systems statistics access
+    {% if monitoring_systems %}
+    {% for monitor in monitoring_systems %}
+    inet {{ monitor.interface | default('*') }} port {{ monitor.port | default(8053) }} allow { 
+        {{ monitor.ip }}; 
+    };
+    {% endfor %}
+    {% else %}
+    inet * port {{ monitoring_stats_port | default(8053) }} allow { 
+        {% for ip in monitoring_ips | default([]) %}{{ ip }}; {% endfor %}
+    };
+    {% endif %}
+{% endif %}
+
+{% endif %}
+};
+
+// ============================================================================
+// STATISTICS COLLECTION CONFIGURATION
+// ============================================================================
+
+{% if enable_zone_statistics | default(true) %}
+// Zone statistics collection
+// Enables per-zone query and response statistics
+// Access via: http://server:port/xml/v3/zones
+zone-statistics {{ 'yes' if enable_zone_statistics else 'no' }};
+{% endif %}
+
+{% if enable_server_statistics | default(true) %}
+// Server statistics collection  
+// Enables overall server performance statistics
+// Access via: http://server:port/xml/v3/server
+server-statistics {{ 'yes' if enable_server_statistics else 'no' }};
+{% endif %}
+
+{% if enable_mem_statistics | default(false) %}
+// Memory statistics collection
+// Enables detailed memory usage statistics
+// Access via: http://server:port/xml/v3/mem
+memstatistics {{ 'yes' if enable_mem_statistics else 'no' }};
+{% endif %}
+
+// ============================================================================
+// STATISTICS CONFIGURATION NOTES AND BEST PRACTICES
+// ============================================================================
+
+/*
+Statistics Configuration Overview:
+
+This statistics configuration provides comprehensive DNS server monitoring with
+the following features:
+
+1. STATISTICS CHANNELS:
+   - HTTP/XML interface for statistics access
+   - Configurable network access controls
+   - Multiple channels for different access patterns
+   - IPv4 and IPv6 support
+
+2. STATISTICS TYPES:
+   - Zone Statistics: Per-zone query counts and response codes
+   - Server Statistics: Overall server performance metrics
+   - Memory Statistics: Detailed memory usage information
+   - Resolver Statistics: Recursive query performance
+   - Cache Statistics: Cache hit/miss ratios and efficiency
+
+3. ACCESS CONTROL:
+   - Localhost access for local monitoring
+   - Network access for management systems
+   - Monitoring system integration
+   - Security-focused access restrictions
+
+4. PERFORMANCE CONSIDERATIONS:
+   - Statistics collection has minimal performance impact
+   - XML output can be resource-intensive for large datasets
+   - Consider access frequency and caching strategies
+   - Monitor statistics channel usage
+
+5. SECURITY CONSIDERATIONS:
+   - Statistics reveal server configuration and usage patterns
+   - Restrict access to trusted networks only
+   - Monitor for unauthorized access attempts
+   - Consider firewall rules for statistics ports
+
+Statistics Access URLs:
+{% if statistics_channels %}
+{% for channel in statistics_channels %}
+{% if channel.enabled | default(true) %}
+- {{ channel.name }}: http://{{ channel.address | default('127.0.0.1') }}:{{ channel.port | default(8053) }}/
+{% endif %}
+{% endfor %}
+{% else %}
+- Local: http://127.0.0.1:{{ local_stats_port | default(8053) }}/
+{% if enable_network_stats | default(false) %}- Network: http://server-ip:{{ network_stats_port | default(8053) }}/
+{% endif %}{% if enable_monitoring_stats | default(false) %}- Monitoring: http://server-ip:{{ monitoring_stats_port | default(8053) }}/
+{% endif %}{% endif %}
+
+Available Statistics Endpoints:
+- /xml/v3/server - Server-wide statistics and counters
+- /xml/v3/zones - Per-zone statistics and query counts  
+- /xml/v3/mem - Memory usage and allocation statistics
+- /xml/v3/status - Server status and configuration info
+- /xml/v3/bind9.xsd - XML schema definition
+- /json/v1/server - JSON format server statistics (if supported)
+- /json/v1/zones - JSON format zone statistics (if supported)
+
+Common Statistics Metrics:
+- Query Counts: Total queries, queries per second
+- Response Codes: NOERROR, NXDOMAIN, SERVFAIL, etc.
+- Cache Performance: Hit ratio, cache size, evictions
+- Zone Information: SOA queries, zone transfers, updates
+- Security Events: RPZ actions, rate limiting triggers
+- Performance: Response times, recursive query counts
+- Resource Usage: Memory consumption, file descriptors
+
+Integration with Monitoring Systems:
+- Prometheus: Use bind_exporter for metrics collection
+- Grafana: Create dashboards from statistics data
+- Nagios/Icinga: Monitor specific statistics thresholds
+- Custom Scripts: Parse XML/JSON for automated monitoring
+- Log Analysis: Correlate statistics with log events
+
+Troubleshooting Statistics:
+- Verify network connectivity to statistics port
+- Check access control lists for client IP
+- Confirm statistics collection is enabled
+- Monitor for XML parsing errors in clients
+- Validate firewall rules for statistics ports
+- Test with curl: curl http://server:8053/xml/v3/server
+
+Performance Tuning:
+- Disable unused statistics types to reduce overhead
+- Limit statistics channel access to necessary systems
+- Consider statistics collection frequency
+- Monitor impact on DNS query performance
+- Use local access when possible for better performance
+
+Security Best Practices:
+- Restrict statistics access to management networks only
+- Use firewall rules to block unauthorized access
+- Monitor statistics access logs for suspicious activity
+- Consider VPN access for remote statistics monitoring
+- Regularly review and update access control lists
+- Implement rate limiting for statistics requests
+
+Configuration Management:
+- This file is generated automatically
+- Manual changes will be overwritten
+- Use the web interface to modify statistics settings
+- Test configuration changes before applying
+- Backup configuration before making changes
+- Validate statistics access after configuration updates
+
+Monitoring Integration Examples:
+
+1. Prometheus Configuration:
+   - Install bind_exporter
+   - Configure scrape target: server:8053
+   - Create alerting rules for key metrics
+
+2. Grafana Dashboard:
+   - Import BIND9 dashboard templates
+   - Configure data source for Prometheus
+   - Set up alerts for threshold violations
+
+3. Custom Monitoring Script:
+   #!/bin/bash
+   curl -s http://127.0.0.1:8053/xml/v3/server | \
+   xmllint --xpath "//counter[@name='Requestv4']/@value" - | \
+   cut -d'"' -f2
+
+4. Health Check Integration:
+   - Monitor statistics availability
+   - Check for expected counter increases
+   - Alert on statistics collection failures
+   - Validate response time thresholds
+
+Statistics Data Retention:
+- BIND9 statistics are real-time counters
+- Historical data requires external collection
+- Consider time-series database for trends
+- Implement data archival strategies
+- Monitor storage requirements for historical data
+
+Capacity Planning:
+- Monitor query rate trends
+- Track cache efficiency over time
+- Analyze zone-specific usage patterns
+- Plan for peak usage scenarios
+- Monitor resource utilization trends
+*/
+
+// ============================================================================
+// END OF STATISTICS CONFIGURATION
+// ============================================================================

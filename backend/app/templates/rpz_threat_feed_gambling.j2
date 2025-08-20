@@ -1,0 +1,247 @@
+; Gambling Threat Feed RPZ Zone Template
+; Generated automatically by Hybrid DNS Server
+; Feed Name: {{ feed_name | default('Gambling Feed') }}
+; Feed Source: {{ feed_source | default('external') }}
+; Feed URL: {{ feed_url | default('N/A') }}
+; Total Gambling Domains: {{ rules|length }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Last Feed Update: {{ feed_last_updated.strftime('%Y-%m-%d %H:%M:%S') if feed_last_updated else 'Never' }}
+; Zone Generated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+$TTL {{ ttl | default(300) }}
+$ORIGIN {{ feed_zone | default('gambling') }}.rpz.
+
+; SOA Record for Gambling Threat Feed RPZ Zone
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
+		{{ refresh | default(3600) }}		; Refresh interval (1 hour - moderate updates)
+		{{ retry | default(900) }}		; Retry interval (15 minutes)
+		{{ expire | default(604800) }}		; Expire time (1 week)
+		{{ minimum | default(300) }}		; Minimum TTL (5 minutes)
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+; Gambling Threat Feed Information
+; Feed Type: Gambling Content Blocking
+; Feed Description: {{ feed_description | default('External gambling domain feed for content filtering') }}
+; Update Frequency: {{ feed_update_frequency | default('daily') }}
+; Feed Format: {{ feed_format | default('domain-list') }}
+; Feed Reliability: {{ feed_reliability | default('high') }}
+; Gambling Categories: Online Casinos, Sports Betting, Poker, Lottery, Cryptocurrency Gambling
+
+{% if rules %}
+; Gambling Domain Rules ({{ rules|length }} total, {{ active_rules_count | default(0) }} active)
+
+{% set online_casinos = [] %}
+{% set sports_betting = [] %}
+{% set poker_gaming = [] %}
+{% set lottery_games = [] %}
+{% set crypto_gambling = [] %}
+{% set fantasy_sports = [] %}
+{% set gambling_affiliates = [] %}
+{% set other_gambling = [] %}
+
+{# Group gambling rules by gambling type #}
+{% for rule in rules %}
+{% if rule.is_active %}
+{% set gambling_type = rule.gambling_type | default('other') | lower %}
+{% set gambling_category = rule.gambling_category | default('') | lower %}
+{% if gambling_type == 'casino' or 'casino' in gambling_category or 'slots' in gambling_category %}
+{% set _ = online_casinos.append(rule) %}
+{% elif gambling_type == 'sports' or 'sports' in gambling_category or 'betting' in gambling_category %}
+{% set _ = sports_betting.append(rule) %}
+{% elif gambling_type == 'poker' or 'poker' in gambling_category or 'card' in gambling_category %}
+{% set _ = poker_gaming.append(rule) %}
+{% elif gambling_type == 'lottery' or 'lottery' in gambling_category or 'lotto' in gambling_category %}
+{% set _ = lottery_games.append(rule) %}
+{% elif gambling_type == 'crypto' or 'crypto' in gambling_category or 'bitcoin' in gambling_category %}
+{% set _ = crypto_gambling.append(rule) %}
+{% elif gambling_type == 'fantasy' or 'fantasy' in gambling_category or 'dfs' in gambling_category %}
+{% set _ = fantasy_sports.append(rule) %}
+{% elif gambling_type == 'affiliate' or 'affiliate' in gambling_category or 'bonus' in gambling_category %}
+{% set _ = gambling_affiliates.append(rule) %}
+{% else %}
+{% set _ = other_gambling.append(rule) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+{# Online Casinos - Highest Risk #}
+{% if online_casinos %}
+; ========================================
+; ONLINE CASINOS ({{ online_casinos|length }} rules)
+; Online casino and slot machine gambling sites
+; GAMBLING RISK: HIGH
+; ========================================
+{% for rule in online_casinos | sort(attribute='domain') %}
+{% if rule.gambling_description %}; Gambling: {{ rule.gambling_description }}{% endif %}
+{% if rule.casino_type %}; Casino Type: {{ rule.casino_type }}{% endif %}
+{% if rule.license_jurisdiction %}; License: {{ rule.license_jurisdiction }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.gambling_id %} ; Gambling ID: {{ rule.gambling_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Sports Betting #}
+{% if sports_betting %}
+; ========================================
+; SPORTS BETTING ({{ sports_betting|length }} rules)
+; Sports betting and wagering platforms
+; GAMBLING RISK: HIGH
+; ========================================
+{% for rule in sports_betting | sort(attribute='domain') %}
+{% if rule.gambling_description %}; Gambling: {{ rule.gambling_description }}{% endif %}
+{% if rule.sports_type %}; Sports Type: {{ rule.sports_type }}{% endif %}
+{% if rule.betting_type %}; Betting Type: {{ rule.betting_type }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.gambling_id %} ; Gambling ID: {{ rule.gambling_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Cryptocurrency Gambling #}
+{% if crypto_gambling %}
+; ========================================
+; CRYPTOCURRENCY GAMBLING ({{ crypto_gambling|length }} rules)
+; Bitcoin and cryptocurrency gambling platforms
+; GAMBLING RISK: HIGH
+; ========================================
+{% for rule in crypto_gambling | sort(attribute='domain') %}
+{% if rule.gambling_description %}; Gambling: {{ rule.gambling_description }}{% endif %}
+{% if rule.crypto_type %}; Crypto Type: {{ rule.crypto_type }}{% endif %}
+{% if rule.gambling_method %}; Method: {{ rule.gambling_method }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.gambling_id %} ; Gambling ID: {{ rule.gambling_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Poker Gaming #}
+{% if poker_gaming %}
+; ========================================
+; POKER GAMING ({{ poker_gaming|length }} rules)
+; Online poker and card game gambling sites
+; GAMBLING RISK: MEDIUM-HIGH
+; ========================================
+{% for rule in poker_gaming | sort(attribute='domain') %}
+{% if rule.gambling_description %}; Gambling: {{ rule.gambling_description }}{% endif %}
+{% if rule.poker_type %}; Poker Type: {{ rule.poker_type }}{% endif %}
+{% if rule.game_format %}; Game Format: {{ rule.game_format }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.gambling_id %} ; Gambling ID: {{ rule.gambling_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Lottery Games #}
+{% if lottery_games %}
+; ========================================
+; LOTTERY GAMES ({{ lottery_games|length }} rules)
+; Online lottery and number game platforms
+; GAMBLING RISK: MEDIUM
+; ========================================
+{% for rule in lottery_games | sort(attribute='domain') %}
+{% if rule.gambling_description %}; Gambling: {{ rule.gambling_description }}{% endif %}
+{% if rule.lottery_type %}; Lottery Type: {{ rule.lottery_type }}{% endif %}
+{% if rule.draw_frequency %}; Draw Frequency: {{ rule.draw_frequency }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.gambling_id %} ; Gambling ID: {{ rule.gambling_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Fantasy Sports #}
+{% if fantasy_sports %}
+; ========================================
+; FANTASY SPORTS ({{ fantasy_sports|length }} rules)
+; Daily fantasy sports and skill-based gaming
+; GAMBLING RISK: MEDIUM (May be legal in some jurisdictions)
+; ========================================
+{% for rule in fantasy_sports | sort(attribute='domain') %}
+{% if rule.gambling_description %}; Gambling: {{ rule.gambling_description }}{% endif %}
+{% if rule.fantasy_type %}; Fantasy Type: {{ rule.fantasy_type }}{% endif %}
+{% if rule.sport_focus %}; Sport Focus: {{ rule.sport_focus }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.gambling_id %} ; Gambling ID: {{ rule.gambling_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Gambling Affiliates #}
+{% if gambling_affiliates %}
+; ========================================
+; GAMBLING AFFILIATES ({{ gambling_affiliates|length }} rules)
+; Gambling affiliate and promotional sites
+; GAMBLING RISK: MEDIUM
+; ========================================
+{% for rule in gambling_affiliates | sort(attribute='domain') %}
+{% if rule.gambling_description %}; Gambling: {{ rule.gambling_description }}{% endif %}
+{% if rule.affiliate_type %}; Affiliate Type: {{ rule.affiliate_type }}{% endif %}
+{% if rule.promotion_type %}; Promotion Type: {{ rule.promotion_type }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.gambling_id %} ; Gambling ID: {{ rule.gambling_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Other Gambling #}
+{% if other_gambling %}
+; ========================================
+; OTHER GAMBLING ({{ other_gambling|length }} rules)
+; Miscellaneous gambling and wagering sites
+; GAMBLING RISK: MEDIUM
+; ========================================
+{% for rule in other_gambling | sort(attribute='domain') %}
+{% if rule.gambling_description %}; Gambling: {{ rule.gambling_description }}{% endif %}
+{% if rule.gambling_category %}; Category: {{ rule.gambling_category }}{% endif %}
+{% if rule.risk_level %}; Risk Level: {{ rule.risk_level }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.gambling_id %} ; Gambling ID: {{ rule.gambling_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% else %}
+; No gambling filtering rules available
+; Feed may be empty or all rules are inactive
+{% endif %}
+
+; Gambling Feed Statistics:
+; Total Rules: {{ rules|length }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Online Casinos: {{ online_casinos|length if online_casinos else 0 }}
+; Sports Betting: {{ sports_betting|length if sports_betting else 0 }}
+; Cryptocurrency Gambling: {{ crypto_gambling|length if crypto_gambling else 0 }}
+; Poker Gaming: {{ poker_gaming|length if poker_gaming else 0 }}
+; Lottery Games: {{ lottery_games|length if lottery_games else 0 }}
+; Fantasy Sports: {{ fantasy_sports|length if fantasy_sports else 0 }}
+; Gambling Affiliates: {{ gambling_affiliates|length if gambling_affiliates else 0 }}
+; Other Gambling: {{ other_gambling|length if other_gambling else 0 }}
+
+; Feed Metadata:
+; Feed Source: {{ feed_source | default('external') }}
+; Feed URL: {{ feed_url | default('N/A') }}
+; Feed Format: {{ feed_format | default('domain-list') }}
+; Last Updated: {{ feed_last_updated.strftime('%Y-%m-%d %H:%M:%S') if feed_last_updated else 'Never' }}
+; Next Update: {{ feed_next_update.strftime('%Y-%m-%d %H:%M:%S') if feed_next_update else 'Unknown' }}
+; Update Frequency: {{ feed_update_frequency | default('daily') }}
+; Feed Reliability: {{ feed_reliability | default('high') }}
+
+; Gambling Blocking Notice:
+; This zone contains domains identified as gambling or wagering sites.
+; All domains in this zone are blocked to prevent gambling-related activities.
+; Blocking includes casinos, sports betting, poker, and lottery platforms.
+
+; Legal Notice:
+; Gambling laws vary by jurisdiction. This blocking is for content filtering purposes.
+; Consult local laws and regulations regarding online gambling restrictions.
+
+; Template Information:
+; Template: rpz_threat_feed_gambling.j2
+; Generated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+; Zone: {{ feed_zone | default('gambling') }}.rpz
+
+; End of Gambling Threat Feed RPZ zone file

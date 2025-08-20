@@ -1,0 +1,286 @@
+; Custom Business Rules Template
+; Generated automatically by Hybrid DNS Server
+; Template: Custom Business Rules
+; Description: Template for business-specific RPZ rules and policies
+; Total Rules: {{ rules|length if rules else 0 }}
+; Last Updated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+$TTL {{ ttl | default(300) }}
+$ORIGIN {{ zone_name | default('rpz.custom-business') }}.
+
+; SOA Record for Custom Business Rules
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
+		{{ refresh | default(3600) }}		; Refresh interval (1 hour)
+		{{ retry | default(1800) }}		; Retry interval (30 minutes)
+		{{ expire | default(604800) }}		; Expire time (1 week)
+		{{ minimum | default(300) }}		; Minimum TTL (5 minutes)
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+; ========================================
+; CUSTOM BUSINESS RULES
+; ========================================
+; This template is specifically designed for business-specific RPZ rules
+; Rules are organized by business function and department
+; All rules should have business justification and approval
+
+{% if rules %}
+{% set active_rules = rules | selectattr('is_active') | list %}
+{% if active_rules %}
+
+{% set departments = active_rules | groupby('department') %}
+{% for department, dept_rules in departments %}
+; ========================================
+; {{ department.upper() }} DEPARTMENT RULES
+; ========================================
+{% set dept_rules_list = dept_rules | list %}
+; Department: {{ department }}
+; Total Rules: {{ dept_rules_list|length }}
+; Department Head: {{ dept_rules_list[0].department_head if dept_rules_list[0].department_head else 'Not specified' }}
+; Last Review: {{ dept_rules_list[0].last_review.strftime('%Y-%m-%d') if dept_rules_list[0].last_review else 'Never' }}
+
+{% for rule in dept_rules_list | sort(attribute='domain') %}
+{% if rule.business_function %}; Business Function: {{ rule.business_function }}{% endif %}
+{% if rule.business_justification %}; Justification: {{ rule.business_justification }}{% endif %}
+{% if rule.approved_by %}; Approved by: {{ rule.approved_by }}{% endif %}
+{% if rule.approval_date %}; Approval Date: {{ rule.approval_date.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.review_date %}; Next Review: {{ rule.review_date.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.compliance_requirement %}; Compliance: {{ rule.compliance_requirement }}{% endif %}
+{% if rule.action == 'block' %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.
+{% elif rule.action == 'redirect' %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ rule.redirect_target | ensure_trailing_dot }}
+{% elif rule.action in ['passthru', 'passthrough'] %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-passthru.
+{% endif %}
+{% if rule.wildcard_subdomains %}
+*.{{ rule.domain | rpz_format_domain }}	IN	CNAME	{% if rule.action == 'block' %}.{% elif rule.action == 'redirect' %}{{ rule.redirect_target | ensure_trailing_dot }}{% else %}rpz-passthru.{% endif %}
+{% endif %}
+{% endfor %}
+
+{% endfor %}
+{% endif %}
+{% else %}
+; No custom business rules defined
+; Add business-specific rules through the web interface or API
+{% endif %}
+
+; ========================================
+; EXECUTIVE EXCEPTIONS
+; ========================================
+{% if executive_exceptions %}
+; Executive-level exceptions and special access:
+{% for exception in executive_exceptions %}
+; Executive: {{ exception.executive_name }}
+; Position: {{ exception.position }}
+; Exception Type: {{ exception.exception_type }}
+; Approved by: {{ exception.approved_by }}
+; Approval Date: {{ exception.approval_date.strftime('%Y-%m-%d') }}
+; Review Date: {{ exception.review_date.strftime('%Y-%m-%d') if exception.review_date else 'Annual' }}
+{% for domain in exception.domains %}
+{{ domain | rpz_format_domain }}	IN	CNAME	rpz-passthru.	; Executive exception: {{ exception.executive_name }}
+{% endfor %}
+{% endfor %}
+
+{% else %}
+; No executive exceptions defined
+; Executive exceptions should be:
+; - Approved by board or C-level executives
+; - Documented with business justification
+; - Regularly reviewed and renewed
+; - Monitored for appropriate usage
+{% endif %}
+
+; ========================================
+; COMPLIANCE REQUIREMENTS
+; ========================================
+{% if compliance_rules %}
+; Compliance-mandated rules:
+{% for compliance in compliance_rules %}
+; Regulation: {{ compliance.regulation }}
+; Requirement: {{ compliance.requirement }}
+; Compliance Officer: {{ compliance.officer }}
+; Implementation Date: {{ compliance.implementation_date.strftime('%Y-%m-%d') }}
+; Next Audit: {{ compliance.next_audit.strftime('%Y-%m-%d') if compliance.next_audit else 'TBD' }}
+{% for rule in compliance.rules %}
+{% if rule.action == 'block' %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.	; Compliance: {{ compliance.regulation }}
+{% elif rule.action == 'redirect' %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ rule.redirect_target | ensure_trailing_dot }}	; Compliance: {{ compliance.regulation }}
+{% endif %}
+{% endfor %}
+{% endfor %}
+
+{% else %}
+; No compliance rules defined
+; Compliance rules may be required for:
+; - GDPR data protection requirements
+; - HIPAA healthcare regulations
+; - SOX financial compliance
+; - Industry-specific regulations
+; - Government security requirements
+{% endif %}
+
+; ========================================
+; BUSINESS PARTNER ACCESS
+; ========================================
+{% if partner_access %}
+; Business partner and vendor access rules:
+{% for partner in partner_access %}
+; Partner: {{ partner.partner_name }}
+; Contract: {{ partner.contract_number }}
+; Business Relationship: {{ partner.relationship_type }}
+; Contact: {{ partner.contact_person }}
+; Contract Expiry: {{ partner.contract_expiry.strftime('%Y-%m-%d') if partner.contract_expiry else 'Ongoing' }}
+{% for domain in partner.allowed_domains %}
+{{ domain | rpz_format_domain }}	IN	CNAME	rpz-passthru.	; Partner: {{ partner.partner_name }}
+{% endfor %}
+{% endfor %}
+
+{% else %}
+; No business partner access rules defined
+; Partner access rules should include:
+; - Vendor and supplier access requirements
+; - Customer portal access
+; - Integration partner requirements
+; - Third-party service providers
+; - Consultant and contractor access
+{% endif %}
+
+; ========================================
+; PROJECT-SPECIFIC RULES
+; ========================================
+{% if project_rules %}
+; Project-specific access and blocking rules:
+{% for project in project_rules %}
+; Project: {{ project.project_name }}
+; Project Manager: {{ project.project_manager }}
+; Start Date: {{ project.start_date.strftime('%Y-%m-%d') }}
+; End Date: {{ project.end_date.strftime('%Y-%m-%d') if project.end_date else 'Ongoing' }}
+; Budget Code: {{ project.budget_code }}
+{% for rule in project.rules %}
+{% if rule.action == 'allow' %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-passthru.	; Project: {{ project.project_name }}
+{% elif rule.action == 'block' %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.	; Project: {{ project.project_name }}
+{% elif rule.action == 'redirect' %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ rule.redirect_target | ensure_trailing_dot }}	; Project: {{ project.project_name }}
+{% endif %}
+{% endfor %}
+{% endfor %}
+
+{% else %}
+; No project-specific rules defined
+; Project rules are useful for:
+; - Temporary access for specific projects
+; - Blocking distracting sites during critical projects
+; - Allowing access to project-specific tools
+; - Research and development requirements
+; - Client-specific access requirements
+{% endif %}
+
+; ========================================
+; BUSINESS HOURS RULES
+; ========================================
+{% if business_hours_rules %}
+; Business hours-specific rules:
+{% for hours_rule in business_hours_rules %}
+; Rule: {{ hours_rule.rule_name }}
+; Schedule: {{ hours_rule.schedule }}
+; Time Zone: {{ hours_rule.timezone }}
+; Effective Hours: {{ hours_rule.effective_hours }}
+; Weekends: {{ 'Included' if hours_rule.include_weekends else 'Excluded' }}
+; Holidays: {{ 'Included' if hours_rule.include_holidays else 'Excluded' }}
+{% if hours_rule.is_currently_active %}
+; STATUS: Currently Active
+{% for domain in hours_rule.domains %}
+{% if hours_rule.action == 'block' %}
+{{ domain | rpz_format_domain }}	IN	CNAME	.	; Business hours rule: {{ hours_rule.rule_name }}
+{% elif hours_rule.action == 'redirect' %}
+{{ domain | rpz_format_domain }}	IN	CNAME	{{ hours_rule.redirect_target | ensure_trailing_dot }}	; Business hours rule: {{ hours_rule.rule_name }}
+{% endif %}
+{% endfor %}
+{% else %}
+; STATUS: Currently Inactive (outside business hours)
+{% endif %}
+{% endfor %}
+
+{% else %}
+; No business hours rules defined
+; Business hours rules can be used for:
+; - Blocking social media during work hours
+; - Allowing recreational sites only during breaks
+; - Restricting bandwidth-heavy sites during peak hours
+; - Different policies for different shifts
+; - Weekend and holiday policy variations
+{% endif %}
+
+; ========================================
+; COST MANAGEMENT RULES
+; ========================================
+{% if cost_management %}
+; Cost management and bandwidth control rules:
+{% for cost_rule in cost_management %}
+; Rule: {{ cost_rule.rule_name }}
+; Cost Center: {{ cost_rule.cost_center }}
+; Budget Impact: {{ cost_rule.budget_impact }}
+; Bandwidth Savings: {{ cost_rule.bandwidth_savings }}
+; Implementation Date: {{ cost_rule.implementation_date.strftime('%Y-%m-%d') }}
+{% for domain in cost_rule.domains %}
+{% if cost_rule.action == 'block' %}
+{{ domain | rpz_format_domain }}	IN	CNAME	.	; Cost management: {{ cost_rule.rule_name }}
+{% elif cost_rule.action == 'redirect' %}
+{{ domain | rpz_format_domain }}	IN	CNAME	{{ cost_rule.redirect_target | ensure_trailing_dot }}	; Cost management: {{ cost_rule.rule_name }}
+{% endif %}
+{% endfor %}
+{% endfor %}
+
+{% else %}
+; No cost management rules defined
+; Cost management rules can help with:
+; - Reducing bandwidth costs
+; - Blocking expensive cloud services
+; - Controlling SaaS subscription usage
+; - Managing data transfer costs
+; - Optimizing network resource usage
+{% endif %}
+
+; ========================================
+; RULE GOVERNANCE
+; ========================================
+; Business rule governance requirements:
+; - All rules must have business justification
+; - Rules must be approved by department heads
+; - Executive exceptions require C-level approval
+; - Compliance rules must be reviewed by legal/compliance team
+; - Regular review cycles must be maintained
+; - Usage monitoring and reporting required
+; - Audit trail must be maintained for all changes
+
+; Rule Review Schedule:
+; - Monthly: Project-specific and temporary rules
+; - Quarterly: Department rules and partner access
+; - Semi-annually: Executive exceptions
+; - Annually: Compliance and cost management rules
+
+; ========================================
+; STATISTICS
+; ========================================
+; Total Rules: {{ rules|length if rules else 0 }}
+; Active Rules: {{ active_rules|length if active_rules else 0 }}
+; Departments: {{ departments|length if departments else 0 }}
+; Executive Exceptions: {{ executive_exceptions|length if executive_exceptions else 0 }}
+; Compliance Rules: {{ compliance_rules|length if compliance_rules else 0 }}
+; Partner Access Rules: {{ partner_access|length if partner_access else 0 }}
+; Project Rules: {{ project_rules|length if project_rules else 0 }}
+; Business Hours Rules: {{ business_hours_rules|length if business_hours_rules else 0 }}
+; Cost Management Rules: {{ cost_management|length if cost_management else 0 }}
+
+; Template: rpz_custom_business.j2
+; Generated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+; Zone: {{ zone_name | default('rpz.custom-business') }}
+
+; End of Custom Business Rules zone file

@@ -43,6 +43,26 @@ class BindService:
         self.jinja_env.filters['format_email_for_soa'] = self._format_email_filter
         self.jinja_env.filters['ensure_trailing_dot'] = self._ensure_trailing_dot_filter
         self.jinja_env.filters['rpz_format_domain'] = self._rpz_format_domain_filter
+        self.jinja_env.filters['format_ttl'] = self._format_ttl_filter
+        self.jinja_env.filters['format_serial'] = self._format_serial_filter
+        self.jinja_env.filters['format_duration'] = self._format_duration_filter
+        self.jinja_env.filters['validate_ip'] = self._validate_ip_filter
+        self.jinja_env.filters['reverse_ip'] = self._reverse_ip_filter
+        self.jinja_env.filters['format_mx_priority'] = self._format_mx_priority_filter
+        self.jinja_env.filters['format_srv_record'] = self._format_srv_record_filter
+        self.jinja_env.filters['escape_txt_record'] = self._escape_txt_record_filter
+        self.jinja_env.filters['normalize_domain'] = self._normalize_domain_filter
+        self.jinja_env.filters['is_wildcard'] = self._is_wildcard_filter
+        self.jinja_env.filters['format_comment'] = self._format_comment_filter
+        
+        # Add global functions for templates
+        self.jinja_env.globals['now'] = datetime.now
+        self.jinja_env.globals['utcnow'] = datetime.utcnow
+        self.jinja_env.globals['generate_serial'] = self._generate_serial_number
+        self.jinja_env.globals['default_ttl'] = self._get_default_ttl
+        self.jinja_env.globals['format_timestamp'] = self._format_timestamp
+        self.jinja_env.globals['get_zone_type_description'] = self._get_zone_type_description
+        self.jinja_env.globals['get_record_type_description'] = self._get_record_type_description
     
     async def get_service_status(self) -> Dict:
         """Get BIND9 service status"""
@@ -2350,10 +2370,11 @@ class BindService:
             prioritized_forwarders = await self.handle_forwarder_priority(validated_forwarders)
             
             # Generate configuration content using template
-            template = self.jinja_env.get_template("forwarder_config.j2")
+            template = self.jinja_env.get_template("config/forwarders.j2")
             content = template.render(
                 forwarders=prioritized_forwarders,
-                generated_at=datetime.now()
+                generated_at=datetime.now(),
+                config_version="1.0"
             )
             
             # Write configuration file
@@ -2372,6 +2393,192 @@ class BindService:
             logger.error(f"Failed to generate forwarder configuration: {e}")
             return False
     
+    async def generate_acl_configuration(self, acls: List = None, **template_vars) -> bool:
+        """Generate ACL configuration file from database ACLs"""
+        logger = get_bind_logger()
+        logger.info(f"Generating ACL configuration for {len(acls) if acls else 0} ACLs")
+        
+        try:
+            # Ensure config directory exists
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Define ACL configuration file path
+            acl_config_path = self.config_dir / "acl.conf"
+            
+            # Backup existing configuration if it exists
+            if acl_config_path.exists():
+                await self._backup_configuration_file(acl_config_path)
+            
+            # Validate ACLs before generation
+            validated_acls = []
+            if acls:
+                for acl in acls:
+                    validation = await self.validate_acl_configuration(acl)
+                    if validation["valid"]:
+                        validated_acls.append(acl)
+                    else:
+                        logger.warning(f"Skipping invalid ACL {acl.name}: {validation['errors']}")
+            
+            # Prepare template variables with defaults
+            template_data = {
+                "acls": validated_acls,
+                "generated_at": datetime.now(),
+                "config_version": "1.0",
+                "include_predefined_acls": template_vars.get("include_predefined_acls", True),
+                "include_security_acls": template_vars.get("include_security_acls", True),
+                "include_dynamic_acls": template_vars.get("include_dynamic_acls", False),
+                "trusted_networks": template_vars.get("trusted_networks", []),
+                "management_networks": template_vars.get("management_networks", []),
+                "dns_servers": template_vars.get("dns_servers", []),
+                "monitoring_systems": template_vars.get("monitoring_systems", []),
+                "blocked_networks": template_vars.get("blocked_networks", []),
+                "rate_limited_networks": template_vars.get("rate_limited_networks", []),
+                "dynamic_threats": template_vars.get("dynamic_threats", []),
+                "dynamic_allow": template_vars.get("dynamic_allow", [])
+            }
+            
+            # Generate configuration content using template
+            template = self.jinja_env.get_template("config/acl.j2")
+            content = template.render(**template_data)
+            
+            # Write configuration file
+            acl_config_path.write_text(content, encoding='utf-8')
+            
+            # Set appropriate permissions
+            acl_config_path.chmod(0o644)
+            
+            # Update main configuration to include acl.conf
+            await self._update_main_config_include_acl(acl_config_path)
+            
+            logger.info(f"Successfully generated ACL configuration: {acl_config_path}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to generate ACL configuration: {e}")
+            return False
+    
+    async def validate_acl_configuration(self, acl) -> Dict[str, Any]:
+        """Validate ACL configuration before generation"""
+        errors = []
+        warnings = []
+        
+        try:
+            # Validate ACL name
+            if not acl.name or len(acl.name.strip()) == 0:
+                errors.append("ACL name cannot be empty")
+            elif not acl.name.replace('-', '').replace('_', '').isalnum():
+                errors.append("ACL name must contain only alphanumeric characters, hyphens, and underscores")
+            
+            # Check for reserved BIND9 ACL names
+            reserved_names = ['any', 'none', 'localhost', 'localnets']
+            if acl.name.lower() in reserved_names:
+                errors.append(f"ACL name '{acl.name}' is reserved by BIND9")
+            
+            # Validate ACL entries
+            if not acl.entries or len(acl.entries) == 0:
+                warnings.append(f"ACL '{acl.name}' has no entries")
+            else:
+                for entry in acl.entries:
+                    if entry.is_active:
+                        entry_validation = await self._validate_acl_entry(entry)
+                        if not entry_validation["valid"]:
+                            errors.extend(entry_validation["errors"])
+                        warnings.extend(entry_validation.get("warnings", []))
+            
+            return {
+                "valid": len(errors) == 0,
+                "errors": errors,
+                "warnings": warnings
+            }
+            
+        except Exception as e:
+            return {
+                "valid": False,
+                "errors": [f"ACL validation error: {str(e)}"],
+                "warnings": warnings
+            }
+    
+    async def _validate_acl_entry(self, entry) -> Dict[str, Any]:
+        """Validate individual ACL entry"""
+        errors = []
+        warnings = []
+        
+        try:
+            import ipaddress
+            
+            address = entry.address.strip()
+            
+            # Handle negation prefix
+            if address.startswith('!'):
+                address = address[1:].strip()
+            
+            # Try to validate as IP network
+            try:
+                ipaddress.ip_network(address, strict=False)
+            except ValueError:
+                # Check if it's a valid hostname
+                import re
+                hostname_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$'
+                if not re.match(hostname_pattern, address):
+                    errors.append(f"Invalid address format: {entry.address}")
+            
+            return {
+                "valid": len(errors) == 0,
+                "errors": errors,
+                "warnings": warnings
+            }
+            
+        except Exception as e:
+            return {
+                "valid": False,
+                "errors": [f"Entry validation error: {str(e)}"],
+                "warnings": warnings
+            }
+    
+    async def _update_main_config_include_acl(self, acl_config_path: Path) -> bool:
+        """Update main BIND configuration to include acl.conf"""
+        logger = get_bind_logger()
+        
+        try:
+            # Read main configuration file
+            main_config_path = Path("/etc/bind/named.conf.local")
+            if not main_config_path.exists():
+                logger.warning(f"Main config file not found: {main_config_path}")
+                return False
+            
+            content = main_config_path.read_text(encoding='utf-8')
+            
+            # Check if ACL include already exists
+            include_line = f'include "{acl_config_path}";'
+            if include_line in content:
+                logger.debug("ACL configuration include already exists in main config")
+                return True
+            
+            # Add include at the beginning of the file (after comments)
+            lines = content.split('\n')
+            insert_index = 0
+            
+            # Find the first non-comment, non-empty line
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                if stripped and not stripped.startswith('//') and not stripped.startswith('#'):
+                    insert_index = i
+                    break
+            
+            # Insert the include line
+            lines.insert(insert_index, include_line)
+            lines.insert(insert_index + 1, "")  # Add empty line for readability
+            
+            # Write back to file
+            main_config_path.write_text('\n'.join(lines), encoding='utf-8')
+            
+            logger.info(f"Added ACL configuration include to {main_config_path}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update main config with ACL include: {e}")
+            return False
+
     async def validate_forwarder_configuration(self, forwarder) -> Dict[str, Any]:
         """Validate forwarder configuration before generation"""
         errors = []
@@ -2737,6 +2944,111 @@ class BindService:
             logger.error(f"Failed to handle forwarder priority: {e}")
             return forwarders
     
+    async def generate_statistics_configuration(self, statistics_config: Dict[str, Any] = None) -> bool:
+        """Generate BIND9 statistics configuration file from settings"""
+        logger = get_bind_logger()
+        logger.info("Generating statistics configuration")
+        
+        try:
+            # Ensure config directory exists
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Define statistics configuration file path
+            stats_config_path = self.config_dir / "statistics.conf"
+            
+            # Backup existing configuration if it exists
+            if stats_config_path.exists():
+                await self._backup_configuration_file(stats_config_path)
+            
+            # Set default configuration if none provided
+            if statistics_config is None:
+                statistics_config = {
+                    'enable_zone_statistics': True,
+                    'enable_server_statistics': True,
+                    'enable_mem_statistics': False,
+                    'enable_network_stats': False,
+                    'enable_monitoring_stats': False,
+                    'local_stats_port': 8053,
+                    'network_stats_port': 8053,
+                    'monitoring_stats_port': 8053,
+                    'trusted_networks': ['127.0.0.1', '192.168.0.0/16', '10.0.0.0/8', '172.16.0.0/12'],
+                    'monitoring_ips': []
+                }
+            
+            # Generate configuration content using template
+            template = self.jinja_env.get_template("config/statistics.j2")
+            content = template.render(
+                generated_at=datetime.now(),
+                config_version="1.0",
+                **statistics_config
+            )
+            
+            # Write configuration file
+            stats_config_path.write_text(content, encoding='utf-8')
+            
+            # Set appropriate permissions
+            stats_config_path.chmod(0o644)
+            
+            # Update main configuration to include statistics.conf
+            await self._update_main_config_include_statistics(stats_config_path)
+            
+            logger.info(f"Successfully generated statistics configuration: {stats_config_path}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to generate statistics configuration: {e}")
+            return False
+    
+    async def _update_main_config_include_statistics(self, stats_config_path: Path) -> bool:
+        """Update main BIND configuration to include statistics.conf"""
+        logger = get_bind_logger()
+        
+        try:
+            # Path to main local configuration
+            main_config_path = self.config_dir / "named.conf.local"
+            
+            if not main_config_path.exists():
+                logger.warning(f"Main configuration file not found: {main_config_path}")
+                return False
+            
+            # Backup existing configuration before modification
+            await self._backup_configuration_file(main_config_path)
+            
+            # Read current configuration
+            current_config = main_config_path.read_text(encoding='utf-8')
+            
+            # Check if statistics.conf is already included
+            include_line = f'include "{stats_config_path}";'
+            
+            if include_line not in current_config:
+                # Add include at the beginning of the file
+                lines = current_config.split('\n')
+                
+                # Find a good place to insert (after initial comments)
+                insert_index = 0
+                for i, line in enumerate(lines):
+                    if line.strip() and not line.strip().startswith('//'):
+                        insert_index = i
+                        break
+                
+                # Insert the include line
+                lines.insert(insert_index, include_line)
+                lines.insert(insert_index + 1, '')  # Add blank line
+                
+                # Write updated configuration
+                updated_config = '\n'.join(lines)
+                main_config_path.write_text(updated_config, encoding='utf-8')
+                
+                logger.info(f"Added statistics.conf include to main configuration")
+            else:
+                logger.debug("Statistics.conf already included in main configuration")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update main configuration with statistics include: {e}")
+            return False
+
     # Helper methods for zone file generation
     async def _generate_master_zone_file(self, zone: Zone, records: List[DNSRecord]) -> str:
         """Generate master zone file content using enhanced serialization"""
@@ -2770,7 +3082,11 @@ class BindService:
                     logger.warning(f"Enhanced serialization failed for {zone.name}, falling back to template: {e}")
             
             # Fallback to template-based generation
-            template_name = "reverse_zone.j2" if is_reverse_zone else "zone_file.j2"
+            if is_reverse_zone:
+                template_name = "zones/reverse.j2"
+            else:
+                # Use the dedicated master zone template for better formatting and documentation
+                template_name = "zones/master.j2"
             template = self.jinja_env.get_template(template_name)
             
             # Render the template with grouped records for better organization
@@ -2791,17 +3107,17 @@ class BindService:
             raise
     
     async def _generate_slave_zone_file(self, zone: Zone) -> str:
-        """Generate slave zone file content (minimal placeholder)"""
+        """Generate slave zone file content using the zones/slave.j2 template"""
         logger = get_bind_logger()
         
         try:
-            template = self.jinja_env.get_template("slave_zone.j2")
+            template = self.jinja_env.get_template("zones/slave.j2")
             content = template.render(
                 zone=zone,
                 generated_at=datetime.now()
             )
             
-            logger.debug(f"Generated slave zone file content for {zone.name}")
+            logger.debug(f"Generated slave zone file content for {zone.name} using zones/slave.j2 template")
             return content
             
         except Exception as e:
@@ -3836,6 +4152,217 @@ $ORIGIN {rpz_zone}.rpz.
         
         # For regular domains, just return as-is (RPZ will handle the formatting)
         return domain
+    
+    def _format_ttl_filter(self, ttl: Optional[int]) -> str:
+        """Jinja2 filter to format TTL values with human-readable comments"""
+        if ttl is None:
+            return ""
+        
+        if ttl < 60:
+            return f"{ttl}"
+        elif ttl < 3600:
+            minutes = ttl // 60
+            return f"{ttl}  ; {minutes}m"
+        elif ttl < 86400:
+            hours = ttl // 3600
+            return f"{ttl}  ; {hours}h"
+        else:
+            days = ttl // 86400
+            return f"{ttl}  ; {days}d"
+    
+    def _format_serial_filter(self, serial: Optional[int]) -> str:
+        """Jinja2 filter to format serial numbers with date information"""
+        if serial is None:
+            return str(self._generate_serial_number())
+        
+        serial_str = str(serial)
+        if len(serial_str) == 10:
+            # YYYYMMDDNN format
+            year = serial_str[:4]
+            month = serial_str[4:6]
+            day = serial_str[6:8]
+            revision = serial_str[8:10]
+            return f"{serial}  ; {year}-{month}-{day} rev {revision}"
+        else:
+            return str(serial)
+    
+    def _format_duration_filter(self, seconds: int) -> str:
+        """Jinja2 filter to format duration in seconds to human-readable format"""
+        if seconds < 60:
+            return f"{seconds}s"
+        elif seconds < 3600:
+            minutes = seconds // 60
+            remaining_seconds = seconds % 60
+            if remaining_seconds == 0:
+                return f"{minutes}m"
+            else:
+                return f"{minutes}m{remaining_seconds}s"
+        elif seconds < 86400:
+            hours = seconds // 3600
+            remaining_minutes = (seconds % 3600) // 60
+            if remaining_minutes == 0:
+                return f"{hours}h"
+            else:
+                return f"{hours}h{remaining_minutes}m"
+        else:
+            days = seconds // 86400
+            remaining_hours = (seconds % 86400) // 3600
+            if remaining_hours == 0:
+                return f"{days}d"
+            else:
+                return f"{days}d{remaining_hours}h"
+    
+    def _validate_ip_filter(self, ip_address: str) -> bool:
+        """Jinja2 filter to validate IP addresses"""
+        try:
+            ipaddress.ip_address(ip_address)
+            return True
+        except ValueError:
+            return False
+    
+    def _reverse_ip_filter(self, ip_address: str) -> str:
+        """Jinja2 filter to create reverse DNS format for IP addresses"""
+        try:
+            ip = ipaddress.ip_address(ip_address)
+            if isinstance(ip, ipaddress.IPv4Address):
+                # For IPv4: 192.168.1.10 -> 10.1.168.192.in-addr.arpa
+                octets = str(ip).split('.')
+                return '.'.join(reversed(octets)) + '.in-addr.arpa'
+            elif isinstance(ip, ipaddress.IPv6Address):
+                # For IPv6: create ip6.arpa format
+                expanded = ip.exploded.replace(':', '')
+                reversed_chars = '.'.join(reversed(expanded))
+                return f"{reversed_chars}.ip6.arpa"
+        except ValueError:
+            return ip_address  # Return original if invalid
+    
+    def _format_mx_priority_filter(self, priority: Optional[int]) -> str:
+        """Jinja2 filter to format MX record priority with validation"""
+        if priority is None:
+            return "10"  # Default MX priority
+        
+        if 0 <= priority <= 65535:
+            return str(priority)
+        else:
+            return "10"  # Fallback to default if invalid
+    
+    def _format_srv_record_filter(self, record) -> str:
+        """Jinja2 filter to format SRV record components"""
+        priority = record.priority if record.priority is not None else 0
+        weight = record.weight if record.weight is not None else 0
+        port = record.port if record.port is not None else 0
+        target = self._ensure_trailing_dot_filter(record.value)
+        
+        return f"{priority} {weight} {port} {target}"
+    
+    def _escape_txt_record_filter(self, text: str) -> str:
+        """Jinja2 filter to properly escape TXT record content"""
+        if not text:
+            return '""'
+        
+        # Escape quotes and backslashes
+        escaped = text.replace('\\', '\\\\').replace('"', '\\"')
+        
+        # Handle long TXT records (split at 255 characters)
+        if len(escaped) <= 255:
+            return f'"{escaped}"'
+        else:
+            # Split into multiple quoted strings
+            chunks = []
+            for i in range(0, len(escaped), 255):
+                chunk = escaped[i:i+255]
+                chunks.append(f'"{chunk}"')
+            return ' '.join(chunks)
+    
+    def _normalize_domain_filter(self, domain: str) -> str:
+        """Jinja2 filter to normalize domain names"""
+        if not domain:
+            return ""
+        
+        # Convert to lowercase
+        domain = domain.lower()
+        
+        # Remove protocol prefixes
+        domain = domain.replace('http://', '').replace('https://', '')
+        
+        # Remove trailing slash
+        domain = domain.rstrip('/')
+        
+        # Handle @ symbol (represents zone root)
+        if domain == '@':
+            return '@'
+        
+        return domain
+    
+    def _is_wildcard_filter(self, domain: str) -> bool:
+        """Jinja2 filter to check if domain is a wildcard"""
+        return domain.startswith('*.')
+    
+    def _format_comment_filter(self, text: str, max_length: int = 50) -> str:
+        """Jinja2 filter to format comments in zone files"""
+        if not text:
+            return ""
+        
+        # Truncate if too long
+        if len(text) > max_length:
+            text = text[:max_length-3] + "..."
+        
+        # Ensure it starts with semicolon and space
+        if not text.startswith(';'):
+            text = f"; {text}"
+        
+        return text
+    
+    def _generate_serial_number(self) -> int:
+        """Generate a serial number in YYYYMMDDNN format"""
+        now = datetime.now()
+        date_part = now.strftime('%Y%m%d')
+        
+        # For simplicity, use hour as revision number (00-23)
+        revision = now.strftime('%H')
+        
+        return int(f"{date_part}{revision:0>2}")
+    
+    def _get_default_ttl(self) -> int:
+        """Get default TTL value"""
+        return 3600  # 1 hour default
+    
+    def _format_timestamp(self, dt: Optional[datetime] = None, format_str: str = '%Y-%m-%d %H:%M:%S UTC') -> str:
+        """Format timestamp for zone file comments"""
+        if dt is None:
+            dt = datetime.utcnow()
+        return dt.strftime(format_str)
+    
+    def _get_zone_type_description(self, zone_type: str) -> str:
+        """Get human-readable description of zone type"""
+        descriptions = {
+            'master': 'Master (Authoritative)',
+            'slave': 'Slave (Secondary)',
+            'forward': 'Forward Only',
+            'hint': 'Root Hints',
+            'stub': 'Stub Zone'
+        }
+        return descriptions.get(zone_type.lower(), zone_type)
+    
+    def _get_record_type_description(self, record_type: str) -> str:
+        """Get human-readable description of DNS record type"""
+        descriptions = {
+            'A': 'IPv4 Address Record',
+            'AAAA': 'IPv6 Address Record',
+            'CNAME': 'Canonical Name Record',
+            'MX': 'Mail Exchange Record',
+            'NS': 'Name Server Record',
+            'PTR': 'Pointer Record',
+            'SOA': 'Start of Authority Record',
+            'SRV': 'Service Record',
+            'TXT': 'Text Record',
+            'CAA': 'Certification Authority Authorization',
+            'DNAME': 'Delegation Name Record',
+            'NAPTR': 'Naming Authority Pointer Record',
+            'SSHFP': 'SSH Fingerprint Record',
+            'TLSA': 'Transport Layer Security Authentication'
+        }
+        return descriptions.get(record_type.upper(), f'{record_type} Record')
     
     def _validate_zone_configuration(self, zone: Zone) -> Dict:
         """Validate zone configuration parameters"""

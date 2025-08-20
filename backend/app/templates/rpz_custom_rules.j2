@@ -1,0 +1,138 @@
+; Custom RPZ Rules Template
+; Generated automatically by Hybrid DNS Server
+; Custom Rules Zone: {{ zone_name | default('custom') }}
+; Total Custom Rules: {{ rules|length }}
+; Last Updated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+$TTL {{ ttl | default(300) }}
+$ORIGIN {{ zone_name | default('custom') }}.rpz.
+
+; SOA Record for Custom RPZ Rules
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
+		{{ refresh | default(3600) }}		; Refresh interval (1 hour)
+		{{ retry | default(1800) }}		; Retry interval (30 minutes)
+		{{ expire | default(604800) }}		; Expire time (1 week)
+		{{ minimum | default(300) }}		; Minimum TTL (5 minutes)
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+{% if rules %}
+; Custom RPZ Rules ({{ rules|length }} total)
+; These are manually created rules for specific domains
+
+{% set block_rules = [] %}
+{% set redirect_rules = [] %}
+{% set passthru_rules = [] %}
+{% set custom_rules = [] %}
+
+{# Group rules by action for better organization #}
+{% for rule in rules %}
+{% if rule.is_active %}
+{% if rule.action == 'block' %}
+{% set _ = block_rules.append(rule) %}
+{% elif rule.action == 'redirect' %}
+{% set _ = redirect_rules.append(rule) %}
+{% elif rule.action == 'passthru' %}
+{% set _ = passthru_rules.append(rule) %}
+{% else %}
+{% set _ = custom_rules.append(rule) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+{# Custom Block Rules #}
+{% if block_rules %}
+; ========================================
+; CUSTOM BLOCK RULES ({{ block_rules|length }} rules)
+; Manually configured domains to block
+; ========================================
+{% for rule in block_rules | sort(attribute='domain') %}
+{% if rule.description %}; Custom Rule: {{ rule.description }}{% endif %}
+{% if rule.source %}; Source: {{ rule.source }}{% endif %}
+{% if rule.created_at %}; Created: {{ rule.created_at.strftime('%Y-%m-%d %H:%M:%S') }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.
+{% if not loop.last %}
+{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Custom Redirect Rules #}
+{% if redirect_rules %}
+; ========================================
+; CUSTOM REDIRECT RULES ({{ redirect_rules|length }} rules)
+; Manually configured domain redirections
+; ========================================
+{% for rule in redirect_rules | sort(attribute='domain') %}
+{% if rule.description %}; Custom Rule: {{ rule.description }}{% endif %}
+{% if rule.source %}; Source: {{ rule.source }}{% endif %}
+{% if rule.created_at %}; Created: {{ rule.created_at.strftime('%Y-%m-%d %H:%M:%S') }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ rule.redirect_target | ensure_trailing_dot }}
+{% if not loop.last %}
+{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Custom Passthrough Rules #}
+{% if passthru_rules %}
+; ========================================
+; CUSTOM PASSTHROUGH RULES ({{ passthru_rules|length }} rules)
+; Manually configured domains to allow (whitelist)
+; ========================================
+{% for rule in passthru_rules | sort(attribute='domain') %}
+{% if rule.description %}; Custom Rule: {{ rule.description }}{% endif %}
+{% if rule.source %}; Source: {{ rule.source }}{% endif %}
+{% if rule.created_at %}; Created: {{ rule.created_at.strftime('%Y-%m-%d %H:%M:%S') }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-passthru.
+{% if not loop.last %}
+{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Other Custom Rules #}
+{% if custom_rules %}
+; ========================================
+; OTHER CUSTOM RULES ({{ custom_rules|length }} rules)
+; Special custom rule configurations
+; ========================================
+{% for rule in custom_rules | sort(attribute='domain') %}
+{% if rule.description %}; Custom Rule: {{ rule.description }}{% endif %}
+{% if rule.source %}; Source: {{ rule.source }}{% endif %}
+{% if rule.created_at %}; Created: {{ rule.created_at.strftime('%Y-%m-%d %H:%M:%S') }}{% endif %}
+{% if rule.action == 'nxdomain' %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.
+{% elif rule.action == 'nodata' %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	*.
+{% elif rule.action == 'tcp-only' %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-tcp-only.
+{% elif rule.action == 'drop' %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-drop.
+{% else %}
+; Unknown action: {{ rule.action }}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.
+{% endif %}
+{% if not loop.last %}
+{% endif %}
+{% endfor %}
+
+{% endif %}
+{% else %}
+; No custom RPZ rules defined
+; Add custom rules through the web interface or API
+{% endif %}
+
+; Custom Rules Summary:
+; Total Rules: {{ rules|length }}
+; Block Rules: {{ block_rules|length if block_rules else 0 }}
+; Redirect Rules: {{ redirect_rules|length if redirect_rules else 0 }}
+; Passthrough Rules: {{ passthru_rules|length if passthru_rules else 0 }}
+; Other Custom Rules: {{ custom_rules|length if custom_rules else 0 }}
+
+; Template Information:
+; Template: rpz_custom_rules.j2
+; Generated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+; Zone: {{ zone_name | default('custom') }}.rpz
+
+; End of Custom RPZ Rules zone file

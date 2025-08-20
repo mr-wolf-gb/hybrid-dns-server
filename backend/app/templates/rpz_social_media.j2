@@ -1,0 +1,282 @@
+; Response Policy Zone - Social Media Blocking
+; Generated automatically by Hybrid DNS Server
+; Category: Social Media Blocking
+; Description: Blocks access to social media platforms and messaging services
+; Total Rules: {{ rules|length if rules else 0 }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Last Updated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+; Blocking Policy: {{ blocking_policy | default('Complete Block') }}
+
+$TTL {{ ttl | default(60) }}
+$ORIGIN {{ zone_name | default('rpz.social-media') }}.
+
+; SOA Record for Social Media Blocking RPZ
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
+		{{ refresh | default(86400) }}		; Refresh interval (24 hours)
+		{{ retry | default(7200) }}		; Retry interval (2 hours)
+		{{ expire | default(604800) }}		; Expire time (1 week)
+		{{ minimum | default(60) }}		; Minimum TTL (1 minute)
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+; ========================================
+; SOCIAL MEDIA BLOCKING RULES
+; ========================================
+; This zone blocks access to social media platforms including:
+; - Major social networks (Facebook, Twitter, Instagram, etc.)
+; - Professional networks (LinkedIn, etc.)
+; - Messaging platforms (WhatsApp, Telegram, etc.)
+; - Video platforms (TikTok, Snapchat, etc.)
+; - Community platforms (Reddit, Discord, etc.)
+
+{% if major_platforms | default(true) %}
+; ========================================
+; MAJOR SOCIAL MEDIA PLATFORMS
+; ========================================
+; Primary social networking sites
+
+; Facebook and Meta platforms
+facebook.com			IN	CNAME	{{ block_target | default('.') }}
+*.facebook.com			IN	CNAME	{{ block_target | default('.') }}
+fb.com				IN	CNAME	{{ block_target | default('.') }}
+*.fb.com			IN	CNAME	{{ block_target | default('.') }}
+meta.com			IN	CNAME	{{ block_target | default('.') }}
+*.meta.com			IN	CNAME	{{ block_target | default('.') }}
+
+; Instagram
+instagram.com			IN	CNAME	{{ block_target | default('.') }}
+*.instagram.com			IN	CNAME	{{ block_target | default('.') }}
+
+; Twitter / X
+twitter.com			IN	CNAME	{{ block_target | default('.') }}
+*.twitter.com			IN	CNAME	{{ block_target | default('.') }}
+x.com				IN	CNAME	{{ block_target | default('.') }}
+*.x.com				IN	CNAME	{{ block_target | default('.') }}
+t.co				IN	CNAME	{{ block_target | default('.') }}
+
+; TikTok
+tiktok.com			IN	CNAME	{{ block_target | default('.') }}
+*.tiktok.com			IN	CNAME	{{ block_target | default('.') }}
+
+; Snapchat
+snapchat.com			IN	CNAME	{{ block_target | default('.') }}
+*.snapchat.com			IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+{% if professional_networks | default(false) %}
+; ========================================
+; PROFESSIONAL NETWORKING PLATFORMS
+; ========================================
+; Note: LinkedIn may be allowed for business purposes
+
+; LinkedIn
+linkedin.com			IN	CNAME	{{ block_target | default('.') }}
+*.linkedin.com			IN	CNAME	{{ block_target | default('.') }}
+
+; Xing (European professional network)
+xing.com			IN	CNAME	{{ block_target | default('.') }}
+*.xing.com			IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+{% if messaging_platforms | default(true) %}
+; ========================================
+; MESSAGING PLATFORMS
+; ========================================
+; Instant messaging and communication platforms
+
+; WhatsApp
+whatsapp.com			IN	CNAME	{{ block_target | default('.') }}
+*.whatsapp.com			IN	CNAME	{{ block_target | default('.') }}
+
+; Telegram
+telegram.org			IN	CNAME	{{ block_target | default('.') }}
+*.telegram.org			IN	CNAME	{{ block_target | default('.') }}
+telegram.me			IN	CNAME	{{ block_target | default('.') }}
+t.me				IN	CNAME	{{ block_target | default('.') }}
+
+; Signal
+signal.org			IN	CNAME	{{ block_target | default('.') }}
+*.signal.org			IN	CNAME	{{ block_target | default('.') }}
+
+; Discord
+discord.com			IN	CNAME	{{ block_target | default('.') }}
+*.discord.com			IN	CNAME	{{ block_target | default('.') }}
+discord.gg			IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+{% if content_platforms | default(true) %}
+; ========================================
+; CONTENT AND MEDIA PLATFORMS
+; ========================================
+; Content sharing and media platforms
+
+; Pinterest
+pinterest.com			IN	CNAME	{{ block_target | default('.') }}
+*.pinterest.com			IN	CNAME	{{ block_target | default('.') }}
+
+; Tumblr
+tumblr.com			IN	CNAME	{{ block_target | default('.') }}
+*.tumblr.com			IN	CNAME	{{ block_target | default('.') }}
+
+; Reddit
+reddit.com			IN	CNAME	{{ block_target | default('.') }}
+*.reddit.com			IN	CNAME	{{ block_target | default('.') }}
+redd.it				IN	CNAME	{{ block_target | default('.') }}
+
+; Flickr
+flickr.com			IN	CNAME	{{ block_target | default('.') }}
+*.flickr.com			IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+{% if regional_platforms | default(false) %}
+; ========================================
+; REGIONAL SOCIAL MEDIA PLATFORMS
+; ========================================
+; Regional and country-specific platforms
+
+; WeChat (China)
+wechat.com			IN	CNAME	{{ block_target | default('.') }}
+*.wechat.com			IN	CNAME	{{ block_target | default('.') }}
+
+; Weibo (China)
+weibo.com			IN	CNAME	{{ block_target | default('.') }}
+*.weibo.com			IN	CNAME	{{ block_target | default('.') }}
+
+; VKontakte (Russia)
+vk.com				IN	CNAME	{{ block_target | default('.') }}
+*.vk.com			IN	CNAME	{{ block_target | default('.') }}
+
+; Odnoklassniki (Russia)
+ok.ru				IN	CNAME	{{ block_target | default('.') }}
+*.ok.ru				IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+{% if business_tools | default(false) %}
+; ========================================
+; BUSINESS COLLABORATION TOOLS
+; ========================================
+; Note: These may be needed for business operations
+
+; Slack
+slack.com			IN	CNAME	{{ block_target | default('.') }}
+*.slack.com			IN	CNAME	{{ block_target | default('.') }}
+
+; Microsoft Teams (web version)
+teams.microsoft.com		IN	CNAME	{{ block_target | default('.') }}
+
+; Zoom (social features)
+zoom.us				IN	CNAME	{{ block_target | default('.') }}
+*.zoom.us			IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+{% if rules %}
+; ========================================
+; CUSTOM SOCIAL MEDIA RULES
+; ========================================
+; Additional social media rules configured via database
+
+{% set blocked_rules = [] %}
+{% set redirected_rules = [] %}
+{% set allowed_rules = [] %}
+
+{# Categorize rules by action #}
+{% for rule in rules %}
+{% if rule.is_active %}
+{% if rule.action == 'block' %}
+{% set _ = blocked_rules.append(rule) %}
+{% elif rule.action == 'redirect' %}
+{% set _ = redirected_rules.append(rule) %}
+{% elif rule.action == 'passthru' %}
+{% set _ = allowed_rules.append(rule) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+{# Blocked Social Media Sites #}
+{% if blocked_rules %}
+; Custom Blocked Social Media Sites ({{ blocked_rules|length }} rules)
+{% for rule in blocked_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Redirected Social Media Sites #}
+{% if redirected_rules %}
+; Redirected Social Media Sites ({{ redirected_rules|length }} rules)
+; These sites redirect to company policy or alternative pages
+{% for rule in redirected_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ rule.redirect_target | ensure_trailing_dot }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Allowed Social Media Sites #}
+{% if allowed_rules %}
+; Allowed Social Media Sites ({{ allowed_rules|length }} rules)
+; These sites are explicitly allowed despite category blocking
+{% for rule in allowed_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-passthru.{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% endif %}
+; ========================================
+; BLOCKING POLICY OPTIONS
+; ========================================
+; Block Target Options:
+; - "." (NXDOMAIN): Domain does not exist
+; - "rpz-drop." (DROP): No response to query
+; - Custom IP: Redirect to company policy page
+; - Custom CNAME: Redirect to alternative service
+;
+; Current Block Target: {{ block_target | default('NXDOMAIN') }}
+
+{% if redirect_page %}
+; ========================================
+; COMPANY POLICY REDIRECT
+; ========================================
+; Users are redirected to: {{ redirect_page }}
+; This page should explain the social media policy
+; and provide information about approved communication tools
+
+{% endif %}
+; ========================================
+; TIME-BASED BLOCKING
+; ========================================
+; Note: Time-based blocking requires additional BIND configuration
+; Consider implementing:
+; - Block during work hours (9 AM - 5 PM)
+; - Allow during lunch break (12 PM - 1 PM)
+; - Allow after work hours and weekends
+; This requires BIND views and time-based ACLs
+
+; ========================================
+; EXEMPTION GUIDELINES
+; ========================================
+; Consider exemptions for:
+; - Marketing department (may need social media access)
+; - Executive team (may need LinkedIn access)
+; - IT department (for monitoring and management)
+; - Specific projects requiring social media research
+; Implement exemptions via BIND ACLs or separate DNS views
+
+; ========================================
+; STATISTICS SUMMARY
+; ========================================
+; Major Platforms: {{ 'Blocked' if major_platforms | default(true) else 'Allowed' }}
+; Professional Networks: {{ 'Blocked' if professional_networks | default(false) else 'Allowed' }}
+; Messaging Platforms: {{ 'Blocked' if messaging_platforms | default(true) else 'Allowed' }}
+; Content Platforms: {{ 'Blocked' if content_platforms | default(true) else 'Allowed' }}
+; Regional Platforms: {{ 'Blocked' if regional_platforms | default(false) else 'Allowed' }}
+; Business Tools: {{ 'Blocked' if business_tools | default(false) else 'Allowed' }}
+; Custom Blocked Rules: {{ blocked_rules|length if blocked_rules else 0 }}
+; Custom Redirected Rules: {{ redirected_rules|length if redirected_rules else 0 }}
+; Custom Allowed Rules: {{ allowed_rules|length if allowed_rules else 0 }}
+; Total Active Rules: {{ active_rules_count | default(0) }}
+
+; End of Social Media Blocking RPZ zone

@@ -1,0 +1,51 @@
+//
+// CONDITIONAL FORWARDING CONFIGURATION
+// Generated automatically by Hybrid DNS Server
+// Generated at: {{ generated_at }}
+// Configuration version: {{ config_version | default('1.0') }}
+//
+
+{% if forwarders %}
+{% for forwarder in forwarders %}
+{% if forwarder.is_active %}
+// ============================================================================
+// {{ forwarder.name }} ({{ forwarder.forwarder_type | upper }})
+// ============================================================================
+{% if forwarder.description %}// Description: {{ forwarder.description }}
+{% endif %}// Health Check: {{ 'Enabled' if forwarder.health_check_enabled else 'Disabled' }}
+// Created: {{ forwarder.created_at.strftime('%Y-%m-%d %H:%M:%S') if forwarder.created_at else 'Unknown' }}
+// Last Updated: {{ forwarder.updated_at.strftime('%Y-%m-%d %H:%M:%S') if forwarder.updated_at else 'Unknown' }}
+
+{% for domain in forwarder.domains %}
+zone "{{ domain }}" {
+    type forward;
+    forward {{ 'first' if forwarder.forwarder_type == 'public' else 'only' }};
+    forwarders {
+{% for server in forwarder.servers | sort(attribute='priority') %}
+        {{ server.ip }}{% if server.port != 53 %} port {{ server.port }}{% endif %};{% if server.priority > 1 %}  // Priority {{ server.priority }}{% endif %}
+
+{% endfor %}
+    };
+{% if forwarder.forwarder_type == 'active_directory' %}
+    // Active Directory specific settings
+    forward first;
+    check-names ignore;
+{% elif forwarder.forwarder_type == 'intranet' %}
+    // Intranet specific settings
+    forward only;
+{% elif forwarder.forwarder_type == 'public' %}
+    // Public DNS specific settings
+    forward first;
+{% endif %}
+};
+
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% else %}
+// No active forwarders configured
+{% endif %}
+
+// ============================================================================
+// END OF CONDITIONAL FORWARDING CONFIGURATION
+// ============================================================================

@@ -1,0 +1,53 @@
+; Example Zone Template demonstrating template variables and filters
+; Zone: {{ zone.name }}
+; Type: {{ get_zone_type_description(zone.zone_type) }}
+; Generated: {{ format_timestamp() }}
+; Serial: {{ zone.serial | format_serial }}
+
+$TTL {{ zone.minimum | format_duration }}
+$ORIGIN {{ zone.name | ensure_trailing_dot }}
+
+; SOA Record with enhanced formatting
+@	IN	SOA	{{ zone.name | ensure_trailing_dot }} {{ zone.email | format_email_for_soa }} (
+		{{ zone.serial | format_serial }}	; Serial with date info
+		{{ zone.refresh | format_ttl }}	; Refresh ({{ zone.refresh | format_duration }})
+		{{ zone.retry | format_ttl }}	; Retry ({{ zone.retry | format_duration }})
+		{{ zone.expire | format_ttl }}	; Expire ({{ zone.expire | format_duration }})
+		{{ zone.minimum | format_ttl }}	; Minimum ({{ zone.minimum | format_duration }})
+		)
+
+{% if records %}
+; DNS Records with enhanced formatting
+{% for record in records %}
+{% if record.is_active %}
+{%- set record_desc = get_record_type_description(record.record_type) -%}
+{{ "%-20s"|format(record.name) }}	{{ record.ttl | format_ttl }}	IN	{{ record.record_type }}	
+{%- if record.record_type == 'MX' -%}
+{{ record.priority | format_mx_priority }}	{{ record.value | ensure_trailing_dot }}	; {{ record_desc }}
+{%- elif record.record_type == 'SRV' -%}
+{{ record | format_srv_record }}	; {{ record_desc }}
+{%- elif record.record_type == 'TXT' -%}
+{{ record.value | escape_txt_record }}	; {{ record_desc }}
+{%- elif record.record_type in ['CNAME', 'NS', 'PTR'] -%}
+{{ record.value | ensure_trailing_dot }}	; {{ record_desc }}
+{%- else -%}
+{{ record.value }}	; {{ record_desc }}
+{%- endif %}
+{% endif %}
+{% endfor %}
+
+; Zone Statistics
+; Total records: {{ records | selectattr('is_active') | list | length }}
+; Generated with template variables and filters at {{ format_timestamp() }}
+{% else %}
+; No records defined for this zone
+; Use the web interface to add DNS records
+{% endif %}
+
+; Template Features Demonstrated:
+; - Enhanced TTL formatting with human-readable comments
+; - Serial number formatting with date information
+; - Proper domain name formatting with trailing dots
+; - Record-specific formatting (MX priority, SRV components, TXT escaping)
+; - Comprehensive record type descriptions
+; - Zone statistics and metadata

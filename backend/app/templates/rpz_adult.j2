@@ -1,0 +1,223 @@
+; Response Policy Zone - Adult Content Blocking
+; Generated automatically by Hybrid DNS Server
+; Category: Adult Content Blocking
+; Description: Blocks access to adult and inappropriate content
+; Total Rules: {{ rules|length if rules else 0 }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Last Updated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+; Content Filter Level: {{ filter_level | default('Strict') }}
+
+$TTL {{ ttl | default(60) }}
+$ORIGIN {{ zone_name | default('rpz.adult') }}.
+
+; SOA Record for Adult Content Blocking RPZ
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
+		{{ refresh | default(86400) }}		; Refresh interval (24 hours)
+		{{ retry | default(7200) }}		; Retry interval (2 hours)
+		{{ expire | default(604800) }}		; Expire time (1 week)
+		{{ minimum | default(60) }}		; Minimum TTL (1 minute)
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+; ========================================
+; ADULT CONTENT BLOCKING RULES
+; ========================================
+; This zone blocks access to adult content including:
+; - Adult websites and pornographic content
+; - Dating and hookup sites (optional)
+; - Adult-oriented social platforms
+; - Inappropriate content and mature themes
+; - Adult advertising and affiliate sites
+;
+; Filter Level: {{ filter_level | default('Strict') }}
+; - Strict: Blocks all adult content and suggestive material
+; - Moderate: Blocks explicit content but allows some mature themes
+; - Basic: Blocks only explicit pornographic content
+
+{% if rules %}
+{% set explicit_content = [] %}
+{% set dating_sites = [] %}
+{% set adult_social = [] %}
+{% set mature_content = [] %}
+{% set adult_advertising = [] %}
+{% set general_adult = [] %}
+
+{# Categorize adult content rules by type #}
+{% for rule in rules %}
+{% if rule.is_active %}
+{% if rule.threat_category == 'explicit' or 'explicit' in (rule.description | lower) or 'pornographic' in (rule.description | lower) %}
+{% set _ = explicit_content.append(rule) %}
+{% elif rule.threat_category == 'dating' or 'dating' in (rule.description | lower) or 'hookup' in (rule.description | lower) %}
+{% set _ = dating_sites.append(rule) %}
+{% elif rule.threat_category == 'adult_social' or 'adult social' in (rule.description | lower) or 'cam' in (rule.description | lower) %}
+{% set _ = adult_social.append(rule) %}
+{% elif rule.threat_category == 'mature' or 'mature' in (rule.description | lower) or 'suggestive' in (rule.description | lower) %}
+{% set _ = mature_content.append(rule) %}
+{% elif rule.threat_category == 'adult_ads' or 'advertising' in (rule.description | lower) or 'affiliate' in (rule.description | lower) %}
+{% set _ = adult_advertising.append(rule) %}
+{% else %}
+{% set _ = general_adult.append(rule) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+{# Explicit Pornographic Content - Highest Priority #}
+{% if explicit_content %}
+; Explicit Pornographic Content ({{ explicit_content|length }} rules)
+; Direct pornographic and sexually explicit material
+{% for rule in explicit_content | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Adult Social Platforms #}
+{% if adult_social %}
+; Adult Social Platforms ({{ adult_social|length }} rules)
+; Adult-oriented social networks and cam sites
+{% for rule in adult_social | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Dating and Hookup Sites #}
+{% if dating_sites and block_dating | default(false) %}
+; Dating and Hookup Sites ({{ dating_sites|length }} rules)
+; Note: Dating sites blocking is {{ 'enabled' if block_dating | default(false) else 'disabled' }}
+{% for rule in dating_sites | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Adult Advertising and Affiliates #}
+{% if adult_advertising %}
+; Adult Advertising and Affiliate Sites ({{ adult_advertising|length }} rules)
+; Adult content advertising and affiliate marketing sites
+{% for rule in adult_advertising | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Mature Content (Filter Level Dependent) #}
+{% if mature_content and filter_level in ['Strict', 'Moderate'] %}
+; Mature Content ({{ mature_content|length }} rules)
+; Suggestive content and mature themes (blocked in {{ filter_level }} mode)
+{% for rule in mature_content | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# General Adult Content #}
+{% if general_adult %}
+; General Adult Content ({{ general_adult|length }} rules)
+; Various adult-oriented websites and content
+{% for rule in general_adult | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% else %}
+; No active adult content blocking rules defined
+; This zone is currently empty - consider importing content filtering lists
+{% endif %}
+
+{% if common_adult_domains | default(true) %}
+; ========================================
+; COMMON ADULT CONTENT DOMAINS
+; ========================================
+; Note: This section contains examples and should be populated
+; with actual domains from commercial filtering services
+
+; Major adult content sites (examples - replace with actual domains)
+; adult-example.com		IN	CNAME	{{ block_target | default('.') }}
+; *.adult-example.com		IN	CNAME	{{ block_target | default('.') }}
+
+; Adult video streaming sites
+; video-adult-example.com	IN	CNAME	{{ block_target | default('.') }}
+; *.video-adult-example.com	IN	CNAME	{{ block_target | default('.') }}
+
+; Adult image hosting
+; images-adult-example.com	IN	CNAME	{{ block_target | default('.') }}
+; *.images-adult-example.com	IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+; ========================================
+; CONTENT FILTERING INTEGRATION
+; ========================================
+{% if content_filters %}
+; Active Content Filtering Services:
+{% for filter in content_filters %}
+; - {{ filter.name }}: {{ filter.description }} (Last Updated: {{ filter.last_updated.strftime('%Y-%m-%d %H:%M') if filter.last_updated else 'Never' }})
+{% endfor %}
+{% else %}
+; No commercial content filtering services configured
+; Consider integrating with:
+; - OpenDNS/Cisco Umbrella content categories
+; - Fortinet FortiGuard Web Filtering
+; - Symantec Web Security Service
+; - Barracuda Web Security Gateway
+; - Custom content filtering lists
+{% endif %}
+
+; ========================================
+; FILTER LEVEL CONFIGURATION
+; ========================================
+; Current Filter Level: {{ filter_level | default('Strict') }}
+;
+; Filter Level Descriptions:
+; - Basic: Blocks only explicit pornographic content
+; - Moderate: Blocks explicit content and some suggestive material
+; - Strict: Blocks all adult content including mature themes
+;
+; Dating Sites Blocking: {{ 'Enabled' if block_dating | default(false) else 'Disabled' }}
+; Mature Content Blocking: {{ 'Enabled' if filter_level in ['Strict', 'Moderate'] else 'Disabled' }}
+
+; ========================================
+; BYPASS AND EXEMPTION OPTIONS
+; ========================================
+; Adult content blocking can be bypassed for:
+; - Specific user groups (via BIND ACLs)
+; - Certain time periods (via BIND views)
+; - Administrative access (separate DNS configuration)
+; - Medical/educational research (whitelist specific domains)
+;
+; Implement exemptions carefully and document all exceptions
+; for compliance and audit purposes
+
+; ========================================
+; COMPLIANCE AND LEGAL NOTES
+; ========================================
+; This content filter is designed to:
+; - Protect minors from inappropriate content
+; - Maintain workplace productivity standards
+; - Comply with organizational acceptable use policies
+; - Support regulatory compliance requirements
+;
+; Regular review and updates are recommended to:
+; - Ensure effectiveness against new adult content sites
+; - Maintain compliance with changing regulations
+; - Address false positives and legitimate business needs
+; - Update filtering categories based on organizational needs
+
+; ========================================
+; STATISTICS SUMMARY
+; ========================================
+; Filter Level: {{ filter_level | default('Strict') }}
+; Total Rules: {{ rules|length if rules else 0 }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Explicit Content: {{ explicit_content|length if explicit_content else 0 }}
+; Adult Social: {{ adult_social|length if adult_social else 0 }}
+; Dating Sites: {{ dating_sites|length if dating_sites else 0 }} ({{ 'Blocked' if block_dating | default(false) else 'Allowed' }})
+; Adult Advertising: {{ adult_advertising|length if adult_advertising else 0 }}
+; Mature Content: {{ mature_content|length if mature_content else 0 }} ({{ 'Blocked' if filter_level in ['Strict', 'Moderate'] else 'Allowed' }})
+; General Adult: {{ general_adult|length if general_adult else 0 }}
+
+; End of Adult Content Blocking RPZ zone

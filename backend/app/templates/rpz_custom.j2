@@ -1,0 +1,283 @@
+; Response Policy Zone - Custom Rules
+; Generated automatically by Hybrid DNS Server
+; Category: Custom Rules
+; Description: User-defined custom RPZ rules and policies
+; Total Rules: {{ rules|length if rules else 0 }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Last Updated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+; Rule Categories: {{ rule_categories | join(', ') if rule_categories else 'Mixed' }}
+
+$TTL {{ ttl | default(60) }}
+$ORIGIN {{ zone_name | default('rpz.custom') }}.
+
+; SOA Record for Custom Rules RPZ
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
+		{{ refresh | default(86400) }}		; Refresh interval (24 hours)
+		{{ retry | default(7200) }}		; Retry interval (2 hours)
+		{{ expire | default(604800) }}		; Expire time (1 week)
+		{{ minimum | default(60) }}		; Minimum TTL (1 minute)
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+; ========================================
+; CUSTOM RPZ RULES
+; ========================================
+; This zone contains custom rules defined by administrators including:
+; - Organization-specific blocking rules
+; - Custom whitelist/passthrough rules
+; - Redirect rules for internal services
+; - Temporary blocking rules
+; - Testing and development rules
+; - Business-specific content filtering
+
+{% if rules %}
+{% set block_rules = [] %}
+{% set redirect_rules = [] %}
+{% set passthru_rules = [] %}
+{% set nxdomain_rules = [] %}
+{% set nodata_rules = [] %}
+{% set drop_rules = [] %}
+{% set tcp_only_rules = [] %}
+
+{# Categorize rules by action type #}
+{% for rule in rules %}
+{% if rule.is_active %}
+{% if rule.action == 'block' %}
+{% set _ = block_rules.append(rule) %}
+{% elif rule.action == 'redirect' %}
+{% set _ = redirect_rules.append(rule) %}
+{% elif rule.action == 'passthru' or rule.action == 'passthrough' %}
+{% set _ = passthru_rules.append(rule) %}
+{% elif rule.action == 'nxdomain' %}
+{% set _ = nxdomain_rules.append(rule) %}
+{% elif rule.action == 'nodata' %}
+{% set _ = nodata_rules.append(rule) %}
+{% elif rule.action == 'drop' %}
+{% set _ = drop_rules.append(rule) %}
+{% elif rule.action == 'tcp-only' %}
+{% set _ = tcp_only_rules.append(rule) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+{# Block Rules - Return NXDOMAIN #}
+{% if block_rules %}
+; ========================================
+; BLOCK RULES ({{ block_rules|length }} rules)
+; ========================================
+; These domains will return NXDOMAIN (domain does not exist)
+
+{% for rule in block_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{% if rule.category %}; Category: {{ rule.category }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.source %} ; Source: {{ rule.source }}{% endif %}{% if rule.created_by %} ; Created by: {{ rule.created_by }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Redirect Rules - Redirect to specified target #}
+{% if redirect_rules %}
+; ========================================
+; REDIRECT RULES ({{ redirect_rules|length }} rules)
+; ========================================
+; These domains will redirect to specified targets
+
+{% for rule in redirect_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{% if rule.category %}; Category: {{ rule.category }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ rule.redirect_target | ensure_trailing_dot }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}{% if rule.created_by %} ; Created by: {{ rule.created_by }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Passthrough Rules - Allow through (whitelist) #}
+{% if passthru_rules %}
+; ========================================
+; PASSTHROUGH RULES ({{ passthru_rules|length }} rules)
+; ========================================
+; These domains are explicitly allowed (whitelist)
+
+{% for rule in passthru_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{% if rule.category %}; Category: {{ rule.category }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-passthru.{% if rule.source %} ; Source: {{ rule.source }}{% endif %}{% if rule.created_by %} ; Created by: {{ rule.created_by }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# NXDOMAIN Rules - Explicit NXDOMAIN response #}
+{% if nxdomain_rules %}
+; ========================================
+; NXDOMAIN RULES ({{ nxdomain_rules|length }} rules)
+; ========================================
+; These domains will return explicit NXDOMAIN response
+
+{% for rule in nxdomain_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{% if rule.category %}; Category: {{ rule.category }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-nxdomain.{% if rule.source %} ; Source: {{ rule.source }}{% endif %}{% if rule.created_by %} ; Created by: {{ rule.created_by }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# NODATA Rules - Return empty response #}
+{% if nodata_rules %}
+; ========================================
+; NODATA RULES ({{ nodata_rules|length }} rules)
+; ========================================
+; These domains will return empty response (NODATA)
+
+{% for rule in nodata_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{% if rule.category %}; Category: {{ rule.category }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-nodata.{% if rule.source %} ; Source: {{ rule.source }}{% endif %}{% if rule.created_by %} ; Created by: {{ rule.created_by }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# DROP Rules - Drop queries (no response) #}
+{% if drop_rules %}
+; ========================================
+; DROP RULES ({{ drop_rules|length }} rules)
+; ========================================
+; These queries will be dropped (no response sent)
+
+{% for rule in drop_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{% if rule.category %}; Category: {{ rule.category }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-drop.{% if rule.source %} ; Source: {{ rule.source }}{% endif %}{% if rule.created_by %} ; Created by: {{ rule.created_by }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# TCP-Only Rules - Force TCP queries #}
+{% if tcp_only_rules %}
+; ========================================
+; TCP-ONLY RULES ({{ tcp_only_rules|length }} rules)
+; ========================================
+; These domains will force TCP queries only
+
+{% for rule in tcp_only_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{% if rule.category %}; Category: {{ rule.category }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-tcp-only.{% if rule.source %} ; Source: {{ rule.source }}{% endif %}{% if rule.created_by %} ; Created by: {{ rule.created_by }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% else %}
+; No active custom RPZ rules defined
+; Use the web interface to create custom rules for your organization
+{% endif %}
+
+; ========================================
+; RULE CATEGORIES
+; ========================================
+{% if rule_categories %}
+; Active Rule Categories:
+{% for category in rule_categories %}
+; - {{ category.name }}: {{ category.description }} ({{ category.rule_count }} rules)
+{% endfor %}
+{% else %}
+; No rule categories defined
+; Consider organizing rules into categories such as:
+; - Business Applications
+; - Security Exceptions
+; - Temporary Blocks
+; - Development/Testing
+; - Compliance Requirements
+{% endif %}
+
+; ========================================
+; CUSTOM RULE EXAMPLES
+; ========================================
+; Example custom rules (commented out):
+;
+; Block specific competitor websites:
+; competitor1.com		IN	CNAME	.
+; *.competitor1.com		IN	CNAME	.
+;
+; Redirect old company domain to new domain:
+; oldcompany.com		IN	CNAME	newcompany.com.
+; *.oldcompany.com		IN	CNAME	newcompany.com.
+;
+; Allow specific social media for marketing team:
+; linkedin.com			IN	CNAME	rpz-passthru.
+; *.linkedin.com		IN	CNAME	rpz-passthru.
+;
+; Block specific file sharing sites:
+; fileshare-site.com		IN	CNAME	rpz-drop.
+; *.fileshare-site.com		IN	CNAME	rpz-drop.
+;
+; Force TCP for large file downloads:
+; downloads.example.com	IN	CNAME	rpz-tcp-only.
+
+; ========================================
+; WILDCARD RULES
+; ========================================
+; Wildcard rules affect all subdomains:
+; *.example.com matches:
+; - subdomain.example.com
+; - www.example.com
+; - mail.example.com
+; - any.subdomain.example.com
+;
+; Use wildcards carefully to avoid blocking legitimate services
+
+; ========================================
+; TEMPORARY RULES
+; ========================================
+{% if temporary_rules %}
+; Temporary rules (auto-expire):
+{% for rule in temporary_rules %}
+; {{ rule.domain }} - Expires: {{ rule.expires_at.strftime('%Y-%m-%d %H:%M') if rule.expires_at else 'Never' }}
+{% if rule.is_active and (not rule.expires_at or rule.expires_at > now()) %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ rule.action_target }}	; Temporary rule
+{% endif %}
+{% endfor %}
+{% else %}
+; No temporary rules configured
+; Temporary rules can be useful for:
+; - Incident response (temporary blocking)
+; - Testing new policies
+; - Time-limited exceptions
+; - Maintenance windows
+{% endif %}
+
+; ========================================
+; RULE MANAGEMENT NOTES
+; ========================================
+; Custom rules can be managed via:
+; - Web interface: Create, edit, delete rules
+; - API endpoints: Programmatic rule management
+; - Bulk import: Import rules from CSV/JSON files
+; - Rule templates: Pre-defined rule sets
+;
+; Best practices:
+; - Document the purpose of each rule
+; - Use descriptive rule names and categories
+; - Regularly review and clean up unused rules
+; - Test rules in a development environment first
+; - Monitor rule effectiveness and adjust as needed
+
+; ========================================
+; INTEGRATION WITH OTHER ZONES
+; ========================================
+; Custom rules can override other RPZ zones:
+; - Higher priority zones take precedence
+; - Use passthrough rules to allow blocked domains
+; - Use custom redirects for specific business needs
+; - Coordinate with security team for threat-related rules
+
+; ========================================
+; STATISTICS SUMMARY
+; ========================================
+; Total Rules: {{ rules|length if rules else 0 }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Block Rules: {{ block_rules|length if block_rules else 0 }}
+; Redirect Rules: {{ redirect_rules|length if redirect_rules else 0 }}
+; Passthrough Rules: {{ passthru_rules|length if passthru_rules else 0 }}
+; NXDOMAIN Rules: {{ nxdomain_rules|length if nxdomain_rules else 0 }}
+; NODATA Rules: {{ nodata_rules|length if nodata_rules else 0 }}
+; DROP Rules: {{ drop_rules|length if drop_rules else 0 }}
+; TCP-Only Rules: {{ tcp_only_rules|length if tcp_only_rules else 0 }}
+; Rule Categories: {{ rule_categories|length if rule_categories else 0 }}
+; Temporary Rules: {{ temporary_rules|length if temporary_rules else 0 }}
+
+; End of Custom Rules RPZ zone

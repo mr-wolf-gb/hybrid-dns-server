@@ -1,0 +1,281 @@
+; Custom Temporary Rules Template
+; Generated automatically by Hybrid DNS Server
+; Template: Custom Temporary Rules
+; Description: Template for temporary RPZ rules with expiration
+; Total Rules: {{ rules|length if rules else 0 }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Last Updated: {{ generated_at.strftime("%Y-%m-%d %H:%M:%S") }}
+
+$TTL {{ ttl | default(300) }}
+$ORIGIN {{ zone_name | default('rpz.custom-temporary') }}.
+
+; SOA Record for Custom Temporary Rules
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime("%Y%m%d%H")) }}	; Serial number (YYYYMMDDHH)
+		{{ refresh | default(1800) }}		; Refresh interval (30 minutes - shorter for temporary rules)
+		{{ retry | default(900) }}		; Retry interval (15 minutes)
+		{{ expire | default(86400) }}		; Expire time (1 day - shorter for temporary rules)
+		{{ minimum | default(300) }}		; Minimum TTL (5 minutes)
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+; ========================================
+; CUSTOM TEMPORARY RULES
+; ========================================
+; This template is specifically designed for temporary RPZ rules
+; Rules in this zone have expiration dates and are automatically cleaned up
+; Useful for incident response, testing, and short-term policy enforcement
+
+{% if rules %}
+{% set current_time = now() %}
+{% set active_rules = [] %}
+{% set expired_rules = [] %}
+{% set expiring_soon = [] %}
+
+{# Categorize rules by expiration status #}
+{% for rule in rules %}
+{% if rule.is_active %}
+{% if rule.expires_at %}
+{% if rule.expires_at > current_time %}
+{% set _ = active_rules.append(rule) %}
+{% if (rule.expires_at - current_time).total_seconds() < 86400 %}
+{% set _ = expiring_soon.append(rule) %}
+{% endif %}
+{% else %}
+{% set _ = expired_rules.append(rule) %}
+{% endif %}
+{% else %}
+{% set _ = active_rules.append(rule) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+{% if active_rules %}
+; ========================================
+; ACTIVE TEMPORARY RULES ({{ active_rules|length }} rules)
+; ========================================
+
+{% set block_rules = active_rules | selectattr('action', 'equalto', 'block') | list %}
+{% set redirect_rules = active_rules | selectattr('action', 'equalto', 'redirect') | list %}
+{% set allow_rules = active_rules | selectattr('action', 'in', ['passthru', 'passthrough']) | list %}
+
+{% if block_rules %}
+; Temporary Block Rules ({{ block_rules|length }} rules)
+{% for rule in block_rules | sort(attribute='expires_at') %}
+; {{ rule.domain }}
+; Reason: {{ rule.reason | default('No reason specified') }}
+; Created: {{ rule.created_at.strftime("%Y-%m-%d %H:%M:%S") if rule.created_at else "Unknown" }}
+; Expires: {{ rule.expires_at.strftime("%Y-%m-%d %H:%M:%S") if rule.expires_at else "Never" }}
+; Created by: {{ rule.created_by | default("System") }}
+{% if rule.incident_id %}; Incident ID: {{ rule.incident_id }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.
+{% if rule.wildcard_subdomains %}
+*.{{ rule.domain | rpz_format_domain }}	IN	CNAME	.
+{% endif %}
+{% endfor %}
+
+{% endif %}
+{% if redirect_rules %}
+; Temporary Redirect Rules ({{ redirect_rules|length }} rules)
+{% for rule in redirect_rules | sort(attribute='expires_at') %}
+; {{ rule.domain }} -> {{ rule.redirect_target }}
+; Reason: {{ rule.reason | default('No reason specified') }}
+; Created: {{ rule.created_at.strftime("%Y-%m-%d %H:%M:%S") if rule.created_at else "Unknown" }}
+; Expires: {{ rule.expires_at.strftime("%Y-%m-%d %H:%M:%S") if rule.expires_at else "Never" }}
+; Created by: {{ rule.created_by | default("System") }}
+{% if rule.incident_id %}; Incident ID: {{ rule.incident_id }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ rule.redirect_target | ensure_trailing_dot }}
+{% if rule.wildcard_subdomains %}
+*.{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ rule.redirect_target | ensure_trailing_dot }}
+{% endif %}
+{% endfor %}
+
+{% endif %}
+{% if allow_rules %}
+; Temporary Allow Rules ({{ allow_rules|length }} rules)
+{% for rule in allow_rules | sort(attribute='expires_at') %}
+; {{ rule.domain }}
+; Reason: {{ rule.reason | default('No reason specified') }}
+; Created: {{ rule.created_at.strftime("%Y-%m-%d %H:%M:%S") if rule.created_at else "Unknown" }}
+; Expires: {{ rule.expires_at.strftime("%Y-%m-%d %H:%M:%S") if rule.expires_at else "Never" }}
+; Created by: {{ rule.created_by | default("System") }}
+{% if rule.incident_id %}; Incident ID: {{ rule.incident_id }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-passthru.
+{% if rule.wildcard_subdomains %}
+*.{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-passthru.
+{% endif %}
+{% endfor %}
+
+{% endif %}
+{% endif %}
+
+{% if expiring_soon %}
+; ========================================
+; RULES EXPIRING SOON ({{ expiring_soon|length }} rules)
+; ========================================
+; These rules will expire within 24 hours
+{% for rule in expiring_soon | sort(attribute='expires_at') %}
+; WARNING: {{ rule.domain }} expires soon
+; Expires: {{ rule.expires_at.strftime("%Y-%m-%d %H:%M:%S") }}
+; Contact: {{ rule.created_by | default("Unknown") }}
+{% endfor %}
+
+{% endif %}
+
+{% if expired_rules %}
+; ========================================
+; EXPIRED RULES ({{ expired_rules|length }} rules)
+; ========================================
+; These rules have expired and should be cleaned up
+{% for rule in expired_rules | sort(attribute='expires_at') %}
+; EXPIRED: {{ rule.domain }} (expired {{ rule.expires_at.strftime("%Y-%m-%d %H:%M:%S") }})
+; Reason: {{ rule.reason | default('No reason specified') }}
+{% endfor %}
+
+{% endif %}
+{% else %}
+; No temporary rules defined
+; Add temporary rules through the web interface or API
+; Temporary rules are useful for:
+; - Incident response
+; - Testing new policies
+; - Short-term blocking during investigations
+; - Temporary business exceptions
+{% endif %}
+
+; ========================================
+; INCIDENT RESPONSE RULES
+; ========================================
+{% if incident_rules %}
+; Active incident response rules:
+{% for incident in incident_rules %}
+; Incident: {{ incident.incident_id }} - {{ incident.title }}
+; Status: {{ incident.status }}
+; Created: {{ incident.created_at.strftime("%Y-%m-%d %H:%M:%S") }}
+; Expires: {{ incident.expires_at.strftime("%Y-%m-%d %H:%M:%S") if incident.expires_at else "Manual cleanup required" }}
+; Response Team: {{ incident.response_team }}
+{% for rule in incident.rules %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ rule.action_target }}	; Incident {{ incident.incident_id }}
+{% endfor %}
+{% endfor %}
+
+{% else %}
+; No active incident response rules
+; Incident response rules are automatically created for:
+; - Security incidents requiring immediate blocking
+; - Malware outbreaks
+; - Phishing campaigns
+; - Data breach containment
+; - Compliance violations
+{% endif %}
+
+; ========================================
+; TESTING RULES
+; ========================================
+{% if testing_rules %}
+; Active testing rules:
+{% for test in testing_rules %}
+; Test: {{ test.test_name }}
+; Environment: {{ test.environment }}
+; Tester: {{ test.tester }}
+; Created: {{ test.created_at.strftime("%Y-%m-%d %H:%M:%S") }}
+; Expires: {{ test.expires_at.strftime("%Y-%m-%d %H:%M:%S") if test.expires_at else "Manual cleanup required" }}
+{% for rule in test.rules %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ rule.action_target }}	; Test: {{ test.test_name }}
+{% endfor %}
+{% endfor %}
+
+{% else %}
+; No active testing rules
+; Testing rules are useful for:
+; - Policy testing before production deployment
+; - User acceptance testing
+; - Performance testing
+; - Integration testing
+; - Rollback testing
+{% endif %}
+
+; ========================================
+; MAINTENANCE WINDOWS
+; ========================================
+{% if maintenance_windows %}
+; Active maintenance windows:
+{% for window in maintenance_windows %}
+{% if window.start_time <= current_time <= window.end_time %}
+; Maintenance: {{ window.title }}
+; Window: {{ window.start_time.strftime("%Y-%m-%d %H:%M") }} to {{ window.end_time.strftime("%Y-%m-%d %H:%M") }}
+; Team: {{ window.maintenance_team }}
+{% for rule in window.rules %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ rule.action_target }}	; Maintenance: {{ window.title }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+
+{% else %}
+; No active maintenance windows
+; Maintenance window rules are useful for:
+; - Redirecting traffic during maintenance
+; - Blocking access to systems under maintenance
+; - Providing maintenance notifications
+; - Testing disaster recovery procedures
+{% endif %}
+
+; ========================================
+; AUTOMATIC CLEANUP
+; ========================================
+; Expired rules are automatically cleaned up by the system
+; Cleanup frequency: {{ cleanup_frequency | default('Every 4 hours') }}
+; Last cleanup: {{ last_cleanup.strftime("%Y-%m-%d %H:%M:%S") if last_cleanup else "Never" }}
+; Next cleanup: {{ next_cleanup.strftime("%Y-%m-%d %H:%M:%S") if next_cleanup else "Unknown" }}
+
+; Rules are considered expired when:
+; - expires_at timestamp has passed
+; - Rule has been inactive for more than {{ inactive_cleanup_days | default(30) }} days
+; - Associated incident has been closed for more than {{ incident_cleanup_days | default(7) }} days
+
+; ========================================
+; TEMPLATE USAGE EXAMPLES
+; ========================================
+; Example temporary rules (commented out):
+;
+; Temporary block during security incident:
+; malicious-site.com		IN	CNAME	.	; Expires: 2024-01-15 18:00:00
+;
+; Temporary redirect during maintenance:
+; service.company.com		IN	CNAME	maintenance.company.com.	; Expires: 2024-01-10 06:00:00
+;
+; Temporary allow for business continuity:
+; critical-vendor.com		IN	CNAME	rpz-passthru.	; Expires: 2024-01-20 23:59:59
+;
+; Testing rule for new policy:
+; test-domain.com		IN	CNAME	.	; Expires: 2024-01-05 17:00:00
+
+; ========================================
+; BEST PRACTICES
+; ========================================
+; Temporary rules should:
+; - Always have expiration dates
+; - Include clear reasons for creation
+; - Be associated with incidents or tickets
+; - Be reviewed before expiration
+; - Have appropriate approval for sensitive domains
+; - Be documented for audit purposes
+
+; ========================================
+; STATISTICS
+; ========================================
+; Total Rules: {{ rules|length if rules else 0 }}
+; Active Rules: {{ active_rules|length if active_rules else 0 }}
+; Expired Rules: {{ expired_rules|length if expired_rules else 0 }}
+; Expiring Soon: {{ expiring_soon|length if expiring_soon else 0 }}
+; Incident Rules: {{ incident_rules|length if incident_rules else 0 }}
+; Testing Rules: {{ testing_rules|length if testing_rules else 0 }}
+; Maintenance Windows: {{ maintenance_windows|length if maintenance_windows else 0 }}
+
+; Template: rpz_custom_temporary.j2
+; Generated: {{ generated_at.strftime("%Y-%m-%d %H:%M:%S") }}
+; Zone: {{ zone_name | default('rpz.custom-temporary') }}
+
+; End of Custom Temporary Rules zone file

@@ -1,0 +1,80 @@
+; Custom Block Rules Template
+; Generated automatically by Hybrid DNS Server
+; Template: Custom Block Rules
+; Description: Template for custom domain blocking rules
+; Total Rules: 4
+; Last Updated: 2025-08-20 11:42:00
+
+$TTL 300
+$ORIGIN rpz.test.
+
+; SOA Record for Custom Block Rules
+@	IN	SOA	ns1.company.com. admin.company.com. (
+		2025082011	; Serial number (YYYYMMDDHH)
+		3600		; Refresh interval (1 hour)
+		1800		; Retry interval (30 minutes)
+		604800		; Expire time (1 week)
+		300		; Minimum TTL (5 minutes)
+		)
+
+; Name Server Record
+@	IN	NS	ns1.company.com.
+
+; ========================================
+; CUSTOM BLOCK RULES
+; ========================================
+; This template is specifically designed for custom blocking rules
+; All domains in this zone will be blocked (return NXDOMAIN)
+
+; Active Block Rules (4 total)
+; Sample allow rule; Category: Business; Source: Manual; Created by: admin; Expires: 2025-09-19 11:42:00example-allow.com	IN	CNAME	.
+; Sample block rule; Category: Testing; Source: Manual; Created by: admin; Expires: 2025-08-22 11:42:00example-block.com	IN	CNAME	.
+; Include all subdomains
+*.example-block.com	IN	CNAME	.
+; Sample redirect rule; Category: Policy; Source: Manual; Created by: admin; Expires: 2025-08-27 11:42:00example-redirect.com	IN	CNAME	.
+; Temporary block for testing; Category: Temporary; Source: Incident Response; Created by: security-team; Expires: 2025-08-21 11:42:00example-temporary.com	IN	CNAME	.
+
+
+; ========================================
+; RULE CATEGORIES
+; ========================================
+; Rule Categories in this zone:
+; - Testing: Test rules (1 rules)
+; - Policy: Policy enforcement (1 rules)
+; - Business: Business rules (1 rules)
+; - Temporary: Temporary rules (1 rules)
+
+; ========================================
+; TEMPLATE USAGE EXAMPLES
+; ========================================
+; Example custom block rules (commented out):
+;
+; Block specific competitor websites:
+; competitor1.com		IN	CNAME	.
+; *.competitor1.com		IN	CNAME	.
+;
+; Block social media during work hours:
+; facebook.com			IN	CNAME	.
+; twitter.com			IN	CNAME	.
+; instagram.com		IN	CNAME	.
+;
+; Block file sharing sites:
+; dropbox.com			IN	CNAME	.
+; googledrive.com		IN	CNAME	.
+;
+; Block specific news sites:
+; distractingnews.com	IN	CNAME	.
+
+; ========================================
+; STATISTICS
+; ========================================
+; Total Rules: 4
+; Active Rules: 4
+; Inactive Rules: 0
+; Categories: 4
+
+; Template: rpz_custom_block.j2
+; Generated: 2025-08-20 11:42:00
+; Zone: rpz.test
+
+; End of Custom Block Rules zone file

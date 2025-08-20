@@ -2,13 +2,18 @@
 System administration endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 
 from ...core.database import get_database_session
 from ...core.security import get_current_user
 from ...services.bind_service import BindService
+from ...services.acl_service import ACLService
+from ...schemas.system import (
+    ACLCreate, ACLUpdate, ACL, ACLSummary, ACLEntryCreate, ACLEntryUpdate, 
+    ACLEntry, BulkACLEntryUpdate, ACLValidationResult
+)
 
 router = APIRouter()
 
@@ -184,3 +189,370 @@ async def get_system_health(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get system health: {str(e)}")
+
+
+# ACL Management Endpoints
+@router.get("/acls", response_model=List[ACLSummary])
+async def list_acls(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    acl_type: Optional[str] = Query(None),
+    active_only: bool = Query(True),
+    search: Optional[str] = Query(None),
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """List all ACLs with optional filtering"""
+    try:
+        acl_service = ACLService(db)
+        acls = await acl_service.get_acls(
+            skip=skip,
+            limit=limit,
+            acl_type=acl_type,
+            active_only=active_only,
+            search=search
+        )
+        
+        # Convert to summary format
+        summaries = []
+        for acl in acls:
+            summaries.append(ACLSummary(
+                id=acl.id,
+                name=acl.name,
+                acl_type=acl.acl_type,
+                description=acl.description,
+                is_active=acl.is_active,
+                entry_count=len([e for e in acl.entries if e.is_active]) if acl.entries else 0,
+                created_at=acl.created_at,
+                updated_at=acl.updated_at
+            ))
+        
+        return summaries
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list ACLs: {str(e)}")
+
+@router.post("/acls", response_model=ACL)
+async def create_acl(
+    acl_data: ACLCreate,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a new ACL"""
+    try:
+        acl_service = ACLService(db)
+        bind_service = BindService(db)
+        
+        # Create ACL
+        acl = await acl_service.create_acl(acl_data, current_user.get("id"))
+        
+        # Regenerate ACL configuration
+        all_acls = await acl_service.get_acls(active_only=True)
+        await bind_service.generate_acl_configuration(all_acls)
+        
+        return acl
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create ACL: {str(e)}")
+
+@router.get("/acls/{acl_id}", response_model=ACL)
+async def get_acl(
+    acl_id: int,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get a specific ACL"""
+    try:
+        acl_service = ACLService(db)
+        acl = await acl_service.get_acl(acl_id)
+        
+        if not acl:
+            raise HTTPException(status_code=404, detail="ACL not found")
+        
+        return acl
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get ACL: {str(e)}")
+
+@router.put("/acls/{acl_id}", response_model=ACL)
+async def update_acl(
+    acl_id: int,
+    acl_data: ACLUpdate,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update an ACL"""
+    try:
+        acl_service = ACLService(db)
+        bind_service = BindService(db)
+        
+        acl = await acl_service.update_acl(acl_id, acl_data, current_user.get("id"))
+        
+        if not acl:
+            raise HTTPException(status_code=404, detail="ACL not found")
+        
+        # Regenerate ACL configuration
+        all_acls = await acl_service.get_acls(active_only=True)
+        await bind_service.generate_acl_configuration(all_acls)
+        
+        return acl
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update ACL: {str(e)}")
+
+@router.delete("/acls/{acl_id}")
+async def delete_acl(
+    acl_id: int,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete an ACL"""
+    try:
+        acl_service = ACLService(db)
+        bind_service = BindService(db)
+        
+        success = await acl_service.delete_acl(acl_id)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="ACL not found")
+        
+        # Regenerate ACL configuration
+        all_acls = await acl_service.get_acls(active_only=True)
+        await bind_service.generate_acl_configuration(all_acls)
+        
+        return {"message": "ACL deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete ACL: {str(e)}")
+
+@router.post("/acls/{acl_id}/toggle", response_model=ACL)
+async def toggle_acl(
+    acl_id: int,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Toggle ACL active status"""
+    try:
+        acl_service = ACLService(db)
+        bind_service = BindService(db)
+        
+        acl = await acl_service.toggle_acl(acl_id, current_user.get("id"))
+        
+        if not acl:
+            raise HTTPException(status_code=404, detail="ACL not found")
+        
+        # Regenerate ACL configuration
+        all_acls = await acl_service.get_acls(active_only=True)
+        await bind_service.generate_acl_configuration(all_acls)
+        
+        return acl
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to toggle ACL: {str(e)}")
+
+@router.post("/acls/{acl_id}/validate", response_model=ACLValidationResult)
+async def validate_acl(
+    acl_id: int,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Validate an ACL configuration"""
+    try:
+        acl_service = ACLService(db)
+        validation_result = await acl_service.validate_acl(acl_id)
+        
+        return validation_result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to validate ACL: {str(e)}")
+
+# ACL Entry Management Endpoints
+@router.get("/acls/{acl_id}/entries", response_model=List[ACLEntry])
+async def list_acl_entries(
+    acl_id: int,
+    active_only: bool = Query(True),
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """List entries for a specific ACL"""
+    try:
+        acl_service = ACLService(db)
+        
+        # Check if ACL exists
+        acl = await acl_service.get_acl(acl_id)
+        if not acl:
+            raise HTTPException(status_code=404, detail="ACL not found")
+        
+        entries = await acl_service.get_acl_entries(acl_id, active_only=active_only)
+        return entries
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list ACL entries: {str(e)}")
+
+@router.post("/acls/{acl_id}/entries", response_model=ACLEntry)
+async def add_acl_entry(
+    acl_id: int,
+    entry_data: ACLEntryCreate,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Add an entry to an ACL"""
+    try:
+        acl_service = ACLService(db)
+        bind_service = BindService(db)
+        
+        entry = await acl_service.add_acl_entry(acl_id, entry_data, current_user.get("id"))
+        
+        if not entry:
+            raise HTTPException(status_code=404, detail="ACL not found")
+        
+        # Regenerate ACL configuration
+        all_acls = await acl_service.get_acls(active_only=True)
+        await bind_service.generate_acl_configuration(all_acls)
+        
+        return entry
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to add ACL entry: {str(e)}")
+
+@router.put("/acl-entries/{entry_id}", response_model=ACLEntry)
+async def update_acl_entry(
+    entry_id: int,
+    entry_data: ACLEntryUpdate,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update an ACL entry"""
+    try:
+        acl_service = ACLService(db)
+        bind_service = BindService(db)
+        
+        entry = await acl_service.update_acl_entry(entry_id, entry_data, current_user.get("id"))
+        
+        if not entry:
+            raise HTTPException(status_code=404, detail="ACL entry not found")
+        
+        # Regenerate ACL configuration
+        all_acls = await acl_service.get_acls(active_only=True)
+        await bind_service.generate_acl_configuration(all_acls)
+        
+        return entry
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update ACL entry: {str(e)}")
+
+@router.delete("/acl-entries/{entry_id}")
+async def delete_acl_entry(
+    entry_id: int,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete an ACL entry"""
+    try:
+        acl_service = ACLService(db)
+        bind_service = BindService(db)
+        
+        success = await acl_service.delete_acl_entry(entry_id)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="ACL entry not found")
+        
+        # Regenerate ACL configuration
+        all_acls = await acl_service.get_acls(active_only=True)
+        await bind_service.generate_acl_configuration(all_acls)
+        
+        return {"message": "ACL entry deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete ACL entry: {str(e)}")
+
+@router.post("/acls/{acl_id}/entries/bulk")
+async def bulk_update_acl_entries(
+    acl_id: int,
+    bulk_data: BulkACLEntryUpdate,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Bulk update ACL entries"""
+    try:
+        acl_service = ACLService(db)
+        bind_service = BindService(db)
+        
+        results = await acl_service.bulk_update_acl_entries(acl_id, bulk_data, current_user.get("id"))
+        
+        # Regenerate ACL configuration if any updates were successful
+        if results["successful_updates"] > 0:
+            all_acls = await acl_service.get_acls(active_only=True)
+            await bind_service.generate_acl_configuration(all_acls)
+        
+        return results
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to bulk update ACL entries: {str(e)}")
+
+@router.get("/acls/statistics")
+async def get_acl_statistics(
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get ACL statistics"""
+    try:
+        acl_service = ACLService(db)
+        statistics = await acl_service.get_acl_statistics()
+        
+        return statistics
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get ACL statistics: {str(e)}")
+
+@router.post("/acls/generate-config")
+async def generate_acl_configuration(
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Generate ACL configuration file"""
+    try:
+        acl_service = ACLService(db)
+        bind_service = BindService(db)
+        
+        # Get all active ACLs
+        all_acls = await acl_service.get_acls(active_only=True)
+        
+        # Generate configuration
+        success = await bind_service.generate_acl_configuration(all_acls)
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to generate ACL configuration")
+        
+        return {"message": "ACL configuration generated successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate ACL configuration: {str(e)}")

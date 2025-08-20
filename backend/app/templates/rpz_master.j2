@@ -1,0 +1,198 @@
+; Master RPZ Zone Template
+; Generated automatically by Hybrid DNS Server
+; RPZ Zone: {{ zone_name | default('rpz') }}
+; Zone Type: {{ zone_type | default('master') }}
+; Zone Description: {{ zone_description | default('Response Policy Zone') }}
+; Total Rules: {{ rules|length if rules else 0 }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Last Updated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+$TTL {{ ttl | default(300) }}
+$ORIGIN {{ zone_name | default('rpz') }}.
+
+; SOA Record for RPZ Zone
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
+		{{ refresh | default(3600) }}		; Refresh interval
+		{{ retry | default(1800) }}		; Retry interval  
+		{{ expire | default(604800) }}		; Expire time
+		{{ minimum | default(300) }}		; Minimum TTL
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+; RPZ Zone Configuration
+; Zone Name: {{ zone_name | default('rpz') }}
+; Zone Purpose: {{ zone_purpose | default('DNS security and content filtering') }}
+; Policy Action: {{ default_policy | default('GIVEN') }}
+; Break DNSSEC: {{ break_dnssec | default('no') }}
+; Max Policy TTL: {{ max_policy_ttl | default('300') }}
+
+{% if rules %}
+; RPZ Rules ({{ rules|length }} total, {{ active_rules_count | default(0) }} active)
+
+{% set block_rules = [] %}
+{% set redirect_rules = [] %}
+{% set passthru_rules = [] %}
+{% set nxdomain_rules = [] %}
+{% set nodata_rules = [] %}
+{% set tcp_only_rules = [] %}
+{% set drop_rules = [] %}
+
+{# Group rules by action type #}
+{% for rule in rules %}
+{% if rule.is_active %}
+{% set action = rule.action | lower %}
+{% if action == 'block' or action == 'nxdomain' %}
+{% set _ = nxdomain_rules.append(rule) %}
+{% elif action == 'redirect' %}
+{% set _ = redirect_rules.append(rule) %}
+{% elif action == 'passthru' or action == 'passthrough' %}
+{% set _ = passthru_rules.append(rule) %}
+{% elif action == 'nodata' %}
+{% set _ = nodata_rules.append(rule) %}
+{% elif action == 'tcp-only' %}
+{% set _ = tcp_only_rules.append(rule) %}
+{% elif action == 'drop' %}
+{% set _ = drop_rules.append(rule) %}
+{% else %}
+{% set _ = block_rules.append(rule) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+{# NXDOMAIN Rules (Block) #}
+{% if nxdomain_rules %}
+; ========================================
+; NXDOMAIN RULES ({{ nxdomain_rules|length }} rules)
+; These domains will return NXDOMAIN (blocked)
+; ========================================
+{% for rule in nxdomain_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{% if rule.category %}; Category: {{ rule.category }}{% endif %}
+{% if rule.source %}; Source: {{ rule.source }}{% endif %}
+{% if rule.created_at %}; Added: {{ rule.created_at.strftime('%Y-%m-%d') }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.
+{% endfor %}
+
+{% endif %}
+{# Redirect Rules #}
+{% if redirect_rules %}
+; ========================================
+; REDIRECT RULES ({{ redirect_rules|length }} rules)
+; These domains will redirect to specified targets
+; ========================================
+{% for rule in redirect_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{% if rule.category %}; Category: {{ rule.category }}{% endif %}
+{% if rule.source %}; Source: {{ rule.source }}{% endif %}
+{% if rule.created_at %}; Added: {{ rule.created_at.strftime('%Y-%m-%d') }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ rule.redirect_target | ensure_trailing_dot }}
+{% endfor %}
+
+{% endif %}
+{# Passthrough Rules #}
+{% if passthru_rules %}
+; ========================================
+; PASSTHROUGH RULES ({{ passthru_rules|length }} rules)
+; These domains are explicitly allowed (whitelist)
+; ========================================
+{% for rule in passthru_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{% if rule.category %}; Category: {{ rule.category }}{% endif %}
+{% if rule.source %}; Source: {{ rule.source }}{% endif %}
+{% if rule.created_at %}; Added: {{ rule.created_at.strftime('%Y-%m-%d') }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-passthru.
+{% endfor %}
+
+{% endif %}
+{# NODATA Rules #}
+{% if nodata_rules %}
+; ========================================
+; NODATA RULES ({{ nodata_rules|length }} rules)
+; These domains will return NODATA (empty response)
+; ========================================
+{% for rule in nodata_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{% if rule.category %}; Category: {{ rule.category }}{% endif %}
+{% if rule.source %}; Source: {{ rule.source }}{% endif %}
+{% if rule.created_at %}; Added: {{ rule.created_at.strftime('%Y-%m-%d') }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	*.
+{% endfor %}
+
+{% endif %}
+{# TCP-Only Rules #}
+{% if tcp_only_rules %}
+; ========================================
+; TCP-ONLY RULES ({{ tcp_only_rules|length }} rules)
+; These domains will only respond to TCP queries
+; ========================================
+{% for rule in tcp_only_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{% if rule.category %}; Category: {{ rule.category }}{% endif %}
+{% if rule.source %}; Source: {{ rule.source }}{% endif %}
+{% if rule.created_at %}; Added: {{ rule.created_at.strftime('%Y-%m-%d') }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-tcp-only.
+{% endfor %}
+
+{% endif %}
+{# Drop Rules #}
+{% if drop_rules %}
+; ========================================
+; DROP RULES ({{ drop_rules|length }} rules)
+; These queries will be dropped (no response)
+; ========================================
+{% for rule in drop_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{% if rule.category %}; Category: {{ rule.category }}{% endif %}
+{% if rule.source %}; Source: {{ rule.source }}{% endif %}
+{% if rule.created_at %}; Added: {{ rule.created_at.strftime('%Y-%m-%d') }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-drop.
+{% endfor %}
+
+{% endif %}
+{# Legacy Block Rules (fallback) #}
+{% if block_rules %}
+; ========================================
+; LEGACY BLOCK RULES ({{ block_rules|length }} rules)
+; Legacy rules with unspecified action (default to block)
+; ========================================
+{% for rule in block_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{% if rule.category %}; Category: {{ rule.category }}{% endif %}
+{% if rule.source %}; Source: {{ rule.source }}{% endif %}
+{% if rule.created_at %}; Added: {{ rule.created_at.strftime('%Y-%m-%d') }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.
+{% endfor %}
+
+{% endif %}
+{% else %}
+; No RPZ rules defined for this zone
+; Rules can be added through the web interface or API
+{% endif %}
+
+; Zone Statistics Summary:
+; Total Rules: {{ rules|length if rules else 0 }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; NXDOMAIN Rules: {{ nxdomain_rules|length if nxdomain_rules else 0 }}
+; Redirect Rules: {{ redirect_rules|length if redirect_rules else 0 }}
+; Passthrough Rules: {{ passthru_rules|length if passthru_rules else 0 }}
+; NODATA Rules: {{ nodata_rules|length if nodata_rules else 0 }}
+; TCP-Only Rules: {{ tcp_only_rules|length if tcp_only_rules else 0 }}
+; Drop Rules: {{ drop_rules|length if drop_rules else 0 }}
+; Legacy Block Rules: {{ block_rules|length if block_rules else 0 }}
+
+; Zone Configuration:
+; Zone Name: {{ zone_name | default('rpz') }}
+; Zone Type: {{ zone_type | default('master') }}
+; Default Policy: {{ default_policy | default('GIVEN') }}
+; Break DNSSEC: {{ break_dnssec | default('no') }}
+; Max Policy TTL: {{ max_policy_ttl | default('300') }}
+
+; Template Information:
+; Template: rpz_master.j2
+; Generated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+; Generator: Hybrid DNS Server
+
+; End of RPZ zone file for {{ zone_name | default('rpz') }}

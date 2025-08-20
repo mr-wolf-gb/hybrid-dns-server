@@ -9,6 +9,7 @@ from .health_service import HealthService
 from .monitoring_service import MonitoringService
 from .rpz_service import RPZService
 from .threat_feed_service import ThreatFeedService
+from .acl_service import ACLService
 
 __all__ = [
     'BaseService',
@@ -19,5 +20,6 @@ __all__ = [
     'HealthService',
     'MonitoringService',
     'RPZService',
-    'ThreatFeedService'
+    'ThreatFeedService',
+    'ACLService'
 ]

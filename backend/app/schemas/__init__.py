@@ -76,10 +76,24 @@ from .system import (
     ConfigValidationResult,
     BulkConfigUpdate,
     BulkConfigUpdateResult,
+    # ACL schemas
+    ACLEntryBase,
+    ACLEntryCreate,
+    ACLEntryUpdate,
+    ACLEntry,
+    ACLBase,
+    ACLCreate,
+    ACLUpdate,
+    ACL,
+    ACLSummary,
+    BulkACLEntryUpdate,
+    ACLValidationResult,
+    ACLConfigurationTemplate,
     # Enums
     ValueType,
     ConfigCategory,
     SystemHealthStatus,
+    ACLType,
 )
 
 from .monitoring import (
@@ -200,6 +214,19 @@ __all__ = [
     "ConfigValidationResult",
     "BulkConfigUpdate",
     "BulkConfigUpdateResult",
+    # ACL schemas
+    "ACLEntryBase",
+    "ACLEntryCreate",
+    "ACLEntryUpdate",
+    "ACLEntry",
+    "ACLBase",
+    "ACLCreate",
+    "ACLUpdate",
+    "ACL",
+    "ACLSummary",
+    "BulkACLEntryUpdate",
+    "ACLValidationResult",
+    "ACLConfigurationTemplate",
     # DNS Log schemas
     "DNSLogBase",
     "DNSLogCreate",
@@ -258,6 +285,7 @@ __all__ = [
     "ValueType",
     "ConfigCategory",
     "SystemHealthStatus",
+    "ACLType",
     "MetricType",
     "QueryType",
     "ResourceType",

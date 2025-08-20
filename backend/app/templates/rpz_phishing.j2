@@ -1,0 +1,154 @@
+; Response Policy Zone - Phishing Protection
+; Generated automatically by Hybrid DNS Server
+; Category: Phishing Protection
+; Description: Blocks phishing sites and credential harvesting domains
+; Total Rules: {{ rules|length if rules else 0 }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Last Updated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+; Threat Intelligence Sources: {{ threat_sources | join(', ') if threat_sources else 'Manual' }}
+
+$TTL {{ ttl | default(60) }}
+$ORIGIN {{ zone_name | default('rpz.phishing') }}.
+
+; SOA Record for Phishing Protection RPZ
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
+		{{ refresh | default(86400) }}		; Refresh interval (24 hours)
+		{{ retry | default(7200) }}		; Retry interval (2 hours)
+		{{ expire | default(604800) }}		; Expire time (1 week)
+		{{ minimum | default(60) }}		; Minimum TTL (1 minute)
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+; ========================================
+; PHISHING PROTECTION RULES
+; ========================================
+; This zone blocks phishing domains including:
+; - Credential harvesting sites
+; - Brand impersonation domains
+; - Business Email Compromise (BEC) domains
+; - Social engineering sites
+; - Fake login pages
+; - Typosquatting domains
+
+{% if rules %}
+{% set credential_harvest = [] %}
+{% set brand_impersonation = [] %}
+{% set bec_domains = [] %}
+{% set typosquatting = [] %}
+{% set general_phishing = [] %}
+
+{# Categorize phishing rules by attack type #}
+{% for rule in rules %}
+{% if rule.is_active %}
+{% if rule.threat_category == 'credential_harvest' or 'credential' in (rule.description | lower) or 'login' in (rule.description | lower) %}
+{% set _ = credential_harvest.append(rule) %}
+{% elif rule.threat_category == 'brand_impersonation' or 'impersonation' in (rule.description | lower) or 'fake' in (rule.description | lower) %}
+{% set _ = brand_impersonation.append(rule) %}
+{% elif rule.threat_category == 'bec' or 'bec' in (rule.description | lower) or 'business email' in (rule.description | lower) %}
+{% set _ = bec_domains.append(rule) %}
+{% elif rule.threat_category == 'typosquatting' or 'typo' in (rule.description | lower) or 'squatting' in (rule.description | lower) %}
+{% set _ = typosquatting.append(rule) %}
+{% else %}
+{% set _ = general_phishing.append(rule) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+{# Credential Harvesting Sites - Highest Priority #}
+{% if credential_harvest %}
+; Credential Harvesting Sites ({{ credential_harvest|length }} rules)
+; These domains attempt to steal usernames, passwords, and other credentials
+{% for rule in credential_harvest | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-drop.{% if rule.source %} ; Source: {{ rule.source }}{% endif %}{% if rule.confidence_score %} ; Confidence: {{ rule.confidence_score }}%{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Brand Impersonation Domains #}
+{% if brand_impersonation %}
+; Brand Impersonation Domains ({{ brand_impersonation|length }} rules)
+; These domains impersonate legitimate brands and services
+{% for rule in brand_impersonation | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.source %} ; Source: {{ rule.source }}{% endif %}{% if rule.confidence_score %} ; Confidence: {{ rule.confidence_score }}%{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Business Email Compromise Domains #}
+{% if bec_domains %}
+; Business Email Compromise (BEC) Domains ({{ bec_domains|length }} rules)
+; These domains are used in BEC and CEO fraud attacks
+{% for rule in bec_domains | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-drop.{% if rule.source %} ; Source: {{ rule.source }}{% endif %}{% if rule.confidence_score %} ; Confidence: {{ rule.confidence_score }}%{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Typosquatting Domains #}
+{% if typosquatting %}
+; Typosquatting Domains ({{ typosquatting|length }} rules)
+; These domains exploit common typing mistakes to deceive users
+{% for rule in typosquatting | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.source %} ; Source: {{ rule.source }}{% endif %}{% if rule.confidence_score %} ; Confidence: {{ rule.confidence_score }}%{% endif %}
+{% endfor %}
+
+{% endif %}
+{# General Phishing Domains #}
+{% if general_phishing %}
+; General Phishing Domains ({{ general_phishing|length }} rules)
+; Various phishing sites and social engineering domains
+{% for rule in general_phishing | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.source %} ; Source: {{ rule.source }}{% endif %}{% if rule.confidence_score %} ; Confidence: {{ rule.confidence_score }}%{% endif %}
+{% endfor %}
+
+{% endif %}
+{% else %}
+; No active phishing protection rules defined
+; This zone is currently empty - consider importing phishing threat feeds
+{% endif %}
+
+; ========================================
+; COMMON PHISHING TARGETS
+; ========================================
+; The following legitimate domains are commonly impersonated:
+; - Banking: paypal.com, chase.com, bankofamerica.com
+; - Email: gmail.com, outlook.com, yahoo.com
+; - Social: facebook.com, linkedin.com, twitter.com
+; - Cloud: dropbox.com, google.com, microsoft.com
+; - Crypto: coinbase.com, binance.com, blockchain.com
+; Monitor for typosquatting variants of these domains
+
+; ========================================
+; THREAT INTELLIGENCE INTEGRATION
+; ========================================
+{% if threat_feeds %}
+; Active Phishing Intelligence Feeds:
+{% for feed in threat_feeds %}
+; - {{ feed.name }}: {{ feed.url }} (Last Updated: {{ feed.last_updated.strftime('%Y-%m-%d %H:%M') if feed.last_updated else 'Never' }})
+{% endfor %}
+{% else %}
+; No phishing intelligence feeds configured
+; Consider integrating with:
+; - OpenPhish (https://openphish.com/)
+; - PhishTank (https://phishtank.org/)
+; - Anti-Phishing Working Group (APWG)
+{% endif %}
+
+; ========================================
+; STATISTICS SUMMARY
+; ========================================
+; Total Rules: {{ rules|length if rules else 0 }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Credential Harvesting: {{ credential_harvest|length if credential_harvest else 0 }}
+; Brand Impersonation: {{ brand_impersonation|length if brand_impersonation else 0 }}
+; BEC Domains: {{ bec_domains|length if bec_domains else 0 }}
+; Typosquatting: {{ typosquatting|length if typosquatting else 0 }}
+; General Phishing: {{ general_phishing|length if general_phishing else 0 }}
+; Average Confidence: {{ average_confidence | default('N/A') }}%
+
+; End of Phishing Protection RPZ zone

@@ -1,0 +1,224 @@
+; Custom Redirect Rules Template
+; Generated automatically by Hybrid DNS Server
+; Template: Custom Redirect Rules
+; Description: Template for custom domain redirection rules
+; Total Rules: {{ rules|length if rules else 0 }}
+; Last Updated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+$TTL {{ ttl | default(300) }}
+$ORIGIN {{ zone_name | default('rpz.custom-redirect') }}.
+
+; SOA Record for Custom Redirect Rules
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
+		{{ refresh | default(3600) }}		; Refresh interval (1 hour)
+		{{ retry | default(1800) }}		; Retry interval (30 minutes)
+		{{ expire | default(604800) }}		; Expire time (1 week)
+		{{ minimum | default(300) }}		; Minimum TTL (5 minutes)
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+; ========================================
+; CUSTOM REDIRECT RULES
+; ========================================
+; This template is specifically designed for custom domain redirection rules
+; Domains in this zone will be redirected to specified targets
+; Useful for policy enforcement, brand protection, and user guidance
+
+{% if rules %}
+{% set active_rules = rules | selectattr('is_active') | list %}
+{% if active_rules %}
+; Active Redirect Rules ({{ active_rules|length }} total)
+{% for rule in active_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{% if rule.category %}; Category: {{ rule.category }}{% endif %}
+{% if rule.source %}; Source: {{ rule.source }}{% endif %}
+{% if rule.created_by %}; Created by: {{ rule.created_by }}{% endif %}
+{% if rule.redirect_reason %}; Redirect Reason: {{ rule.redirect_reason }}{% endif %}
+{% if rule.expires_at %}; Expires: {{ rule.expires_at.strftime('%Y-%m-%d %H:%M:%S') }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ rule.redirect_target | ensure_trailing_dot }}
+{% if rule.wildcard_subdomains %}
+; Include all subdomains
+*.{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ rule.redirect_target | ensure_trailing_dot }}
+{% endif %}
+{% endfor %}
+
+{% endif %}
+{% set inactive_rules = rules | rejectattr('is_active') | list %}
+{% if inactive_rules %}
+; Inactive Redirect Rules ({{ inactive_rules|length }} total)
+; These rules are disabled but kept for reference
+{% for rule in inactive_rules | sort(attribute='domain') %}
+; DISABLED: {{ rule.domain }} -> {{ rule.redirect_target }}{% if rule.description %} - {{ rule.description }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% else %}
+; No custom redirect rules defined
+; Add custom redirect rules through the web interface or API
+{% endif %}
+
+; ========================================
+; POLICY REDIRECTS
+; ========================================
+{% if policy_redirects %}
+; Policy enforcement redirects:
+{% for redirect in policy_redirects %}
+; {{ redirect.domain }} -> {{ redirect.target }}
+; Policy: {{ redirect.policy_name }}
+; Enforcement Level: {{ redirect.enforcement_level }}
+{{ redirect.domain | rpz_format_domain }}	IN	CNAME	{{ redirect.target | ensure_trailing_dot }}
+{% if redirect.include_subdomains %}
+*.{{ redirect.domain | rpz_format_domain }}	IN	CNAME	{{ redirect.target | ensure_trailing_dot }}
+{% endif %}
+{% endfor %}
+
+{% else %}
+; No policy redirects defined
+; Policy redirects can be used for:
+; - Redirecting blocked content to policy pages
+; - Guiding users to approved alternatives
+; - Educational content about policy violations
+; - HR policy enforcement notifications
+{% endif %}
+
+; ========================================
+; BRAND PROTECTION REDIRECTS
+; ========================================
+{% if brand_protection %}
+; Brand protection redirects:
+{% for protection in brand_protection %}
+; {{ protection.domain }} -> {{ protection.target }}
+; Protection Type: {{ protection.protection_type }}
+; Risk Level: {{ protection.risk_level }}
+{{ protection.domain | rpz_format_domain }}	IN	CNAME	{{ protection.target | ensure_trailing_dot }}
+{% if protection.include_subdomains %}
+*.{{ protection.domain | rpz_format_domain }}	IN	CNAME	{{ protection.target | ensure_trailing_dot }}
+{% endif %}
+{% endfor %}
+
+{% else %}
+; No brand protection redirects defined
+; Brand protection redirects can be used for:
+; - Redirecting typosquatting domains to legitimate sites
+; - Protecting against phishing attempts using similar domains
+; - Redirecting old company domains to new ones
+; - Protecting trademark violations
+{% endif %}
+
+; ========================================
+; MAINTENANCE REDIRECTS
+; ========================================
+{% if maintenance_redirects %}
+; Maintenance and migration redirects:
+{% for maintenance in maintenance_redirects %}
+{% if maintenance.active and (not maintenance.end_date or maintenance.end_date > now()) %}
+; {{ maintenance.domain }} -> {{ maintenance.target }}
+; Maintenance Window: {{ maintenance.start_date.strftime('%Y-%m-%d') }} to {{ maintenance.end_date.strftime('%Y-%m-%d') if maintenance.end_date else 'Indefinite' }}
+; Reason: {{ maintenance.reason }}
+{{ maintenance.domain | rpz_format_domain }}	IN	CNAME	{{ maintenance.target | ensure_trailing_dot }}
+{% if maintenance.include_subdomains %}
+*.{{ maintenance.domain | rpz_format_domain }}	IN	CNAME	{{ maintenance.target | ensure_trailing_dot }}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+{% else %}
+; No maintenance redirects defined
+; Maintenance redirects are useful for:
+; - Redirecting during system maintenance
+; - Migrating services to new domains
+; - Temporary service relocations
+; - Planned outage notifications
+{% endif %}
+
+; ========================================
+; RULE CATEGORIES
+; ========================================
+{% if rule_categories %}
+; Rule Categories in this zone:
+{% for category in rule_categories %}
+; - {{ category.name }}: {{ category.description }} ({{ category.rule_count }} rules)
+{% endfor %}
+{% else %}
+; No rule categories defined
+; Consider organizing redirect rules into categories such as:
+; - Policy Enforcement
+; - Brand Protection
+; - Service Migration
+; - User Education
+; - Compliance Requirements
+; - Temporary Redirects
+{% endif %}
+
+; ========================================
+; TEMPLATE USAGE EXAMPLES
+; ========================================
+; Example custom redirect rules (commented out):
+;
+; Redirect old company domain to new domain:
+; oldcompany.com		IN	CNAME	newcompany.com.
+; *.oldcompany.com		IN	CNAME	newcompany.com.
+;
+; Redirect blocked social media to policy page:
+; facebook.com			IN	CNAME	policy.company.com.
+; twitter.com			IN	CNAME	policy.company.com.
+;
+; Redirect typosquatting domains to legitimate site:
+; compnay.com			IN	CNAME	company.com.
+; comapny.com			IN	CNAME	company.com.
+;
+; Redirect deprecated services to new ones:
+; oldservice.company.com	IN	CNAME	newservice.company.com.
+;
+; Redirect to maintenance page during outages:
+; service.company.com		IN	CNAME	maintenance.company.com.
+
+; ========================================
+; REDIRECT TARGET VALIDATION
+; ========================================
+{% if redirect_targets %}
+; Configured redirect targets:
+{% for target in redirect_targets %}
+; {{ target.hostname }} - {{ target.description }}
+; Status: {{ target.status }}
+; Last Checked: {{ target.last_checked.strftime('%Y-%m-%d %H:%M:%S') if target.last_checked else 'Never' }}
+{% endfor %}
+{% else %}
+; No redirect targets configured
+; Ensure redirect targets are:
+; - Valid and accessible hostnames
+; - Properly configured web servers
+; - Serving appropriate content
+; - Monitored for availability
+{% endif %}
+
+; ========================================
+; MONITORING AND ANALYTICS
+; ========================================
+; Redirect rules should be monitored for:
+; - Usage frequency and patterns
+; - Target availability and response times
+; - User behavior after redirection
+; - Effectiveness of policy enforcement
+; - Potential abuse or bypassing attempts
+
+; ========================================
+; STATISTICS
+; ========================================
+; Total Rules: {{ rules|length if rules else 0 }}
+; Active Rules: {{ active_rules|length if active_rules else 0 }}
+; Inactive Rules: {{ inactive_rules|length if inactive_rules else 0 }}
+; Policy Redirects: {{ policy_redirects|length if policy_redirects else 0 }}
+; Brand Protection: {{ brand_protection|length if brand_protection else 0 }}
+; Maintenance Redirects: {{ maintenance_redirects|length if maintenance_redirects else 0 }}
+; Categories: {{ rule_categories|length if rule_categories else 0 }}
+; Redirect Targets: {{ redirect_targets|length if redirect_targets else 0 }}
+
+; Template: rpz_custom_redirect.j2
+; Generated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+; Zone: {{ zone_name | default('rpz.custom-redirect') }}
+
+; End of Custom Redirect Rules zone file

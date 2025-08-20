@@ -1,0 +1,195 @@
+; Adult Content Threat Feed RPZ Zone Template
+; Generated automatically by Hybrid DNS Server
+; Feed Name: {{ feed_name | default('Adult Content Feed') }}
+; Feed Source: {{ feed_source | default('external') }}
+; Feed URL: {{ feed_url | default('N/A') }}
+; Total Adult Content Domains: {{ rules|length }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Last Feed Update: {{ feed_last_updated.strftime('%Y-%m-%d %H:%M:%S') if feed_last_updated else 'Never' }}
+; Zone Generated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+$TTL {{ ttl | default(300) }}
+$ORIGIN {{ feed_zone | default('adult') }}.rpz.
+
+; SOA Record for Adult Content Threat Feed RPZ Zone
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
+		{{ refresh | default(3600) }}		; Refresh interval (1 hour - moderate updates)
+		{{ retry | default(900) }}		; Retry interval (15 minutes)
+		{{ expire | default(604800) }}		; Expire time (1 week)
+		{{ minimum | default(300) }}		; Minimum TTL (5 minutes)
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+; Adult Content Threat Feed Information
+; Feed Type: Adult Content Filtering
+; Feed Description: {{ feed_description | default('External adult content filtering feed') }}
+; Update Frequency: {{ feed_update_frequency | default('daily') }}
+; Feed Format: {{ feed_format | default('domain-list') }}
+; Feed Reliability: {{ feed_reliability | default('medium') }}
+; Content Categories: Adult, Pornography, Dating, Mature Content
+
+{% if rules %}
+; Adult Content Domain Rules ({{ rules|length }} total, {{ active_rules_count | default(0) }} active)
+
+{% set explicit_adult = [] %}
+{% set dating_sites = [] %}
+{% set mature_content = [] %}
+{% set adult_advertising = [] %}
+{% set adult_social = [] %}
+{% set other_adult = [] %}
+
+{# Group adult content rules by content type #}
+{% for rule in rules %}
+{% if rule.is_active %}
+{% set content_type = rule.content_type | default('other') | lower %}
+{% set content_category = rule.content_category | default('') | lower %}
+{% if content_type == 'explicit' or 'porn' in content_category or 'xxx' in content_category %}
+{% set _ = explicit_adult.append(rule) %}
+{% elif content_type == 'dating' or 'dating' in content_category or 'hookup' in content_category %}
+{% set _ = dating_sites.append(rule) %}
+{% elif content_type == 'mature' or 'mature' in content_category or 'suggestive' in content_category %}
+{% set _ = mature_content.append(rule) %}
+{% elif content_type == 'advertising' or 'ads' in content_category or 'popup' in content_category %}
+{% set _ = adult_advertising.append(rule) %}
+{% elif content_type == 'social' or 'chat' in content_category or 'cam' in content_category %}
+{% set _ = adult_social.append(rule) %}
+{% else %}
+{% set _ = other_adult.append(rule) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+{# Explicit Adult Content - Highest Priority #}
+{% if explicit_adult %}
+; ========================================
+; EXPLICIT ADULT CONTENT ({{ explicit_adult|length }} rules)
+; Domains hosting explicit adult/pornographic content
+; CONTENT FILTERING LEVEL: STRICT
+; ========================================
+{% for rule in explicit_adult | sort(attribute='domain') %}
+{% if rule.content_description %}; Content: {{ rule.content_description }}{% endif %}
+{% if rule.content_rating %}; Rating: {{ rule.content_rating }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.content_id %} ; Content ID: {{ rule.content_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Adult Dating Sites #}
+{% if dating_sites %}
+; ========================================
+; ADULT DATING SITES ({{ dating_sites|length }} rules)
+; Dating and hookup platforms with adult content
+; CONTENT FILTERING LEVEL: MODERATE
+; ========================================
+{% for rule in dating_sites | sort(attribute='domain') %}
+{% if rule.content_description %}; Content: {{ rule.content_description }}{% endif %}
+{% if rule.dating_type %}; Dating Type: {{ rule.dating_type }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.content_id %} ; Content ID: {{ rule.content_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Adult Social/Chat Platforms #}
+{% if adult_social %}
+; ========================================
+; ADULT SOCIAL/CHAT PLATFORMS ({{ adult_social|length }} rules)
+; Social platforms and chat services with adult content
+; CONTENT FILTERING LEVEL: MODERATE
+; ========================================
+{% for rule in adult_social | sort(attribute='domain') %}
+{% if rule.content_description %}; Content: {{ rule.content_description }}{% endif %}
+{% if rule.platform_type %}; Platform Type: {{ rule.platform_type }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.content_id %} ; Content ID: {{ rule.content_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Adult Advertising #}
+{% if adult_advertising %}
+; ========================================
+; ADULT ADVERTISING ({{ adult_advertising|length }} rules)
+; Advertising networks serving adult content
+; CONTENT FILTERING LEVEL: MODERATE
+; ========================================
+{% for rule in adult_advertising | sort(attribute='domain') %}
+{% if rule.content_description %}; Content: {{ rule.content_description }}{% endif %}
+{% if rule.ad_network %}; Ad Network: {{ rule.ad_network }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.content_id %} ; Content ID: {{ rule.content_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Mature Content #}
+{% if mature_content %}
+; ========================================
+; MATURE CONTENT ({{ mature_content|length }} rules)
+; Suggestive and mature content domains
+; CONTENT FILTERING LEVEL: BASIC
+; ========================================
+{% for rule in mature_content | sort(attribute='domain') %}
+{% if rule.content_description %}; Content: {{ rule.content_description }}{% endif %}
+{% if rule.maturity_level %}; Maturity Level: {{ rule.maturity_level }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') %}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.content_id %} ; Content ID: {{ rule.content_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Other Adult Content #}
+{% if other_adult %}
+; ========================================
+; OTHER ADULT CONTENT ({{ other_adult|length }} rules)
+; Miscellaneous adult and inappropriate content
+; CONTENT FILTERING LEVEL: BASIC
+; ========================================
+{% for rule in other_adult | sort(attribute='domain') %}
+{% if rule.content_description %}; Content: {{ rule.content_description }}{% endif %}
+{% if rule.content_category %}; Category: {{ rule.content_category }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') %}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.content_id %} ; Content ID: {{ rule.content_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% else %}
+; No adult content filtering rules available
+; Feed may be empty or all rules are inactive
+{% endif %}
+
+; Adult Content Feed Statistics:
+; Total Rules: {{ rules|length }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Explicit Adult Content: {{ explicit_adult|length if explicit_adult else 0 }}
+; Dating Sites: {{ dating_sites|length if dating_sites else 0 }}
+; Adult Social/Chat: {{ adult_social|length if adult_social else 0 }}
+; Adult Advertising: {{ adult_advertising|length if adult_advertising else 0 }}
+; Mature Content: {{ mature_content|length if mature_content else 0 }}
+; Other Adult Content: {{ other_adult|length if other_adult else 0 }}
+
+; Feed Metadata:
+; Feed Source: {{ feed_source | default('external') }}
+; Feed URL: {{ feed_url | default('N/A') }}
+; Feed Format: {{ feed_format | default('domain-list') }}
+; Last Updated: {{ feed_last_updated.strftime('%Y-%m-%d %H:%M:%S') if feed_last_updated else 'Never' }}
+; Next Update: {{ feed_next_update.strftime('%Y-%m-%d %H:%M:%S') if feed_next_update else 'Unknown' }}
+; Update Frequency: {{ feed_update_frequency | default('daily') }}
+; Feed Reliability: {{ feed_reliability | default('medium') }}
+
+; Content Filtering Notice:
+; This zone contains domains identified as hosting adult or inappropriate content.
+; All domains in this zone are blocked to maintain appropriate content standards.
+; Content classification is based on external threat intelligence feeds.
+
+; Template Information:
+; Template: rpz_threat_feed_adult.j2
+; Generated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+; Zone: {{ feed_zone | default('adult') }}.rpz
+
+; End of Adult Content Threat Feed RPZ zone file

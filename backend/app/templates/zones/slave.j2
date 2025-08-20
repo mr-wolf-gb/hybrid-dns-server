@@ -1,0 +1,95 @@
+; Slave Zone Configuration for {{ zone.name }}
+; Generated automatically by Hybrid DNS Server
+; Zone Type: Slave (Secondary)
+; Master servers: {{ zone.master_servers | join(', ') if zone.master_servers else 'None configured' }}
+; Last Updated: {{ zone.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+; Description: {{ zone.description or 'No description provided' }}
+
+; BIND9 Zone Configuration Block
+; This configuration will be included in named.conf.local
+
+zone "{{ zone.name }}" {
+    type slave;
+    file "{{ zone.file_path or ('/var/cache/bind/db.' + zone.name) }}";
+    {% if zone.master_servers %}
+    masters {
+        {% for master in zone.master_servers %}
+        {{ master }};
+        {% endfor %}
+    };
+    {% endif %}
+    
+    ; Zone transfer settings
+    allow-notify {
+        {% if zone.master_servers %}
+        {% for master in zone.master_servers %}
+        {{ master }};
+        {% endfor %}
+        {% else %}
+        none;
+        {% endif %}
+    };
+    
+    ; Query access control
+    allow-query {
+        any;  // Allow queries from any source
+    };
+    
+    ; Zone transfer access control
+    allow-transfer {
+        none;  // Slave zones typically don't allow transfers
+    };
+    
+    {% if zone.refresh %}
+    ; Override default refresh interval
+    refresh {{ zone.refresh }};
+    {% endif %}
+    
+    {% if zone.retry %}
+    ; Override default retry interval  
+    retry {{ zone.retry }};
+    {% endif %}
+    
+    {% if zone.expire %}
+    ; Override default expire time
+    expire {{ zone.expire }};
+    {% endif %}
+    
+    {% if zone.minimum %}
+    ; Override default minimum TTL
+    minimum {{ zone.minimum }};
+    {% endif %}
+};
+
+; Slave Zone Information
+; ======================
+; Zone Name: {{ zone.name }}
+; Zone Type: Slave (receives zone data from master servers)
+; Status: {{ 'Active' if zone.is_active else 'Inactive' }}
+; Serial: Will be automatically synchronized from master
+; Zone File: {{ zone.file_path or ('/var/cache/bind/db.' + zone.name) }}
+;
+; Master Servers:
+{% if zone.master_servers %}
+{% for master in zone.master_servers %}
+;   - {{ master }}
+{% endfor %}
+{% else %}
+;   - No master servers configured (CONFIGURATION ERROR)
+{% endif %}
+;
+; Zone Transfer Process:
+; 1. BIND9 will automatically request zone transfers from master servers
+; 2. Zone data will be stored in the specified zone file
+; 3. Updates will be received via NOTIFY messages from masters
+; 4. No local DNS records are maintained for slave zones
+;
+; SOA Settings (inherited from master):
+; - Refresh: {{ zone.refresh }}s ({{ (zone.refresh / 3600) | round(1) }}h) - How often to check for updates
+; - Retry: {{ zone.retry }}s ({{ (zone.retry / 60) | round(1) }}m) - How often to retry failed transfers
+; - Expire: {{ zone.expire }}s ({{ (zone.expire / 86400) | round(1) }}d) - When to stop answering queries if no updates
+; - Minimum: {{ zone.minimum }}s ({{ (zone.minimum / 3600) | round(1) }}h) - Default TTL for records
+;
+; Configuration generated at {{ now().strftime('%Y-%m-%d %H:%M:%S UTC') }}
+; This configuration is automatically managed by Hybrid DNS Server
+; Manual modifications will be overwritten on next update

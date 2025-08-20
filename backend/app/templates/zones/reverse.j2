@@ -1,0 +1,131 @@
+; Reverse Zone file for {{ zone.name }}
+; Generated automatically by Hybrid DNS Server
+; Zone Type: {{ get_zone_type_description('reverse') }}
+; Serial: {{ zone.serial | format_serial }}
+; Last Updated: {{ format_timestamp(zone.updated_at) }}
+; Description: {{ zone.description or 'Reverse DNS zone for IP address resolution' }}
+; Network: {{ zone.name | replace('.in-addr.arpa', '') | reverse_ip if zone.name.endswith('.in-addr.arpa') else zone.name }}
+
+$TTL {{ zone.minimum }}
+$ORIGIN {{ zone.name }}.
+
+; Start of Authority (SOA) Record
+; This record defines the authoritative information about the reverse DNS zone
+@	IN	SOA	{{ zone.name | ensure_trailing_dot }} {{ zone.email | format_email_for_soa }} (
+		{{ zone.serial | format_serial }}	; Serial number (YYYYMMDDNN format)
+		{{ zone.refresh | format_ttl }}	; Refresh interval ({{ zone.refresh | format_duration }})
+		{{ zone.retry | format_ttl }}	; Retry interval ({{ zone.retry | format_duration }})
+		{{ zone.expire | format_ttl }}	; Expire time ({{ zone.expire | format_duration }})
+		{{ zone.minimum | format_ttl }}	; Minimum TTL ({{ zone.minimum | format_duration }})
+		)
+
+{% if records %}
+; Reverse DNS Resource Records
+; Records are organized by type for better readability and maintenance
+
+{% set ns_records = [] %}
+{% set ptr_records = [] %}
+{% set txt_records = [] %}
+{% set cname_records = [] %}
+{% set other_records = [] %}
+
+{# Group active records by type for organized output #}
+{% for record in records %}
+{% if record.is_active %}
+{% if record.record_type == 'NS' %}
+{% set _ = ns_records.append(record) %}
+{% elif record.record_type == 'PTR' %}
+{% set _ = ptr_records.append(record) %}
+{% elif record.record_type == 'TXT' %}
+{% set _ = txt_records.append(record) %}
+{% elif record.record_type == 'CNAME' %}
+{% set _ = cname_records.append(record) %}
+{% else %}
+{% set _ = other_records.append(record) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+{# Name Server (NS) Records - Critical for zone delegation #}
+{% if ns_records %}
+; Name Server Records
+; These records define the authoritative name servers for this reverse zone
+{% for record in ns_records | sort(attribute='name') %}
+{{ "%-25s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	NS	{{ record.value | ensure_trailing_dot }}
+{% endfor %}
+
+{% endif %}
+{# Pointer (PTR) Records - Primary purpose of reverse zones #}
+{% if ptr_records %}
+; PTR Records (Pointer Records)
+; Maps IP addresses back to domain names (reverse DNS lookup)
+; Format: last-octet IN PTR hostname.domain.com.
+{% for record in ptr_records | sort(attribute='name') %}
+{{ "%-25s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	PTR	{{ record.value | ensure_trailing_dot }}
+{% endfor %}
+
+{% endif %}
+{# Canonical Name (CNAME) Records - Aliases in reverse zones #}
+{% if cname_records %}
+; CNAME Records (Canonical Name Records)
+; Creates aliases for reverse DNS entries
+{% for record in cname_records | sort(attribute='name') %}
+{{ "%-25s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	CNAME	{{ record.value | ensure_trailing_dot }}
+{% endfor %}
+
+{% endif %}
+{# Text (TXT) Records - Additional information #}
+{% if txt_records %}
+; TXT Records (Text Records)
+; Contains arbitrary text data for reverse zone documentation
+{% for record in txt_records | sort(attribute='name') %}
+{{ "%-25s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	TXT	"{{ record.value | replace('"', '\\"') }}"
+{% endfor %}
+
+{% endif %}
+{# Other/Custom Record Types #}
+{% if other_records %}
+; Other Record Types
+; Additional DNS record types not commonly used in reverse zones
+{% for record in other_records | sort(attribute='record_type') | sort(attribute='name') %}
+{{ "%-25s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	{{ record.record_type }}	{{ record.value }}
+{% endfor %}
+
+{% endif %}
+
+; Reverse Zone Statistics
+; Total active records: {{ records | selectattr('is_active') | list | length }}
+; Record type breakdown:
+{% set record_counts = {} %}
+{% for record in records %}
+{% if record.is_active %}
+{% set count = record_counts.get(record.record_type, 0) + 1 %}
+{% set _ = record_counts.update({record.record_type: count}) %}
+{% endif %}
+{% endfor %}
+{% for record_type, count in record_counts.items() | sort %}
+;   {{ record_type }}: {{ count }}
+{% endfor %}
+
+{% else %}
+; No reverse DNS records defined for this zone
+; Add PTR records through the web interface or API to populate this reverse zone
+
+; Example PTR records (commented out):
+; For reverse zone {{ zone.name }}:
+; 10                       IN  PTR     server1.example.com.
+; 20                       IN  PTR     server2.example.com.
+; 30                       IN  PTR     workstation1.example.com.
+; 100                      IN  PTR     router.example.com.
+{% endif %}
+
+; Reverse zone file generation completed at {{ format_timestamp() }}
+; This file is automatically managed by Hybrid DNS Server
+; Manual modifications will be overwritten on next update
+; Template variables: zone={{ zone.name }}, records={{ records|length if records else 0 }}, ttl={{ default_ttl() }}
+
+; Reverse Zone Information:
+; - This zone handles reverse DNS lookups (IP to hostname)
+; - PTR records are the primary record type for reverse zones
+; - Zone name format: network.in-addr.arpa (IPv4) or ip6.arpa (IPv6)
+; - Record names are typically the last octet(s) of the IP address

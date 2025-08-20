@@ -1,0 +1,222 @@
+; Social Media Threat Feed RPZ Zone Template
+; Generated automatically by Hybrid DNS Server
+; Feed Name: {{ feed_name | default('Social Media Feed') }}
+; Feed Source: {{ feed_source | default('external') }}
+; Feed URL: {{ feed_url | default('N/A') }}
+; Total Social Media Domains: {{ rules|length }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Last Feed Update: {{ feed_last_updated.strftime('%Y-%m-%d %H:%M:%S') if feed_last_updated else 'Never' }}
+; Zone Generated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+$TTL {{ ttl | default(300) }}
+$ORIGIN {{ feed_zone | default('social-media') }}.rpz.
+
+; SOA Record for Social Media Threat Feed RPZ Zone
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
+		{{ refresh | default(3600) }}		; Refresh interval (1 hour - moderate updates)
+		{{ retry | default(900) }}		; Retry interval (15 minutes)
+		{{ expire | default(604800) }}		; Expire time (1 week)
+		{{ minimum | default(300) }}		; Minimum TTL (5 minutes)
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+; Social Media Threat Feed Information
+; Feed Type: Social Media Blocking
+; Feed Description: {{ feed_description | default('External social media domain feed for productivity filtering') }}
+; Update Frequency: {{ feed_update_frequency | default('daily') }}
+; Feed Format: {{ feed_format | default('domain-list') }}
+; Feed Reliability: {{ feed_reliability | default('high') }}
+; Platform Categories: Major Social Networks, Messaging, Content Sharing, Professional Networks
+
+{% if rules %}
+; Social Media Domain Rules ({{ rules|length }} total, {{ active_rules_count | default(0) }} active)
+
+{% set major_social = [] %}
+{% set messaging_platforms = [] %}
+{% set content_sharing = [] %}
+{% set professional_networks = [] %}
+{% set regional_social = [] %}
+{% set social_gaming = [] %}
+{% set other_social = [] %}
+
+{# Group social media rules by platform type #}
+{% for rule in rules %}
+{% if rule.is_active %}
+{% set platform_type = rule.platform_type | default('other') | lower %}
+{% set platform_name = rule.platform_name | default('') | lower %}
+{% if platform_type == 'major' or platform_name in ['facebook', 'twitter', 'instagram', 'tiktok', 'snapchat'] %}
+{% set _ = major_social.append(rule) %}
+{% elif platform_type == 'messaging' or platform_name in ['whatsapp', 'telegram', 'discord', 'slack'] %}
+{% set _ = messaging_platforms.append(rule) %}
+{% elif platform_type == 'content' or platform_name in ['youtube', 'twitch', 'pinterest', 'reddit'] %}
+{% set _ = content_sharing.append(rule) %}
+{% elif platform_type == 'professional' or platform_name in ['linkedin', 'xing', 'glassdoor'] %}
+{% set _ = professional_networks.append(rule) %}
+{% elif platform_type == 'regional' or platform_name in ['weibo', 'wechat', 'vk', 'line'] %}
+{% set _ = regional_social.append(rule) %}
+{% elif platform_type == 'gaming' or 'gaming' in platform_name or 'game' in platform_name %}
+{% set _ = social_gaming.append(rule) %}
+{% else %}
+{% set _ = other_social.append(rule) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+{# Major Social Networks - Highest Impact #}
+{% if major_social %}
+; ========================================
+; MAJOR SOCIAL NETWORKS ({{ major_social|length }} rules)
+; Primary social media platforms with high user engagement
+; PRODUCTIVITY IMPACT: HIGH
+; ========================================
+{% for rule in major_social | sort(attribute='domain') %}
+{% if rule.platform_description %}; Platform: {{ rule.platform_description }}{% endif %}
+{% if rule.platform_name %}; Name: {{ rule.platform_name }}{% endif %}
+{% if rule.user_base %}; User Base: {{ rule.user_base }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.platform_id %} ; Platform ID: {{ rule.platform_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Content Sharing Platforms #}
+{% if content_sharing %}
+; ========================================
+; CONTENT SHARING PLATFORMS ({{ content_sharing|length }} rules)
+; Video, image, and content sharing platforms
+; PRODUCTIVITY IMPACT: HIGH
+; ========================================
+{% for rule in content_sharing | sort(attribute='domain') %}
+{% if rule.platform_description %}; Platform: {{ rule.platform_description }}{% endif %}
+{% if rule.platform_name %}; Name: {{ rule.platform_name }}{% endif %}
+{% if rule.content_type %}; Content Type: {{ rule.content_type }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.platform_id %} ; Platform ID: {{ rule.platform_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Messaging Platforms #}
+{% if messaging_platforms %}
+; ========================================
+; MESSAGING PLATFORMS ({{ messaging_platforms|length }} rules)
+; Instant messaging and communication platforms
+; PRODUCTIVITY IMPACT: MEDIUM-HIGH
+; ========================================
+{% for rule in messaging_platforms | sort(attribute='domain') %}
+{% if rule.platform_description %}; Platform: {{ rule.platform_description }}{% endif %}
+{% if rule.platform_name %}; Name: {{ rule.platform_name }}{% endif %}
+{% if rule.messaging_type %}; Messaging Type: {{ rule.messaging_type }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.platform_id %} ; Platform ID: {{ rule.platform_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Social Gaming Platforms #}
+{% if social_gaming %}
+; ========================================
+; SOCIAL GAMING PLATFORMS ({{ social_gaming|length }} rules)
+; Social gaming and interactive entertainment platforms
+; PRODUCTIVITY IMPACT: MEDIUM-HIGH
+; ========================================
+{% for rule in social_gaming | sort(attribute='domain') %}
+{% if rule.platform_description %}; Platform: {{ rule.platform_description }}{% endif %}
+{% if rule.platform_name %}; Name: {{ rule.platform_name }}{% endif %}
+{% if rule.gaming_type %}; Gaming Type: {{ rule.gaming_type }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.platform_id %} ; Platform ID: {{ rule.platform_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Regional Social Networks #}
+{% if regional_social %}
+; ========================================
+; REGIONAL SOCIAL NETWORKS ({{ regional_social|length }} rules)
+; Region-specific social media platforms
+; PRODUCTIVITY IMPACT: MEDIUM
+; ========================================
+{% for rule in regional_social | sort(attribute='domain') %}
+{% if rule.platform_description %}; Platform: {{ rule.platform_description }}{% endif %}
+{% if rule.platform_name %}; Name: {{ rule.platform_name }}{% endif %}
+{% if rule.region %}; Region: {{ rule.region }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.platform_id %} ; Platform ID: {{ rule.platform_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Professional Networks #}
+{% if professional_networks %}
+; ========================================
+; PROFESSIONAL NETWORKS ({{ professional_networks|length }} rules)
+; Business and professional networking platforms
+; PRODUCTIVITY IMPACT: LOW-MEDIUM (Consider allowing for business use)
+; ========================================
+{% for rule in professional_networks | sort(attribute='domain') %}
+{% if rule.platform_description %}; Platform: {{ rule.platform_description }}{% endif %}
+{% if rule.platform_name %}; Name: {{ rule.platform_name }}{% endif %}
+{% if rule.business_focus %}; Business Focus: {{ rule.business_focus }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.platform_id %} ; Platform ID: {{ rule.platform_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Other Social Media #}
+{% if other_social %}
+; ========================================
+; OTHER SOCIAL MEDIA ({{ other_social|length }} rules)
+; Miscellaneous social media and community platforms
+; PRODUCTIVITY IMPACT: MEDIUM
+; ========================================
+{% for rule in other_social | sort(attribute='domain') %}
+{% if rule.platform_description %}; Platform: {{ rule.platform_description }}{% endif %}
+{% if rule.platform_name %}; Name: {{ rule.platform_name }}{% endif %}
+{% if rule.platform_category %}; Category: {{ rule.platform_category }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.platform_id %} ; Platform ID: {{ rule.platform_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% else %}
+; No social media filtering rules available
+; Feed may be empty or all rules are inactive
+{% endif %}
+
+; Social Media Feed Statistics:
+; Total Rules: {{ rules|length }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Major Social Networks: {{ major_social|length if major_social else 0 }}
+; Content Sharing: {{ content_sharing|length if content_sharing else 0 }}
+; Messaging Platforms: {{ messaging_platforms|length if messaging_platforms else 0 }}
+; Social Gaming: {{ social_gaming|length if social_gaming else 0 }}
+; Regional Networks: {{ regional_social|length if regional_social else 0 }}
+; Professional Networks: {{ professional_networks|length if professional_networks else 0 }}
+; Other Social Media: {{ other_social|length if other_social else 0 }}
+
+; Feed Metadata:
+; Feed Source: {{ feed_source | default('external') }}
+; Feed URL: {{ feed_url | default('N/A') }}
+; Feed Format: {{ feed_format | default('domain-list') }}
+; Last Updated: {{ feed_last_updated.strftime('%Y-%m-%d %H:%M:%S') if feed_last_updated else 'Never' }}
+; Next Update: {{ feed_next_update.strftime('%Y-%m-%d %H:%M:%S') if feed_next_update else 'Unknown' }}
+; Update Frequency: {{ feed_update_frequency | default('daily') }}
+; Feed Reliability: {{ feed_reliability | default('high') }}
+
+; Productivity Notice:
+; This zone contains domains for social media platforms that may impact productivity.
+; All domains in this zone are blocked during configured business hours or policies.
+; Consider allowing professional networks for business-related activities.
+
+; Template Information:
+; Template: rpz_threat_feed_social_media.j2
+; Generated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+; Zone: {{ feed_zone | default('social-media') }}.rpz
+
+; End of Social Media Threat Feed RPZ zone file

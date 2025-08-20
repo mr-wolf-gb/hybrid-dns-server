@@ -1,0 +1,349 @@
+; Response Policy Zone - Gambling Blocking
+; Generated automatically by Hybrid DNS Server
+; Category: Gambling Blocking
+; Description: Blocks access to gambling and betting websites
+; Total Rules: {{ rules|length if rules else 0 }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Last Updated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+; Gambling Policy: {{ gambling_policy | default('Complete Block') }}
+
+$TTL {{ ttl | default(60) }}
+$ORIGIN {{ zone_name | default('rpz.gambling') }}.
+
+; SOA Record for Gambling Blocking RPZ
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
+		{{ refresh | default(86400) }}		; Refresh interval (24 hours)
+		{{ retry | default(7200) }}		; Retry interval (2 hours)
+		{{ expire | default(604800) }}		; Expire time (1 week)
+		{{ minimum | default(60) }}		; Minimum TTL (1 minute)
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+; ========================================
+; GAMBLING BLOCKING RULES
+; ========================================
+; This zone blocks access to gambling content including:
+; - Online casinos and slot machines
+; - Sports betting and sportsbooks
+; - Poker and card game sites
+; - Lottery and scratch card sites
+; - Cryptocurrency gambling platforms
+; - Fantasy sports betting
+; - Binary options and forex trading (high-risk)
+
+{% if online_casinos | default(true) %}
+; ========================================
+; ONLINE CASINOS AND SLOT MACHINES
+; ========================================
+; Traditional casino games and slot machine sites
+
+{% if rules %}
+{% set casino_rules = [] %}
+{% for rule in rules %}
+{% if rule.is_active and (rule.threat_category == 'casino' or 'casino' in (rule.description | lower) or 'slot' in (rule.description | lower)) %}
+{% set _ = casino_rules.append(rule) %}
+{% endif %}
+{% endfor %}
+
+{% if casino_rules %}
+; Online Casino Sites ({{ casino_rules|length }} rules)
+{% for rule in casino_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% endif %}
+
+; Example casino domains (replace with actual domains from filtering services)
+; casino-example.com		IN	CNAME	{{ block_target | default('.') }}
+; *.casino-example.com		IN	CNAME	{{ block_target | default('.') }}
+; slots-example.com		IN	CNAME	{{ block_target | default('.') }}
+; *.slots-example.com		IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+{% if sports_betting | default(true) %}
+; ========================================
+; SPORTS BETTING AND SPORTSBOOKS
+; ========================================
+; Sports betting platforms and sportsbook sites
+
+{% if rules %}
+{% set sports_rules = [] %}
+{% for rule in rules %}
+{% if rule.is_active and (rule.threat_category == 'sports_betting' or 'sports' in (rule.description | lower) or 'betting' in (rule.description | lower)) %}
+{% set _ = sports_rules.append(rule) %}
+{% endif %}
+{% endfor %}
+
+{% if sports_rules %}
+; Sports Betting Sites ({{ sports_rules|length }} rules)
+{% for rule in sports_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% endif %}
+
+; Example sports betting domains
+; sportsbet-example.com		IN	CNAME	{{ block_target | default('.') }}
+; *.sportsbet-example.com	IN	CNAME	{{ block_target | default('.') }}
+; bookie-example.com		IN	CNAME	{{ block_target | default('.') }}
+; *.bookie-example.com		IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+{% if poker_gaming | default(true) %}
+; ========================================
+; POKER AND CARD GAME SITES
+; ========================================
+; Online poker rooms and card game platforms
+
+{% if rules %}
+{% set poker_rules = [] %}
+{% for rule in rules %}
+{% if rule.is_active and (rule.threat_category == 'poker' or 'poker' in (rule.description | lower) or 'card' in (rule.description | lower)) %}
+{% set _ = poker_rules.append(rule) %}
+{% endif %}
+{% endfor %}
+
+{% if poker_rules %}
+; Poker and Card Game Sites ({{ poker_rules|length }} rules)
+{% for rule in poker_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% endif %}
+
+; Example poker domains
+; poker-example.com		IN	CNAME	{{ block_target | default('.') }}
+; *.poker-example.com		IN	CNAME	{{ block_target | default('.') }}
+; cardroom-example.com		IN	CNAME	{{ block_target | default('.') }}
+; *.cardroom-example.com	IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+{% if lottery_games | default(true) %}
+; ========================================
+; LOTTERY AND SCRATCH CARD SITES
+; ========================================
+; Online lottery and instant win game sites
+
+{% if rules %}
+{% set lottery_rules = [] %}
+{% for rule in rules %}
+{% if rule.is_active and (rule.threat_category == 'lottery' or 'lottery' in (rule.description | lower) or 'scratch' in (rule.description | lower)) %}
+{% set _ = lottery_rules.append(rule) %}
+{% endif %}
+{% endfor %}
+
+{% if lottery_rules %}
+; Lottery and Scratch Card Sites ({{ lottery_rules|length }} rules)
+{% for rule in lottery_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% endif %}
+
+; Example lottery domains
+; lottery-example.com		IN	CNAME	{{ block_target | default('.') }}
+; *.lottery-example.com		IN	CNAME	{{ block_target | default('.') }}
+; scratch-example.com		IN	CNAME	{{ block_target | default('.') }}
+; *.scratch-example.com		IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+{% if crypto_gambling | default(true) %}
+; ========================================
+; CRYPTOCURRENCY GAMBLING PLATFORMS
+; ========================================
+; Bitcoin and cryptocurrency gambling sites
+
+{% if rules %}
+{% set crypto_rules = [] %}
+{% for rule in rules %}
+{% if rule.is_active and (rule.threat_category == 'crypto_gambling' or 'crypto' in (rule.description | lower) or 'bitcoin' in (rule.description | lower)) %}
+{% set _ = crypto_rules.append(rule) %}
+{% endif %}
+{% endfor %}
+
+{% if crypto_rules %}
+; Cryptocurrency Gambling Sites ({{ crypto_rules|length }} rules)
+{% for rule in crypto_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% endif %}
+
+; Example crypto gambling domains
+; bitcoincasino-example.com	IN	CNAME	{{ block_target | default('.') }}
+; *.bitcoincasino-example.com	IN	CNAME	{{ block_target | default('.') }}
+; cryptobet-example.com		IN	CNAME	{{ block_target | default('.') }}
+; *.cryptobet-example.com	IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+{% if fantasy_sports | default(false) %}
+; ========================================
+; FANTASY SPORTS BETTING
+; ========================================
+; Daily fantasy sports and season-long fantasy leagues
+; Note: Fantasy sports blocking is {{ 'enabled' if fantasy_sports | default(false) else 'disabled' }}
+
+{% if rules %}
+{% set fantasy_rules = [] %}
+{% for rule in rules %}
+{% if rule.is_active and (rule.threat_category == 'fantasy_sports' or 'fantasy' in (rule.description | lower) or 'dfs' in (rule.description | lower)) %}
+{% set _ = fantasy_rules.append(rule) %}
+{% endif %}
+{% endfor %}
+
+{% if fantasy_rules %}
+; Fantasy Sports Sites ({{ fantasy_rules|length }} rules)
+{% for rule in fantasy_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% endif %}
+
+; Example fantasy sports domains (if blocking enabled)
+; draftkings.com			IN	CNAME	{{ block_target | default('.') }}
+; *.draftkings.com		IN	CNAME	{{ block_target | default('.') }}
+; fanduel.com			IN	CNAME	{{ block_target | default('.') }}
+; *.fanduel.com			IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+{% if high_risk_trading | default(false) %}
+; ========================================
+; HIGH-RISK TRADING PLATFORMS
+; ========================================
+; Binary options, forex, and high-risk trading platforms
+; Note: High-risk trading blocking is {{ 'enabled' if high_risk_trading | default(false) else 'disabled' }}
+
+{% if rules %}
+{% set trading_rules = [] %}
+{% for rule in rules %}
+{% if rule.is_active and (rule.threat_category == 'high_risk_trading' or 'binary' in (rule.description | lower) or 'forex' in (rule.description | lower)) %}
+{% set _ = trading_rules.append(rule) %}
+{% endif %}
+{% endfor %}
+
+{% if trading_rules %}
+; High-Risk Trading Sites ({{ trading_rules|length }} rules)
+{% for rule in trading_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% endif %}
+
+; Example high-risk trading domains (if blocking enabled)
+; binary-options-example.com	IN	CNAME	{{ block_target | default('.') }}
+; *.binary-options-example.com	IN	CNAME	{{ block_target | default('.') }}
+; forex-scam-example.com	IN	CNAME	{{ block_target | default('.') }}
+; *.forex-scam-example.com	IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+{% if rules %}
+; ========================================
+; ADDITIONAL GAMBLING RULES
+; ========================================
+; Additional gambling rules configured via database
+
+{% set other_gambling = [] %}
+{% for rule in rules %}
+{% if rule.is_active and rule.threat_category not in ['casino', 'sports_betting', 'poker', 'lottery', 'crypto_gambling', 'fantasy_sports', 'high_risk_trading'] %}
+{% set _ = other_gambling.append(rule) %}
+{% endif %}
+{% endfor %}
+
+{% if other_gambling %}
+; Other Gambling Sites ({{ other_gambling|length }} rules)
+{% for rule in other_gambling | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% endif %}
+; ========================================
+; GAMBLING CONTENT FILTERING
+; ========================================
+{% if gambling_filters %}
+; Active Gambling Content Filters:
+{% for filter in gambling_filters %}
+; - {{ filter.name }}: {{ filter.description }} (Last Updated: {{ filter.last_updated.strftime('%Y-%m-%d %H:%M') if filter.last_updated else 'Never' }})
+{% endfor %}
+{% else %}
+; No commercial gambling filtering services configured
+; Consider integrating with:
+; - Gambling content filtering databases
+; - Regional gambling authority block lists
+; - Commercial web filtering services
+; - Custom gambling domain lists
+{% endif %}
+
+; ========================================
+; REGIONAL COMPLIANCE NOTES
+; ========================================
+; Gambling regulations vary by jurisdiction:
+; - Some regions allow certain types of gambling
+; - Licensed operators may be permitted
+; - Age restrictions and verification requirements
+; - Corporate policy may be more restrictive than law
+;
+; Current Policy: {{ gambling_policy | default('Complete Block') }}
+; - Complete Block: All gambling sites blocked
+; - Licensed Only: Only unlicensed gambling blocked
+; - Regional Compliance: Block based on local laws
+; - Custom Policy: Organization-specific rules
+
+; ========================================
+; EXEMPTION AND WHITELIST OPTIONS
+; ========================================
+; Consider exemptions for:
+; - Licensed gambling operators (if legally permitted)
+; - Educational and research purposes
+; - Specific user groups with business needs
+; - Financial institutions monitoring gambling transactions
+;
+; Implement exemptions via:
+; - BIND ACLs for specific user groups
+; - Separate DNS views for different policies
+; - Time-based restrictions (e.g., after work hours)
+; - Whitelist specific domains via passthrough rules
+
+; ========================================
+; ADDICTION PREVENTION RESOURCES
+; ========================================
+; If implementing a redirect instead of blocking, consider
+; redirecting to gambling addiction resources:
+; - National Council on Problem Gambling
+; - Gamblers Anonymous
+; - Company Employee Assistance Program
+; - Local addiction support services
+
+; ========================================
+; STATISTICS SUMMARY
+; ========================================
+; Gambling Policy: {{ gambling_policy | default('Complete Block') }}
+; Total Rules: {{ rules|length if rules else 0 }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Online Casinos: {{ 'Blocked' if online_casinos | default(true) else 'Allowed' }}
+; Sports Betting: {{ 'Blocked' if sports_betting | default(true) else 'Allowed' }}
+; Poker Gaming: {{ 'Blocked' if poker_gaming | default(true) else 'Allowed' }}
+; Lottery Games: {{ 'Blocked' if lottery_games | default(true) else 'Allowed' }}
+; Crypto Gambling: {{ 'Blocked' if crypto_gambling | default(true) else 'Allowed' }}
+; Fantasy Sports: {{ 'Blocked' if fantasy_sports | default(false) else 'Allowed' }}
+; High-Risk Trading: {{ 'Blocked' if high_risk_trading | default(false) else 'Allowed' }}
+
+; End of Gambling Blocking RPZ zone

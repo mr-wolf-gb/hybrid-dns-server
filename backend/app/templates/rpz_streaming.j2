@@ -1,0 +1,326 @@
+; Response Policy Zone - Streaming Media Blocking
+; Generated automatically by Hybrid DNS Server
+; Category: Streaming Media Blocking
+; Description: Blocks access to streaming video and audio platforms
+; Total Rules: {{ rules|length if rules else 0 }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Last Updated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+; Streaming Policy: {{ streaming_policy | default('Bandwidth Management') }}
+
+$TTL {{ ttl | default(60) }}
+$ORIGIN {{ zone_name | default('rpz.streaming') }}.
+
+; SOA Record for Streaming Media Blocking RPZ
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
+		{{ refresh | default(86400) }}		; Refresh interval (24 hours)
+		{{ retry | default(7200) }}		; Retry interval (2 hours)
+		{{ expire | default(604800) }}		; Expire time (1 week)
+		{{ minimum | default(60) }}		; Minimum TTL (1 minute)
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+; ========================================
+; STREAMING MEDIA BLOCKING RULES
+; ========================================
+; This zone blocks access to streaming platforms including:
+; - Video streaming services (Netflix, YouTube, etc.)
+; - Music streaming platforms (Spotify, Apple Music, etc.)
+; - Live streaming platforms (Twitch, etc.)
+; - Podcast platforms
+; - Video sharing sites
+; - Audio streaming services
+;
+; Purpose: {{ streaming_policy | default('Bandwidth Management') }}
+; - Bandwidth Management: Reduce network congestion
+; - Productivity: Minimize workplace distractions
+; - Content Control: Restrict access to specific content
+; - Cost Control: Manage data usage and costs
+
+{% if video_streaming | default(true) %}
+; ========================================
+; VIDEO STREAMING SERVICES
+; ========================================
+; Major video streaming platforms
+
+{% if rules %}
+{% set video_rules = [] %}
+{% for rule in rules %}
+{% if rule.is_active and (rule.threat_category == 'video_streaming' or 'video' in (rule.description | lower) or 'streaming' in (rule.description | lower)) %}
+{% set _ = video_rules.append(rule) %}
+{% endif %}
+{% endfor %}
+
+{% if video_rules %}
+; Video Streaming Sites ({{ video_rules|length }} rules)
+{% for rule in video_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% endif %}
+
+; Major video streaming platforms
+netflix.com			IN	CNAME	{{ block_target | default('.') }}
+*.netflix.com			IN	CNAME	{{ block_target | default('.') }}
+hulu.com			IN	CNAME	{{ block_target | default('.') }}
+*.hulu.com			IN	CNAME	{{ block_target | default('.') }}
+disneyplus.com			IN	CNAME	{{ block_target | default('.') }}
+*.disneyplus.com		IN	CNAME	{{ block_target | default('.') }}
+primevideo.com			IN	CNAME	{{ block_target | default('.') }}
+*.primevideo.com		IN	CNAME	{{ block_target | default('.') }}
+hbomax.com			IN	CNAME	{{ block_target | default('.') }}
+*.hbomax.com			IN	CNAME	{{ block_target | default('.') }}
+paramount.com			IN	CNAME	{{ block_target | default('.') }}
+*.paramount.com			IN	CNAME	{{ block_target | default('.') }}
+peacocktv.com			IN	CNAME	{{ block_target | default('.') }}
+*.peacocktv.com			IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+{% if youtube_blocking | default(true) %}
+; ========================================
+; YOUTUBE AND VIDEO SHARING
+; ========================================
+; YouTube and related video sharing platforms
+; Note: YouTube blocking is {{ 'enabled' if youtube_blocking | default(true) else 'disabled' }}
+
+youtube.com			IN	CNAME	{{ block_target | default('.') }}
+*.youtube.com			IN	CNAME	{{ block_target | default('.') }}
+youtu.be			IN	CNAME	{{ block_target | default('.') }}
+m.youtube.com			IN	CNAME	{{ block_target | default('.') }}
+music.youtube.com		IN	CNAME	{{ block_target | default('.') }}
+
+; Other video sharing platforms
+vimeo.com			IN	CNAME	{{ block_target | default('.') }}
+*.vimeo.com			IN	CNAME	{{ block_target | default('.') }}
+dailymotion.com			IN	CNAME	{{ block_target | default('.') }}
+*.dailymotion.com		IN	CNAME	{{ block_target | default('.') }}
+twitch.tv			IN	CNAME	{{ block_target | default('.') }}
+*.twitch.tv			IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+{% if music_streaming | default(true) %}
+; ========================================
+; MUSIC STREAMING SERVICES
+; ========================================
+; Audio streaming and music platforms
+
+{% if rules %}
+{% set music_rules = [] %}
+{% for rule in rules %}
+{% if rule.is_active and (rule.threat_category == 'music_streaming' or 'music' in (rule.description | lower) or 'audio' in (rule.description | lower)) %}
+{% set _ = music_rules.append(rule) %}
+{% endif %}
+{% endfor %}
+
+{% if music_rules %}
+; Music Streaming Sites ({{ music_rules|length }} rules)
+{% for rule in music_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% endif %}
+
+; Major music streaming platforms
+spotify.com			IN	CNAME	{{ block_target | default('.') }}
+*.spotify.com			IN	CNAME	{{ block_target | default('.') }}
+music.apple.com			IN	CNAME	{{ block_target | default('.') }}
+pandora.com			IN	CNAME	{{ block_target | default('.') }}
+*.pandora.com			IN	CNAME	{{ block_target | default('.') }}
+soundcloud.com			IN	CNAME	{{ block_target | default('.') }}
+*.soundcloud.com		IN	CNAME	{{ block_target | default('.') }}
+tidal.com			IN	CNAME	{{ block_target | default('.') }}
+*.tidal.com			IN	CNAME	{{ block_target | default('.') }}
+deezer.com			IN	CNAME	{{ block_target | default('.') }}
+*.deezer.com			IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+{% if live_streaming | default(true) %}
+; ========================================
+; LIVE STREAMING PLATFORMS
+; ========================================
+; Live streaming and broadcasting platforms
+
+{% if rules %}
+{% set live_rules = [] %}
+{% for rule in rules %}
+{% if rule.is_active and (rule.threat_category == 'live_streaming' or 'live' in (rule.description | lower) or 'broadcast' in (rule.description | lower)) %}
+{% set _ = live_rules.append(rule) %}
+{% endif %}
+{% endfor %}
+
+{% if live_rules %}
+; Live Streaming Sites ({{ live_rules|length }} rules)
+{% for rule in live_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% endif %}
+
+; Live streaming platforms
+twitch.tv			IN	CNAME	{{ block_target | default('.') }}
+*.twitch.tv			IN	CNAME	{{ block_target | default('.') }}
+mixer.com			IN	CNAME	{{ block_target | default('.') }}
+*.mixer.com			IN	CNAME	{{ block_target | default('.') }}
+facebook.com/watch		IN	CNAME	{{ block_target | default('.') }}
+periscope.tv			IN	CNAME	{{ block_target | default('.') }}
+*.periscope.tv			IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+{% if podcast_platforms | default(false) %}
+; ========================================
+; PODCAST PLATFORMS
+; ========================================
+; Podcast hosting and streaming platforms
+; Note: Podcast blocking is {{ 'enabled' if podcast_platforms | default(false) else 'disabled' }}
+
+{% if rules %}
+{% set podcast_rules = [] %}
+{% for rule in rules %}
+{% if rule.is_active and (rule.threat_category == 'podcast' or 'podcast' in (rule.description | lower)) %}
+{% set _ = podcast_rules.append(rule) %}
+{% endif %}
+{% endfor %}
+
+{% if podcast_rules %}
+; Podcast Platforms ({{ podcast_rules|length }} rules)
+{% for rule in podcast_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% endif %}
+
+; Podcast platforms (if blocking enabled)
+podcasts.apple.com		IN	CNAME	{{ block_target | default('.') }}
+podcasts.google.com		IN	CNAME	{{ block_target | default('.') }}
+anchor.fm			IN	CNAME	{{ block_target | default('.') }}
+*.anchor.fm			IN	CNAME	{{ block_target | default('.') }}
+stitcher.com			IN	CNAME	{{ block_target | default('.') }}
+*.stitcher.com			IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+{% if international_streaming | default(false) %}
+; ========================================
+; INTERNATIONAL STREAMING SERVICES
+; ========================================
+; Regional and international streaming platforms
+; Note: International streaming blocking is {{ 'enabled' if international_streaming | default(false) else 'disabled' }}
+
+; European streaming services
+iplayer.bbc.co.uk		IN	CNAME	{{ block_target | default('.') }}
+itv.com				IN	CNAME	{{ block_target | default('.') }}
+*.itv.com			IN	CNAME	{{ block_target | default('.') }}
+channel4.com			IN	CNAME	{{ block_target | default('.') }}
+*.channel4.com			IN	CNAME	{{ block_target | default('.') }}
+
+; Asian streaming services
+iqiyi.com			IN	CNAME	{{ block_target | default('.') }}
+*.iqiyi.com			IN	CNAME	{{ block_target | default('.') }}
+youku.com			IN	CNAME	{{ block_target | default('.') }}
+*.youku.com			IN	CNAME	{{ block_target | default('.') }}
+
+{% endif %}
+{% if rules %}
+; ========================================
+; ADDITIONAL STREAMING RULES
+; ========================================
+; Additional streaming rules configured via database
+
+{% set other_streaming = [] %}
+{% for rule in rules %}
+{% if rule.is_active and rule.threat_category not in ['video_streaming', 'music_streaming', 'live_streaming', 'podcast'] %}
+{% set _ = other_streaming.append(rule) %}
+{% endif %}
+{% endfor %}
+
+{% if other_streaming %}
+; Other Streaming Sites ({{ other_streaming|length }} rules)
+{% for rule in other_streaming | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ block_target | default('.') }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% endif %}
+; ========================================
+; BANDWIDTH MANAGEMENT NOTES
+; ========================================
+; Streaming media can consume significant bandwidth:
+; - 4K video: 25+ Mbps per stream
+; - HD video: 5-8 Mbps per stream
+; - SD video: 1-3 Mbps per stream
+; - Music streaming: 0.1-0.3 Mbps per stream
+;
+; Consider implementing:
+; - Time-based restrictions (block during peak hours)
+; - User-based exemptions (allow for specific roles)
+; - Quality-of-Service (QoS) rules instead of blocking
+; - Bandwidth throttling for streaming traffic
+
+; ========================================
+; ALTERNATIVE APPROACHES
+; ========================================
+; Instead of complete blocking, consider:
+; - Redirect to company-approved content
+; - Implement bandwidth throttling
+; - Allow during break times only
+; - Provide dedicated streaming network
+; - Use QoS to prioritize business traffic
+
+{% if company_streaming %}
+; ========================================
+; COMPANY-APPROVED STREAMING
+; ========================================
+; Redirect to company-approved streaming services
+; Company streaming portal: {{ company_streaming.portal_url }}
+; Approved content: {{ company_streaming.content_types | join(', ') }}
+
+{% for approved_site in company_streaming.approved_sites %}
+; Redirect {{ approved_site.original }} to {{ approved_site.redirect }}
+{{ approved_site.original }}	IN	CNAME	{{ approved_site.redirect }}
+{% endfor %}
+
+{% endif %}
+; ========================================
+; TIME-BASED RESTRICTIONS
+; ========================================
+; Note: Time-based blocking requires BIND views and ACLs
+; Consider implementing:
+; - Block during work hours (9 AM - 5 PM)
+; - Allow during lunch break (12 PM - 1 PM)
+; - Allow after work hours and weekends
+; - Different policies for different user groups
+
+; ========================================
+; EXEMPTION GUIDELINES
+; ========================================
+; Consider exemptions for:
+; - Marketing team (may need access to video platforms)
+; - Training department (educational content)
+; - Executive team (business-related content)
+; - IT department (monitoring and testing)
+; - Conference rooms (presentation needs)
+
+; ========================================
+; STATISTICS SUMMARY
+; ========================================
+; Streaming Policy: {{ streaming_policy | default('Bandwidth Management') }}
+; Total Rules: {{ rules|length if rules else 0 }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Video Streaming: {{ 'Blocked' if video_streaming | default(true) else 'Allowed' }}
+; YouTube Blocking: {{ 'Blocked' if youtube_blocking | default(true) else 'Allowed' }}
+; Music Streaming: {{ 'Blocked' if music_streaming | default(true) else 'Allowed' }}
+; Live Streaming: {{ 'Blocked' if live_streaming | default(true) else 'Allowed' }}
+; Podcast Platforms: {{ 'Blocked' if podcast_platforms | default(false) else 'Allowed' }}
+; International Streaming: {{ 'Blocked' if international_streaming | default(false) else 'Allowed' }}
+
+; End of Streaming Media Blocking RPZ zone

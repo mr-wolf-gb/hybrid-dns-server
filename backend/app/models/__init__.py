@@ -2,7 +2,7 @@
 
 from .dns import Zone, DNSRecord, Forwarder, ForwarderHealth
 from .security import RPZRule, ThreatFeed
-from .system import SystemConfig
+from .system import SystemConfig, ACL, ACLEntry
 from .auth import User, Session
 from .monitoring import DNSLog, SystemStats, AuditLog
 
@@ -15,6 +15,8 @@ __all__ = [
     "RPZRule",
     "ThreatFeed",
     "SystemConfig",
+    "ACL",
+    "ACLEntry",
     # Auth Models
     "User",
     "Session",

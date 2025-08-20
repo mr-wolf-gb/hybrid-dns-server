@@ -1,0 +1,170 @@
+; Custom Business Rules Template
+; Generated automatically by Hybrid DNS Server
+; Template: Custom Business Rules
+; Description: Template for business-specific RPZ rules and policies
+; Total Rules: 4
+; Last Updated: 2025-08-20 11:42:00
+
+$TTL 300
+$ORIGIN rpz.test.
+
+; SOA Record for Custom Business Rules
+@	IN	SOA	ns1.company.com. admin.company.com. (
+		2025082011	; Serial number (YYYYMMDDHH)
+		3600		; Refresh interval (1 hour)
+		1800		; Retry interval (30 minutes)
+		604800		; Expire time (1 week)
+		300		; Minimum TTL (5 minutes)
+		)
+
+; Name Server Record
+@	IN	NS	ns1.company.com.
+
+; ========================================
+; CUSTOM BUSINESS RULES
+; ========================================
+; This template is specifically designed for business-specific RPZ rules
+; Rules are organized by business function and department
+; All rules should have business justification and approval
+
+
+; ========================================
+; HR DEPARTMENT RULES
+; ========================================
+; Department: HR
+; Total Rules: 1
+; Department Head: Bob HR Director
+; Last Review: Never
+
+; Business Function: Policy Enforcementexample-redirect.com	IN	CNAME	policy.company.com.
+
+; ========================================
+; IT DEPARTMENT RULES
+; ========================================
+; Department: IT
+; Total Rules: 1
+; Department Head: John IT Manager
+; Last Review: Never
+
+; Business Function: Infrastructure Management; Justification: Required for business operations; Approved by: John IT Manager; Approval Date: 2025-08-13; Next Review: 2025-11-18example-allow.com	IN	CNAME	rpz-passthru.
+
+; ========================================
+; SECURITY DEPARTMENT RULES
+; ========================================
+; Department: Security
+; Total Rules: 2
+; Department Head: Jane Security Manager
+; Last Review: Never
+
+; Business Function: Security Testingexample-block.com	IN	CNAME	.
+*.example-block.com	IN	CNAME	.; Business Function: Incident Responseexample-temporary.com	IN	CNAME	.
+
+
+; ========================================
+; EXECUTIVE EXCEPTIONS
+; ========================================
+; Executive-level exceptions and special access:
+; Executive: John CEO
+; Position: Chief Executive Officer
+; Exception Type: Social Media Access
+; Approved by: Board of Directors
+; Approval Date: 2025-07-21
+; Review Date: 2026-07-21
+linkedin.com	IN	CNAME	rpz-passthru.	; Executive exception: John CEO
+twitter.com	IN	CNAME	rpz-passthru.	; Executive exception: John CEO
+
+
+; ========================================
+; COMPLIANCE REQUIREMENTS
+; ========================================
+; Compliance-mandated rules:
+; Regulation: GDPR
+; Requirement: Data Processing Restriction
+; Compliance Officer: Jane Compliance
+; Implementation Date: 2025-05-22
+; Next Audit: 2026-05-22
+data-broker.com	IN	CNAME	.	; Compliance: GDPR
+
+
+; ========================================
+; BUSINESS PARTNER ACCESS
+; ========================================
+; Business partner and vendor access rules:
+; Partner: Vendor Corp
+; Contract: CNT-2024-001
+; Business Relationship: Software Vendor
+; Contact: vendor@vendorcorp.com
+; Contract Expiry: 2026-08-20
+vendorcorp.com	IN	CNAME	rpz-passthru.	; Partner: Vendor Corp
+support.vendorcorp.com	IN	CNAME	rpz-passthru.	; Partner: Vendor Corp
+
+
+; ========================================
+; PROJECT-SPECIFIC RULES
+; ========================================
+; No project-specific rules defined
+; Project rules are useful for:
+; - Temporary access for specific projects
+; - Blocking distracting sites during critical projects
+; - Allowing access to project-specific tools
+; - Research and development requirements
+; - Client-specific access requirements
+
+; ========================================
+; BUSINESS HOURS RULES
+; ========================================
+; No business hours rules defined
+; Business hours rules can be used for:
+; - Blocking social media during work hours
+; - Allowing recreational sites only during breaks
+; - Restricting bandwidth-heavy sites during peak hours
+; - Different policies for different shifts
+; - Weekend and holiday policy variations
+
+; ========================================
+; COST MANAGEMENT RULES
+; ========================================
+; No cost management rules defined
+; Cost management rules can help with:
+; - Reducing bandwidth costs
+; - Blocking expensive cloud services
+; - Controlling SaaS subscription usage
+; - Managing data transfer costs
+; - Optimizing network resource usage
+
+; ========================================
+; RULE GOVERNANCE
+; ========================================
+; Business rule governance requirements:
+; - All rules must have business justification
+; - Rules must be approved by department heads
+; - Executive exceptions require C-level approval
+; - Compliance rules must be reviewed by legal/compliance team
+; - Regular review cycles must be maintained
+; - Usage monitoring and reporting required
+; - Audit trail must be maintained for all changes
+
+; Rule Review Schedule:
+; - Monthly: Project-specific and temporary rules
+; - Quarterly: Department rules and partner access
+; - Semi-annually: Executive exceptions
+; - Annually: Compliance and cost management rules
+
+; ========================================
+; STATISTICS
+; ========================================
+; Total Rules: 4
+; Active Rules: 4
+; Departments: 3
+; Executive Exceptions: 1
+; Compliance Rules: 1
+; Partner Access Rules: 1
+; Project Rules: 0
+; Business Hours Rules: 0
+; Cost Management Rules: 0
+
+; Template: rpz_custom_business.j2
+; Generated: 2025-08-20 11:42:00
+; Zone: rpz.test
+
+; End of Custom Business Rules zone file

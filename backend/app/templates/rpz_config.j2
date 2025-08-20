@@ -1,0 +1,71 @@
+// Response Policy Zone (RPZ) Configuration
+// Generated automatically by Hybrid DNS Server
+// Generated at: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+// Total RPZ Zones: {{ rpz_zones|length if rpz_zones else 0 }}
+// RPZ Status: {{ 'Enabled' if rpz_enabled else 'Disabled' }}
+
+{% if rpz_enabled and rpz_zones %}
+// RPZ Configuration Block
+response-policy {
+{% for zone in rpz_zones | sort(attribute='priority') %}
+    // {{ zone.description | default('RPZ Zone') }}
+    zone "{{ zone.name }}"{% if zone.policy %} policy {{ zone.policy | lower }}{% endif %}{% if zone.recursive_only %} recursive-only yes{% endif %}{% if zone.max_policy_ttl %} max-policy-ttl {{ zone.max_policy_ttl }}{% endif %};
+{% endfor %}
+}{% if qname_wait_recurse %} qname-wait-recurse yes{% endif %}{% if break_dnssec %} break-dnssec yes{% endif %}{% if max_policy_ttl %} max-policy-ttl {{ max_policy_ttl }}{% endif %}{% if min_update_interval %} min-update-interval {{ min_update_interval }}{% endif %};
+
+{% for zone in rpz_zones %}
+// Zone definition for {{ zone.name }}
+zone "{{ zone.name }}" {
+    type {{ zone.type | default('master') }};
+    file "{{ zone.file_path | default('/etc/bind/rpz/' + zone.name + '.db') }}";
+    {% if zone.type == 'master' %}
+    allow-update { none; };
+    {% elif zone.type == 'slave' %}
+    masters { {{ zone.masters | join('; ') }}; };
+    {% endif %}
+    {% if zone.allow_query %}
+    allow-query { {{ zone.allow_query | join('; ') }}; };
+    {% endif %}
+    {% if zone.also_notify %}
+    also-notify { {{ zone.also_notify | join('; ') }}; };
+    {% endif %}
+};
+
+{% endfor %}
+{% else %}
+// RPZ is disabled or no zones configured
+// Uncomment and configure the following to enable RPZ:
+//
+// response-policy {
+//     zone "malware.rpz" policy given;
+//     zone "phishing.rpz" policy given;
+//     zone "adult.rpz" policy given;
+// } qname-wait-recurse no break-dnssec yes;
+//
+// zone "malware.rpz" {
+//     type master;
+//     file "/etc/bind/rpz/malware.rpz.db";
+//     allow-update { none; };
+// };
+{% endif %}
+
+// RPZ Configuration Summary:
+// Enabled: {{ rpz_enabled | default(false) }}
+// Total Zones: {{ rpz_zones|length if rpz_zones else 0 }}
+// QName Wait Recurse: {{ qname_wait_recurse | default(false) }}
+// Break DNSSEC: {{ break_dnssec | default(true) }}
+// Max Policy TTL: {{ max_policy_ttl | default(300) }}
+// Min Update Interval: {{ min_update_interval | default(60) }}
+
+{% if rpz_zones %}
+// Zone Details:
+{% for zone in rpz_zones %}
+// - {{ zone.name }}: {{ zone.description | default('No description') }}
+//   Type: {{ zone.type | default('master') }}
+//   Policy: {{ zone.policy | default('given') }}
+//   File: {{ zone.file_path | default('/etc/bind/rpz/' + zone.name + '.db') }}
+//   Priority: {{ zone.priority | default(1) }}
+{% endfor %}
+{% endif %}
+
+// End of RPZ configuration

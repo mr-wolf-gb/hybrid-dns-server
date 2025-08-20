@@ -1,0 +1,175 @@
+; Master Zone file for {{ zone.name }}
+; Generated automatically by Hybrid DNS Server
+; Zone Type: {{ get_zone_type_description(zone.zone_type) }}
+; Serial: {{ zone.serial | format_serial }}
+; Last Updated: {{ format_timestamp(zone.updated_at) }}
+; Description: {{ zone.description or 'No description provided' }}
+; Default TTL: {{ zone.minimum | format_duration }}
+
+$TTL {{ zone.minimum }}
+$ORIGIN {{ zone.name }}.
+
+; Start of Authority (SOA) Record
+; This record defines the authoritative information about the DNS zone
+@	IN	SOA	{{ zone.name | ensure_trailing_dot }} {{ zone.email | format_email_for_soa }} (
+		{{ zone.serial | format_serial }}	; Serial number (YYYYMMDDNN format)
+		{{ zone.refresh | format_ttl }}	; Refresh interval ({{ zone.refresh | format_duration }})
+		{{ zone.retry | format_ttl }}	; Retry interval ({{ zone.retry | format_duration }})
+		{{ zone.expire | format_ttl }}	; Expire time ({{ zone.expire | format_duration }})
+		{{ zone.minimum | format_ttl }}	; Minimum TTL ({{ zone.minimum | format_duration }})
+		)
+
+{% if records %}
+; DNS Resource Records
+; Records are organized by type for better readability and maintenance
+
+{% set ns_records = [] %}
+{% set a_records = [] %}
+{% set aaaa_records = [] %}
+{% set cname_records = [] %}
+{% set mx_records = [] %}
+{% set txt_records = [] %}
+{% set srv_records = [] %}
+{% set ptr_records = [] %}
+{% set other_records = [] %}
+
+{# Group active records by type for organized output #}
+{% for record in records %}
+{% if record.is_active %}
+{% if record.record_type == 'NS' %}
+{% set _ = ns_records.append(record) %}
+{% elif record.record_type == 'A' %}
+{% set _ = a_records.append(record) %}
+{% elif record.record_type == 'AAAA' %}
+{% set _ = aaaa_records.append(record) %}
+{% elif record.record_type == 'CNAME' %}
+{% set _ = cname_records.append(record) %}
+{% elif record.record_type == 'MX' %}
+{% set _ = mx_records.append(record) %}
+{% elif record.record_type == 'TXT' %}
+{% set _ = txt_records.append(record) %}
+{% elif record.record_type == 'SRV' %}
+{% set _ = srv_records.append(record) %}
+{% elif record.record_type == 'PTR' %}
+{% set _ = ptr_records.append(record) %}
+{% else %}
+{% set _ = other_records.append(record) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+{# Name Server (NS) Records - Critical for zone delegation #}
+{% if ns_records %}
+; Name Server Records
+; These records define the authoritative name servers for this zone
+{% for record in ns_records | sort(attribute='name') %}
+{{ "%-25s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	NS	{{ record.value | ensure_trailing_dot }}
+{% endfor %}
+
+{% endif %}
+{# IPv4 Address (A) Records #}
+{% if a_records %}
+; A Records (IPv4 Address Records)
+; Maps domain names to IPv4 addresses
+{% for record in a_records | sort(attribute='name') %}
+{{ "%-25s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	A	{{ record.value }}
+{% endfor %}
+
+{% endif %}
+{# IPv6 Address (AAAA) Records #}
+{% if aaaa_records %}
+; AAAA Records (IPv6 Address Records)
+; Maps domain names to IPv6 addresses
+{% for record in aaaa_records | sort(attribute='name') %}
+{{ "%-25s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	AAAA	{{ record.value }}
+{% endfor %}
+
+{% endif %}
+{# Canonical Name (CNAME) Records #}
+{% if cname_records %}
+; CNAME Records (Canonical Name Records)
+; Creates aliases that point to other domain names
+{% for record in cname_records | sort(attribute='name') %}
+{{ "%-25s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	CNAME	{{ record.value | ensure_trailing_dot }}
+{% endfor %}
+
+{% endif %}
+{# Mail Exchange (MX) Records #}
+{% if mx_records %}
+; MX Records (Mail Exchange Records)
+; Defines mail servers responsible for accepting email for the domain
+; Records are sorted by priority (lower numbers have higher priority)
+{% for record in mx_records | sort(attribute='priority') %}
+{{ "%-25s"|format(record.name) }}	{{ record.ttl | format_ttl }}	IN	MX	{{ record.priority | format_mx_priority }}	{{ record.value | ensure_trailing_dot }}
+{% endfor %}
+
+{% endif %}
+{# Text (TXT) Records #}
+{% if txt_records %}
+; TXT Records (Text Records)
+; Contains arbitrary text data, often used for verification and configuration
+{% for record in txt_records | sort(attribute='name') %}
+{{ "%-25s"|format(record.name) }}	{{ record.ttl | format_ttl }}	IN	TXT	{{ record.value | escape_txt_record }}
+{% endfor %}
+
+{% endif %}
+{# Service (SRV) Records #}
+{% if srv_records %}
+; SRV Records (Service Records)
+; Defines the location of services (hostname and port number)
+; Format: priority weight port target
+; Records are sorted by priority, then by weight
+{% for record in srv_records | sort(attribute='priority') | sort(attribute='weight') %}
+{{ "%-25s"|format(record.name) }}	{{ record.ttl | format_ttl }}	IN	SRV	{{ record | format_srv_record }}
+{% endfor %}
+
+{% endif %}
+{# Pointer (PTR) Records - Usually for reverse zones but can appear in forward zones #}
+{% if ptr_records %}
+; PTR Records (Pointer Records)
+; Maps IP addresses back to domain names (reverse DNS)
+{% for record in ptr_records | sort(attribute='name') %}
+{{ "%-25s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	PTR	{{ record.value | ensure_trailing_dot }}
+{% endfor %}
+
+{% endif %}
+{# Other/Custom Record Types #}
+{% if other_records %}
+; Other Record Types
+; Additional DNS record types not covered above
+{% for record in other_records | sort(attribute='record_type') | sort(attribute='name') %}
+{{ "%-25s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	{{ record.record_type }}	{{ record.value }}{% if record.record_type in ['MX', 'SRV'] and record.priority is not none %} ; Priority: {{ record.priority }}{% endif %}
+{% endfor %}
+
+{% endif %}
+
+; Zone Statistics
+; Total active records: {{ records | selectattr('is_active') | list | length }}
+; Record type breakdown:
+{% set record_counts = {} %}
+{% for record in records %}
+{% if record.is_active %}
+{% set count = record_counts.get(record.record_type, 0) + 1 %}
+{% set _ = record_counts.update({record.record_type: count}) %}
+{% endif %}
+{% endfor %}
+{% for record_type, count in record_counts.items() | sort %}
+;   {{ record_type }}: {{ count }}
+{% endfor %}
+
+{% else %}
+; No DNS records defined for this master zone
+; Add records through the web interface or API to populate this zone
+
+; Example records (commented out):
+; @                        IN  A       192.168.1.10
+; www                      IN  A       192.168.1.10
+; mail                     IN  A       192.168.1.20
+; @                        IN  MX  10  mail.{{ zone.name }}.
+; ftp                      IN  CNAME   www.{{ zone.name }}.
+{% endif %}
+
+; Zone file generation completed at {{ format_timestamp() }}
+; This file is automatically managed by Hybrid DNS Server
+; Manual modifications will be overwritten on next update
+; Template variables: zone={{ zone.name }}, records={{ records|length if records else 0 }}, ttl={{ default_ttl() }}

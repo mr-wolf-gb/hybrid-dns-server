@@ -1,0 +1,30 @@
+; Single RPZ Rule Template
+; Generated automatically by Hybrid DNS Server
+; Rule ID: {{ rule.id if rule.id else 'new' }}
+; Domain: {{ rule.domain }}
+; Action: {{ rule.action }}
+; Generated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+{% if rule.description %}; Description: {{ rule.description }}{% endif %}
+{% if rule.category %}; Category: {{ rule.category }}{% endif %}
+{% if rule.source %}; Source: {{ rule.source }}{% endif %}
+{% if rule.created_at %}; Created: {{ rule.created_at.strftime('%Y-%m-%d %H:%M:%S') }}{% endif %}
+{% if rule.updated_at %}; Updated: {{ rule.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}{% endif %}
+
+{% set action = rule.action | lower %}
+{% if action == 'block' or action == 'nxdomain' %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.
+{% elif action == 'redirect' %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ rule.redirect_target | ensure_trailing_dot }}
+{% elif action == 'passthru' or action == 'passthrough' %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-passthru.
+{% elif action == 'nodata' %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	*.
+{% elif action == 'tcp-only' %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-tcp-only.
+{% elif action == 'drop' %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-drop.
+{% else %}
+; Unknown action: {{ rule.action }} - defaulting to block
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.
+{% endif %}

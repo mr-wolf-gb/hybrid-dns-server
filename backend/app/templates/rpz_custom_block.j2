@@ -1,0 +1,112 @@
+; Custom Block Rules Template
+; Generated automatically by Hybrid DNS Server
+; Template: Custom Block Rules
+; Description: Template for custom domain blocking rules
+; Total Rules: {{ rules|length if rules else 0 }}
+; Last Updated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+$TTL {{ ttl | default(300) }}
+$ORIGIN {{ zone_name | default('rpz.custom-block') }}.
+
+; SOA Record for Custom Block Rules
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
+		{{ refresh | default(3600) }}		; Refresh interval (1 hour)
+		{{ retry | default(1800) }}		; Retry interval (30 minutes)
+		{{ expire | default(604800) }}		; Expire time (1 week)
+		{{ minimum | default(300) }}		; Minimum TTL (5 minutes)
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+; ========================================
+; CUSTOM BLOCK RULES
+; ========================================
+; This template is specifically designed for custom blocking rules
+; All domains in this zone will be blocked (return NXDOMAIN)
+
+{% if rules %}
+{% set active_rules = rules | selectattr('is_active') | list %}
+{% if active_rules %}
+; Active Block Rules ({{ active_rules|length }} total)
+{% for rule in active_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{% if rule.category %}; Category: {{ rule.category }}{% endif %}
+{% if rule.source %}; Source: {{ rule.source }}{% endif %}
+{% if rule.created_by %}; Created by: {{ rule.created_by }}{% endif %}
+{% if rule.expires_at %}; Expires: {{ rule.expires_at.strftime('%Y-%m-%d %H:%M:%S') }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.
+{% if rule.wildcard_subdomains %}
+; Include all subdomains
+*.{{ rule.domain | rpz_format_domain }}	IN	CNAME	.
+{% endif %}
+{% endfor %}
+
+{% endif %}
+{% set inactive_rules = rules | rejectattr('is_active') | list %}
+{% if inactive_rules %}
+; Inactive Block Rules ({{ inactive_rules|length }} total)
+; These rules are disabled but kept for reference
+{% for rule in inactive_rules | sort(attribute='domain') %}
+; DISABLED: {{ rule.domain }}{% if rule.description %} - {{ rule.description }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% else %}
+; No custom block rules defined
+; Add custom block rules through the web interface or API
+{% endif %}
+
+; ========================================
+; RULE CATEGORIES
+; ========================================
+{% if rule_categories %}
+; Rule Categories in this zone:
+{% for category in rule_categories %}
+; - {{ category.name }}: {{ category.description }} ({{ category.rule_count }} rules)
+{% endfor %}
+{% else %}
+; No rule categories defined
+; Consider organizing rules into categories such as:
+; - Competitor Blocking
+; - Productivity Control
+; - Security Exceptions
+; - Temporary Blocks
+; - Compliance Requirements
+{% endif %}
+
+; ========================================
+; TEMPLATE USAGE EXAMPLES
+; ========================================
+; Example custom block rules (commented out):
+;
+; Block specific competitor websites:
+; competitor1.com		IN	CNAME	.
+; *.competitor1.com		IN	CNAME	.
+;
+; Block social media during work hours:
+; facebook.com			IN	CNAME	.
+; twitter.com			IN	CNAME	.
+; instagram.com		IN	CNAME	.
+;
+; Block file sharing sites:
+; dropbox.com			IN	CNAME	.
+; googledrive.com		IN	CNAME	.
+;
+; Block specific news sites:
+; distractingnews.com	IN	CNAME	.
+
+; ========================================
+; STATISTICS
+; ========================================
+; Total Rules: {{ rules|length if rules else 0 }}
+; Active Rules: {{ active_rules|length if active_rules else 0 }}
+; Inactive Rules: {{ inactive_rules|length if inactive_rules else 0 }}
+; Categories: {{ rule_categories|length if rule_categories else 0 }}
+
+; Template: rpz_custom_block.j2
+; Generated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+; Zone: {{ zone_name | default('rpz.custom-block') }}
+
+; End of Custom Block Rules zone file

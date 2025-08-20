@@ -291,3 +291,196 @@ class BulkConfigUpdateResult(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+# ACL Schemas
+class ACLType(str, Enum):
+    """ACL types for BIND9 configuration"""
+    TRUSTED = "trusted"
+    BLOCKED = "blocked"
+    MANAGEMENT = "management"
+    DNS_SERVERS = "dns-servers"
+    MONITORING = "monitoring"
+    RATE_LIMITED = "rate-limited"
+    DYNAMIC_THREATS = "dynamic-threats"
+    DYNAMIC_ALLOW = "dynamic-allow"
+    CUSTOM = "custom"
+
+
+class ACLEntryBase(BaseModel):
+    """Base schema for ACL entries"""
+    address: str = Field(..., min_length=1, max_length=100, description="IP address or network (e.g., '192.168.1.0/24', '!10.0.0.1')")
+    comment: Optional[str] = Field(None, max_length=200, description="Optional comment for documentation")
+    is_active: bool = Field(default=True, description="Whether this entry is active")
+
+    @validator('address')
+    def validate_address(cls, v):
+        """Validate IP address or network format"""
+        import ipaddress
+        import re
+        
+        if not v or len(v.strip()) == 0:
+            raise ValueError('Address cannot be empty')
+        
+        address = v.strip()
+        
+        # Handle negation prefix
+        negated = False
+        if address.startswith('!'):
+            negated = True
+            address = address[1:].strip()
+        
+        # Validate IP address or network
+        try:
+            # Try to parse as network first (handles both single IPs and networks)
+            ipaddress.ip_network(address, strict=False)
+        except ValueError:
+            # Check if it's a valid hostname/domain
+            hostname_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$'
+            if not re.match(hostname_pattern, address):
+                raise ValueError('Address must be a valid IP address, network, or hostname')
+        
+        return v.strip()
+
+
+class ACLEntryCreate(ACLEntryBase):
+    """Schema for creating ACL entries"""
+    pass
+
+
+class ACLEntryUpdate(BaseModel):
+    """Schema for updating ACL entries"""
+    address: Optional[str] = Field(None, min_length=1, max_length=100)
+    comment: Optional[str] = Field(None, max_length=200)
+    is_active: Optional[bool] = None
+
+    @validator('address')
+    def validate_address(cls, v):
+        """Validate IP address or network format"""
+        if v is None:
+            return v
+        return ACLEntryBase.validate_address(v)
+
+
+class ACLEntry(ACLEntryBase):
+    """Schema for ACL entry response"""
+    id: int
+    acl_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ACLBase(BaseModel):
+    """Base schema for ACLs"""
+    name: str = Field(..., min_length=1, max_length=100, description="ACL name (used in BIND config)")
+    acl_type: ACLType = Field(..., description="Type of ACL")
+    description: Optional[str] = Field(None, max_length=500, description="Optional description")
+    is_active: bool = Field(default=True, description="Whether this ACL is active")
+
+    @validator('name')
+    def validate_name(cls, v):
+        """Validate ACL name format for BIND9 compatibility"""
+        import re
+        
+        if not v or len(v.strip()) == 0:
+            raise ValueError('ACL name cannot be empty')
+        
+        name = v.strip()
+        
+        # BIND9 ACL names must be valid identifiers
+        if not re.match(r'^[a-zA-Z][a-zA-Z0-9_-]*$', name):
+            raise ValueError('ACL name must start with a letter and contain only letters, numbers, underscores, and hyphens')
+        
+        # Reserved BIND9 ACL names
+        reserved_names = ['any', 'none', 'localhost', 'localnets']
+        if name.lower() in reserved_names:
+            raise ValueError(f'ACL name "{name}" is reserved by BIND9')
+        
+        return name
+
+
+class ACLCreate(ACLBase):
+    """Schema for creating ACLs"""
+    entries: List[ACLEntryCreate] = Field(default=[], description="Initial ACL entries")
+
+
+class ACLUpdate(BaseModel):
+    """Schema for updating ACLs"""
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    acl_type: Optional[ACLType] = None
+    description: Optional[str] = Field(None, max_length=500)
+    is_active: Optional[bool] = None
+
+    @validator('name')
+    def validate_name(cls, v):
+        """Validate ACL name format for BIND9 compatibility"""
+        if v is None:
+            return v
+        return ACLBase.validate_name(v)
+
+
+class ACL(ACLBase):
+    """Schema for ACL response"""
+    id: int
+    entries: List[ACLEntry] = []
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ACLSummary(BaseModel):
+    """Schema for ACL summary (without entries)"""
+    id: int
+    name: str
+    acl_type: ACLType
+    description: Optional[str] = None
+    is_active: bool
+    entry_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class BulkACLEntryUpdate(BaseModel):
+    """Schema for bulk ACL entry updates"""
+    entries: List[ACLEntryCreate]
+    replace_all: bool = Field(default=False, description="Whether to replace all existing entries")
+
+
+class ACLValidationResult(BaseModel):
+    """Schema for ACL validation results"""
+    valid: bool
+    errors: List[str] = []
+    warnings: List[str] = []
+    entry_count: int = 0
+    
+    class Config:
+        from_attributes = True
+
+
+class ACLConfigurationTemplate(BaseModel):
+    """Schema for ACL configuration template data"""
+    acls: List[ACL] = []
+    include_predefined_acls: bool = True
+    include_security_acls: bool = True
+    include_dynamic_acls: bool = False
+    trusted_networks: List[str] = []
+    management_networks: List[str] = []
+    dns_servers: List[str] = []
+    monitoring_systems: List[str] = []
+    blocked_networks: List[str] = []
+    rate_limited_networks: List[str] = []
+    dynamic_threats: List[Dict[str, str]] = []
+    dynamic_allow: List[Dict[str, str]] = []
+    generated_at: datetime
+    config_version: str = "1.0"
+
+    class Config:
+        from_attributes = True

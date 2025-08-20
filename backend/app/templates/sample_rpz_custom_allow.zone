@@ -1,0 +1,111 @@
+; Custom Allow Rules Template
+; Generated automatically by Hybrid DNS Server
+; Template: Custom Allow Rules (Whitelist)
+; Description: Template for custom domain allow/passthrough rules
+; Total Rules: 4
+; Last Updated: 2025-08-20 11:42:00
+
+$TTL 300
+$ORIGIN rpz.test.
+
+; SOA Record for Custom Allow Rules
+@	IN	SOA	ns1.company.com. admin.company.com. (
+		2025082011	; Serial number (YYYYMMDDHH)
+		3600		; Refresh interval (1 hour)
+		1800		; Retry interval (30 minutes)
+		604800		; Expire time (1 week)
+		300		; Minimum TTL (5 minutes)
+		)
+
+; Name Server Record
+@	IN	NS	ns1.company.com.
+
+; ========================================
+; CUSTOM ALLOW RULES (WHITELIST)
+; ========================================
+; This template is specifically designed for custom allow/passthrough rules
+; All domains in this zone will be allowed through other RPZ blocking rules
+; These rules override blocking rules in other RPZ zones
+
+; Active Allow Rules (4 total)
+; Sample allow rule; Category: Business; Source: Manual; Created by: admin; Business Justification: Required for business operations; Expires: 2025-09-19 11:42:00example-allow.com	IN	CNAME	rpz-passthru.
+; Sample block rule; Category: Testing; Source: Manual; Created by: admin; Expires: 2025-08-22 11:42:00example-block.com	IN	CNAME	rpz-passthru.
+; Include all subdomains
+*.example-block.com	IN	CNAME	rpz-passthru.
+; Sample redirect rule; Category: Policy; Source: Manual; Created by: admin; Expires: 2025-08-27 11:42:00example-redirect.com	IN	CNAME	rpz-passthru.
+; Temporary block for testing; Category: Temporary; Source: Incident Response; Created by: security-team; Expires: 2025-08-21 11:42:00example-temporary.com	IN	CNAME	rpz-passthru.
+
+
+; ========================================
+; BUSINESS EXCEPTIONS
+; ========================================
+; No business exceptions defined
+; Business exceptions should include:
+; - Justification for allowing the domain
+; - Approval from appropriate authority
+; - Regular review schedule
+
+; ========================================
+; TEMPORARY EXCEPTIONS
+; ========================================
+; No temporary exceptions defined
+; Temporary exceptions are useful for:
+; - Incident response
+; - Business continuity during outages
+; - Testing and troubleshooting
+; - Short-term project requirements
+
+; ========================================
+; RULE CATEGORIES
+; ========================================
+; Rule Categories in this zone:
+; - Testing: Test rules (1 rules)
+; - Policy: Policy enforcement (1 rules)
+; - Business: Business rules (1 rules)
+; - Temporary: Temporary rules (1 rules)
+
+; ========================================
+; TEMPLATE USAGE EXAMPLES
+; ========================================
+; Example custom allow rules (commented out):
+;
+; Allow specific business applications:
+; businessapp.com		IN	CNAME	rpz-passthru.
+; *.businessapp.com		IN	CNAME	rpz-passthru.
+;
+; Allow social media for marketing team:
+; linkedin.com			IN	CNAME	rpz-passthru.
+; twitter.com			IN	CNAME	rpz-passthru.
+;
+; Allow cloud storage for specific projects:
+; projectdrive.com		IN	CNAME	rpz-passthru.
+;
+; Allow educational resources:
+; coursera.com			IN	CNAME	rpz-passthru.
+; khanacademy.org		IN	CNAME	rpz-passthru.
+
+; ========================================
+; COMPLIANCE NOTES
+; ========================================
+; Allow rules should be:
+; - Documented with business justification
+; - Approved by appropriate authority
+; - Regularly reviewed for continued necessity
+; - Monitored for usage and potential abuse
+; - Categorized for easier management
+
+; ========================================
+; STATISTICS
+; ========================================
+; Total Rules: 4
+; Active Rules: 4
+; Inactive Rules: 0
+; Business Exceptions: 0
+; Temporary Exceptions: 0
+; Categories: 4
+
+; Template: rpz_custom_allow.j2
+; Generated: 2025-08-20 11:42:00
+; Zone: rpz.test
+
+; End of Custom Allow Rules zone file

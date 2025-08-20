@@ -1,0 +1,137 @@
+; Custom Redirect Rules Template
+; Generated automatically by Hybrid DNS Server
+; Template: Custom Redirect Rules
+; Description: Template for custom domain redirection rules
+; Total Rules: 4
+; Last Updated: 2025-08-20 11:42:00
+
+$TTL 300
+$ORIGIN rpz.test.
+
+; SOA Record for Custom Redirect Rules
+@	IN	SOA	ns1.company.com. admin.company.com. (
+		2025082011	; Serial number (YYYYMMDDHH)
+		3600		; Refresh interval (1 hour)
+		1800		; Retry interval (30 minutes)
+		604800		; Expire time (1 week)
+		300		; Minimum TTL (5 minutes)
+		)
+
+; Name Server Record
+@	IN	NS	ns1.company.com.
+
+; ========================================
+; CUSTOM REDIRECT RULES
+; ========================================
+; This template is specifically designed for custom domain redirection rules
+; Domains in this zone will be redirected to specified targets
+; Useful for policy enforcement, brand protection, and user guidance
+
+; Active Redirect Rules (4 total)
+; Sample allow rule; Category: Business; Source: Manual; Created by: admin; Expires: 2025-09-19 11:42:00example-allow.com	IN	CNAME	
+; Sample block rule; Category: Testing; Source: Manual; Created by: admin; Expires: 2025-08-22 11:42:00example-block.com	IN	CNAME	
+; Include all subdomains
+*.example-block.com	IN	CNAME	
+; Sample redirect rule; Category: Policy; Source: Manual; Created by: admin; Expires: 2025-08-27 11:42:00example-redirect.com	IN	CNAME	policy.company.com.
+; Temporary block for testing; Category: Temporary; Source: Incident Response; Created by: security-team; Expires: 2025-08-21 11:42:00example-temporary.com	IN	CNAME	
+
+
+; ========================================
+; POLICY REDIRECTS
+; ========================================
+; No policy redirects defined
+; Policy redirects can be used for:
+; - Redirecting blocked content to policy pages
+; - Guiding users to approved alternatives
+; - Educational content about policy violations
+; - HR policy enforcement notifications
+
+; ========================================
+; BRAND PROTECTION REDIRECTS
+; ========================================
+; No brand protection redirects defined
+; Brand protection redirects can be used for:
+; - Redirecting typosquatting domains to legitimate sites
+; - Protecting against phishing attempts using similar domains
+; - Redirecting old company domains to new ones
+; - Protecting trademark violations
+
+; ========================================
+; MAINTENANCE REDIRECTS
+; ========================================
+; No maintenance redirects defined
+; Maintenance redirects are useful for:
+; - Redirecting during system maintenance
+; - Migrating services to new domains
+; - Temporary service relocations
+; - Planned outage notifications
+
+; ========================================
+; RULE CATEGORIES
+; ========================================
+; Rule Categories in this zone:
+; - Testing: Test rules (1 rules)
+; - Policy: Policy enforcement (1 rules)
+; - Business: Business rules (1 rules)
+; - Temporary: Temporary rules (1 rules)
+
+; ========================================
+; TEMPLATE USAGE EXAMPLES
+; ========================================
+; Example custom redirect rules (commented out):
+;
+; Redirect old company domain to new domain:
+; oldcompany.com		IN	CNAME	newcompany.com.
+; *.oldcompany.com		IN	CNAME	newcompany.com.
+;
+; Redirect blocked social media to policy page:
+; facebook.com			IN	CNAME	policy.company.com.
+; twitter.com			IN	CNAME	policy.company.com.
+;
+; Redirect typosquatting domains to legitimate site:
+; compnay.com			IN	CNAME	company.com.
+; comapny.com			IN	CNAME	company.com.
+;
+; Redirect deprecated services to new ones:
+; oldservice.company.com	IN	CNAME	newservice.company.com.
+;
+; Redirect to maintenance page during outages:
+; service.company.com		IN	CNAME	maintenance.company.com.
+
+; ========================================
+; REDIRECT TARGET VALIDATION
+; ========================================
+; No redirect targets configured
+; Ensure redirect targets are:
+; - Valid and accessible hostnames
+; - Properly configured web servers
+; - Serving appropriate content
+; - Monitored for availability
+
+; ========================================
+; MONITORING AND ANALYTICS
+; ========================================
+; Redirect rules should be monitored for:
+; - Usage frequency and patterns
+; - Target availability and response times
+; - User behavior after redirection
+; - Effectiveness of policy enforcement
+; - Potential abuse or bypassing attempts
+
+; ========================================
+; STATISTICS
+; ========================================
+; Total Rules: 4
+; Active Rules: 4
+; Inactive Rules: 0
+; Policy Redirects: 0
+; Brand Protection: 0
+; Maintenance Redirects: 0
+; Categories: 4
+; Redirect Targets: 0
+
+; Template: rpz_custom_redirect.j2
+; Generated: 2025-08-20 11:42:00
+; Zone: rpz.test
+
+; End of Custom Redirect Rules zone file

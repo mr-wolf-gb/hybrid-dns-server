@@ -1,0 +1,222 @@
+; Phishing Threat Feed RPZ Zone Template
+; Generated automatically by Hybrid DNS Server
+; Feed Name: {{ feed_name | default('Phishing Feed') }}
+; Feed Source: {{ feed_source | default('external') }}
+; Feed URL: {{ feed_url | default('N/A') }}
+; Total Phishing Domains: {{ rules|length }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Last Feed Update: {{ feed_last_updated.strftime('%Y-%m-%d %H:%M:%S') if feed_last_updated else 'Never' }}
+; Zone Generated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+$TTL {{ ttl | default(60) }}
+$ORIGIN {{ feed_zone | default('phishing') }}.rpz.
+
+; SOA Record for Phishing Threat Feed RPZ Zone
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
+		{{ refresh | default(900) }}		; Refresh interval (15 minutes - frequent updates for phishing)
+		{{ retry | default(300) }}		; Retry interval (5 minutes)
+		{{ expire | default(604800) }}		; Expire time (1 week)
+		{{ minimum | default(60) }}		; Minimum TTL (1 minute - fast updates)
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+; Phishing Threat Feed Information
+; Feed Type: Phishing Protection
+; Feed Description: {{ feed_description | default('External phishing threat intelligence feed') }}
+; Update Frequency: {{ feed_update_frequency | default('hourly') }}
+; Feed Format: {{ feed_format | default('domain-list') }}
+; Feed Reliability: {{ feed_reliability | default('high') }}
+; Threat Categories: Phishing, Brand Impersonation, Credential Harvesting, Social Engineering
+
+{% if rules %}
+; Phishing Domain Rules ({{ rules|length }} total, {{ active_rules_count | default(0) }} active)
+
+{% set banking_phishing = [] %}
+{% set email_phishing = [] %}
+{% set social_phishing = [] %}
+{% set ecommerce_phishing = [] %}
+{% set crypto_phishing = [] %}
+{% set government_phishing = [] %}
+{% set other_phishing = [] %}
+
+{# Group phishing rules by target type #}
+{% for rule in rules %}
+{% if rule.is_active %}
+{% set target_type = rule.target_type | default('other') | lower %}
+{% set target_brand = rule.target_brand | default('') | lower %}
+{% if target_type == 'banking' or 'bank' in target_brand or 'paypal' in target_brand or 'visa' in target_brand %}
+{% set _ = banking_phishing.append(rule) %}
+{% elif target_type == 'email' or 'gmail' in target_brand or 'outlook' in target_brand or 'yahoo' in target_brand %}
+{% set _ = email_phishing.append(rule) %}
+{% elif target_type == 'social' or 'facebook' in target_brand or 'twitter' in target_brand or 'linkedin' in target_brand %}
+{% set _ = social_phishing.append(rule) %}
+{% elif target_type == 'ecommerce' or 'amazon' in target_brand or 'ebay' in target_brand or 'shopify' in target_brand %}
+{% set _ = ecommerce_phishing.append(rule) %}
+{% elif target_type == 'crypto' or 'bitcoin' in target_brand or 'coinbase' in target_brand or 'binance' in target_brand %}
+{% set _ = crypto_phishing.append(rule) %}
+{% elif target_type == 'government' or 'gov' in target_brand or 'irs' in target_brand %}
+{% set _ = government_phishing.append(rule) %}
+{% else %}
+{% set _ = other_phishing.append(rule) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+{# Banking/Financial Phishing - Highest Priority #}
+{% if banking_phishing %}
+; ========================================
+; BANKING/FINANCIAL PHISHING ({{ banking_phishing|length }} rules)
+; Domains impersonating banks and financial institutions
+; CRITICAL THREAT LEVEL - IMMEDIATE BLOCKING
+; ========================================
+{% for rule in banking_phishing | sort(attribute='domain') %}
+{% if rule.threat_description %}; Threat: {{ rule.threat_description }}{% endif %}
+{% if rule.target_brand %}; Target Brand: {{ rule.target_brand }}{% endif %}
+{% if rule.phishing_type %}; Phishing Type: {{ rule.phishing_type }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.ioc_id %} ; IOC: {{ rule.ioc_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Cryptocurrency Phishing #}
+{% if crypto_phishing %}
+; ========================================
+; CRYPTOCURRENCY PHISHING ({{ crypto_phishing|length }} rules)
+; Domains targeting cryptocurrency users and exchanges
+; CRITICAL THREAT LEVEL - IMMEDIATE BLOCKING
+; ========================================
+{% for rule in crypto_phishing | sort(attribute='domain') %}
+{% if rule.threat_description %}; Threat: {{ rule.threat_description }}{% endif %}
+{% if rule.target_brand %}; Target Brand: {{ rule.target_brand }}{% endif %}
+{% if rule.crypto_type %}; Crypto Type: {{ rule.crypto_type }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.ioc_id %} ; IOC: {{ rule.ioc_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Government Phishing #}
+{% if government_phishing %}
+; ========================================
+; GOVERNMENT PHISHING ({{ government_phishing|length }} rules)
+; Domains impersonating government agencies
+; HIGH THREAT LEVEL
+; ========================================
+{% for rule in government_phishing | sort(attribute='domain') %}
+{% if rule.threat_description %}; Threat: {{ rule.threat_description }}{% endif %}
+{% if rule.target_brand %}; Target Agency: {{ rule.target_brand }}{% endif %}
+{% if rule.government_type %}; Agency Type: {{ rule.government_type }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.ioc_id %} ; IOC: {{ rule.ioc_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Email Provider Phishing #}
+{% if email_phishing %}
+; ========================================
+; EMAIL PROVIDER PHISHING ({{ email_phishing|length }} rules)
+; Domains impersonating email service providers
+; HIGH THREAT LEVEL
+; ========================================
+{% for rule in email_phishing | sort(attribute='domain') %}
+{% if rule.threat_description %}; Threat: {{ rule.threat_description }}{% endif %}
+{% if rule.target_brand %}; Target Provider: {{ rule.target_brand }}{% endif %}
+{% if rule.email_type %}; Email Type: {{ rule.email_type }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.ioc_id %} ; IOC: {{ rule.ioc_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# E-commerce Phishing #}
+{% if ecommerce_phishing %}
+; ========================================
+; E-COMMERCE PHISHING ({{ ecommerce_phishing|length }} rules)
+; Domains impersonating online shopping platforms
+; MEDIUM-HIGH THREAT LEVEL
+; ========================================
+{% for rule in ecommerce_phishing | sort(attribute='domain') %}
+{% if rule.threat_description %}; Threat: {{ rule.threat_description }}{% endif %}
+{% if rule.target_brand %}; Target Platform: {{ rule.target_brand }}{% endif %}
+{% if rule.ecommerce_type %}; Platform Type: {{ rule.ecommerce_type }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.ioc_id %} ; IOC: {{ rule.ioc_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Social Media Phishing #}
+{% if social_phishing %}
+; ========================================
+; SOCIAL MEDIA PHISHING ({{ social_phishing|length }} rules)
+; Domains impersonating social media platforms
+; MEDIUM THREAT LEVEL
+; ========================================
+{% for rule in social_phishing | sort(attribute='domain') %}
+{% if rule.threat_description %}; Threat: {{ rule.threat_description }}{% endif %}
+{% if rule.target_brand %}; Target Platform: {{ rule.target_brand }}{% endif %}
+{% if rule.social_type %}; Platform Type: {{ rule.social_type }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.ioc_id %} ; IOC: {{ rule.ioc_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Other Phishing Domains #}
+{% if other_phishing %}
+; ========================================
+; OTHER PHISHING DOMAINS ({{ other_phishing|length }} rules)
+; General phishing and brand impersonation domains
+; MEDIUM THREAT LEVEL
+; ========================================
+{% for rule in other_phishing | sort(attribute='domain') %}
+{% if rule.threat_description %}; Threat: {{ rule.threat_description }}{% endif %}
+{% if rule.target_brand %}; Target Brand: {{ rule.target_brand }}{% endif %}
+{% if rule.phishing_technique %}; Technique: {{ rule.phishing_technique }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.ioc_id %} ; IOC: {{ rule.ioc_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% else %}
+; No phishing threat intelligence rules available
+; Feed may be empty or all rules are inactive
+{% endif %}
+
+; Phishing Feed Statistics:
+; Total Rules: {{ rules|length }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Banking/Financial: {{ banking_phishing|length if banking_phishing else 0 }}
+; Cryptocurrency: {{ crypto_phishing|length if crypto_phishing else 0 }}
+; Government: {{ government_phishing|length if government_phishing else 0 }}
+; Email Providers: {{ email_phishing|length if email_phishing else 0 }}
+; E-commerce: {{ ecommerce_phishing|length if ecommerce_phishing else 0 }}
+; Social Media: {{ social_phishing|length if social_phishing else 0 }}
+; Other Phishing: {{ other_phishing|length if other_phishing else 0 }}
+
+; Feed Metadata:
+; Feed Source: {{ feed_source | default('external') }}
+; Feed URL: {{ feed_url | default('N/A') }}
+; Feed Format: {{ feed_format | default('domain-list') }}
+; Last Updated: {{ feed_last_updated.strftime('%Y-%m-%d %H:%M:%S') if feed_last_updated else 'Never' }}
+; Next Update: {{ feed_next_update.strftime('%Y-%m-%d %H:%M:%S') if feed_next_update else 'Unknown' }}
+; Update Frequency: {{ feed_update_frequency | default('hourly') }}
+; Feed Reliability: {{ feed_reliability | default('high') }}
+
+; Security Notice:
+; This zone contains domains identified as phishing or brand impersonation sites.
+; All domains in this zone are blocked to prevent credential theft and fraud.
+; Regular updates ensure protection against new phishing campaigns.
+
+; Template Information:
+; Template: rpz_threat_feed_phishing.j2
+; Generated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+; Zone: {{ feed_zone | default('phishing') }}.rpz
+
+; End of Phishing Threat Feed RPZ zone file

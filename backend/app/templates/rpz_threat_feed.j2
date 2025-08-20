@@ -1,0 +1,179 @@
+; Threat Feed RPZ Zone Template
+; Generated automatically by Hybrid DNS Server
+; Threat Feed: {{ feed_name | default('unknown') }}
+; Feed Source: {{ feed_source | default('manual') }}
+; Feed URL: {{ feed_url | default('N/A') }}
+; Total Threats: {{ rules|length }}
+; Active Threats: {{ active_rules_count | default(0) }}
+; Last Feed Update: {{ feed_last_updated.strftime('%Y-%m-%d %H:%M:%S') if feed_last_updated else 'Never' }}
+; Zone Generated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+$TTL {{ ttl | default(300) }}
+$ORIGIN {{ feed_zone | default('threats') }}.rpz.
+
+; SOA Record for Threat Feed RPZ Zone
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
+		{{ refresh | default(1800) }}		; Refresh interval (30 minutes - frequent updates)
+		{{ retry | default(900) }}		; Retry interval (15 minutes)
+		{{ expire | default(604800) }}		; Expire time (1 week)
+		{{ minimum | default(300) }}		; Minimum TTL (5 minutes)
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+; Threat Feed Information
+; Feed Name: {{ feed_name | default('Unknown Feed') }}
+; Feed Type: {{ feed_type | default('generic') }}
+; Feed Description: {{ feed_description | default('External threat intelligence feed') }}
+; Update Frequency: {{ feed_update_frequency | default('hourly') }}
+; Feed Format: {{ feed_format | default('domain-list') }}
+; Feed Reliability: {{ feed_reliability | default('medium') }}
+
+{% if rules %}
+; Threat Intelligence Rules ({{ rules|length }} total, {{ active_rules_count | default(0) }} active)
+
+{% set malware_rules = [] %}
+{% set phishing_rules = [] %}
+{% set botnet_rules = [] %}
+{% set spam_rules = [] %}
+{% set adult_rules = [] %}
+{% set other_rules = [] %}
+
+{# Group rules by threat category #}
+{% for rule in rules %}
+{% if rule.is_active %}
+{% set threat_category = rule.threat_category | default('other') | lower %}
+{% if threat_category == 'malware' %}
+{% set _ = malware_rules.append(rule) %}
+{% elif threat_category == 'phishing' %}
+{% set _ = phishing_rules.append(rule) %}
+{% elif threat_category == 'botnet' or threat_category == 'c2' %}
+{% set _ = botnet_rules.append(rule) %}
+{% elif threat_category == 'spam' %}
+{% set _ = spam_rules.append(rule) %}
+{% elif threat_category == 'adult' %}
+{% set _ = adult_rules.append(rule) %}
+{% else %}
+{% set _ = other_rules.append(rule) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+{# Malware Domains #}
+{% if malware_rules %}
+; ========================================
+; MALWARE DOMAINS ({{ malware_rules|length }} rules)
+; Domains hosting malware or malicious content
+; ========================================
+{% for rule in malware_rules | sort(attribute='domain') %}
+{% if rule.threat_description %}; Threat: {{ rule.threat_description }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.ioc_id %} ; IOC: {{ rule.ioc_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Phishing Domains #}
+{% if phishing_rules %}
+; ========================================
+; PHISHING DOMAINS ({{ phishing_rules|length }} rules)
+; Domains used for phishing attacks
+; ========================================
+{% for rule in phishing_rules | sort(attribute='domain') %}
+{% if rule.threat_description %}; Threat: {{ rule.threat_description }}{% endif %}
+{% if rule.target_brand %}; Target Brand: {{ rule.target_brand }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.ioc_id %} ; IOC: {{ rule.ioc_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Botnet/C2 Domains #}
+{% if botnet_rules %}
+; ========================================
+; BOTNET/C2 DOMAINS ({{ botnet_rules|length }} rules)
+; Command and control servers and botnet infrastructure
+; ========================================
+{% for rule in botnet_rules | sort(attribute='domain') %}
+{% if rule.threat_description %}; Threat: {{ rule.threat_description }}{% endif %}
+{% if rule.botnet_family %}; Botnet Family: {{ rule.botnet_family }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.ioc_id %} ; IOC: {{ rule.ioc_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Spam Domains #}
+{% if spam_rules %}
+; ========================================
+; SPAM DOMAINS ({{ spam_rules|length }} rules)
+; Domains used for spam and unwanted communications
+; ========================================
+{% for rule in spam_rules | sort(attribute='domain') %}
+{% if rule.threat_description %}; Threat: {{ rule.threat_description }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.ioc_id %} ; IOC: {{ rule.ioc_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Adult Content Domains #}
+{% if adult_rules %}
+; ========================================
+; ADULT CONTENT DOMAINS ({{ adult_rules|length }} rules)
+; Adult and inappropriate content domains
+; ========================================
+{% for rule in adult_rules | sort(attribute='domain') %}
+{% if rule.threat_description %}; Content: {{ rule.threat_description }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.ioc_id %} ; IOC: {{ rule.ioc_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Other Threat Domains #}
+{% if other_rules %}
+; ========================================
+; OTHER THREAT DOMAINS ({{ other_rules|length }} rules)
+; Miscellaneous threats and suspicious domains
+; ========================================
+{% for rule in other_rules | sort(attribute='domain') %}
+{% if rule.threat_description %}; Threat: {{ rule.threat_description }}{% endif %}
+{% if rule.threat_category %}; Category: {{ rule.threat_category }}{% endif %}
+{% if rule.first_seen %}; First Seen: {{ rule.first_seen.strftime('%Y-%m-%d') }}{% endif %}
+{% if rule.confidence_score %}; Confidence: {{ rule.confidence_score }}%{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.ioc_id %} ; IOC: {{ rule.ioc_id }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% else %}
+; No threat intelligence rules available
+; Feed may be empty or all rules are inactive
+{% endif %}
+
+; Threat Feed Statistics:
+; Total Rules: {{ rules|length }}
+; Active Rules: {{ active_rules_count | default(0) }}
+; Malware Domains: {{ malware_rules|length if malware_rules else 0 }}
+; Phishing Domains: {{ phishing_rules|length if phishing_rules else 0 }}
+; Botnet/C2 Domains: {{ botnet_rules|length if botnet_rules else 0 }}
+; Spam Domains: {{ spam_rules|length if spam_rules else 0 }}
+; Adult Content Domains: {{ adult_rules|length if adult_rules else 0 }}
+; Other Threats: {{ other_rules|length if other_rules else 0 }}
+
+; Feed Metadata:
+; Feed Source: {{ feed_source | default('manual') }}
+; Feed URL: {{ feed_url | default('N/A') }}
+; Feed Format: {{ feed_format | default('domain-list') }}
+; Last Updated: {{ feed_last_updated.strftime('%Y-%m-%d %H:%M:%S') if feed_last_updated else 'Never' }}
+; Next Update: {{ feed_next_update.strftime('%Y-%m-%d %H:%M:%S') if feed_next_update else 'Unknown' }}
+; Update Frequency: {{ feed_update_frequency | default('hourly') }}
+; Feed Reliability: {{ feed_reliability | default('medium') }}
+
+; Template Information:
+; Template: rpz_threat_feed.j2
+; Generated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+; Zone: {{ feed_zone | default('threats') }}.rpz
+
+; End of Threat Feed RPZ zone file
