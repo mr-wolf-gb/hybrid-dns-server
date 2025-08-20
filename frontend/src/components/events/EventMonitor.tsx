@@ -3,29 +3,25 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
-import { Input } from '../ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Card, Button, Badge, Input, Select } from '../ui';
 import { useWebSocketContext, WebSocketMessage } from '../../contexts/WebSocketContext';
-import { ScrollArea } from '../ui/scroll-area';
-import { 
-  Activity, 
-  Filter, 
-  Pause, 
-  Play, 
-  Trash2, 
-  Download,
-  Search,
-  Clock,
-  AlertTriangle,
-  Info,
-  AlertCircle,
-  XCircle
-} from 'lucide-react';
+
+import {
+  ChartBarIcon as Activity,
+  FunnelIcon as Filter,
+  PauseIcon as Pause,
+  PlayIcon as Play,
+  TrashIcon as Trash2,
+  ArrowDownTrayIcon as Download,
+  MagnifyingGlassIcon as Search,
+  ClockIcon as Clock,
+  ExclamationTriangleIcon as AlertTriangle,
+  InformationCircleIcon as Info,
+  ExclamationCircleIcon as AlertCircle,
+  XCircleIcon as XCircle
+} from '@heroicons/react/24/outline';
 import { format } from 'date-fns';
-import { cn } from '../../lib/utils';
+import { cn } from '../../utils';
 
 interface EventEntry extends WebSocketMessage {
   id: string;
@@ -87,7 +83,7 @@ const EventMonitor: React.FC = () => {
 
     if (filter.search) {
       const searchLower = filter.search.toLowerCase();
-      filtered = filtered.filter(event => 
+      filtered = filtered.filter(event =>
         event.type.toLowerCase().includes(searchLower) ||
         JSON.stringify(event.data).toLowerCase().includes(searchLower) ||
         (event.source && event.source.toLowerCase().includes(searchLower))
@@ -153,10 +149,10 @@ const EventMonitor: React.FC = () => {
   // Export events to JSON
   const exportEvents = () => {
     const dataStr = JSON.stringify(filteredEvents, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    
+    const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+
     const exportFileDefaultName = `events-${format(new Date(), 'yyyy-MM-dd-HH-mm-ss')}.json`;
-    
+
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
@@ -223,7 +219,7 @@ const EventMonitor: React.FC = () => {
                 className="pl-10"
               />
             </div>
-            
+
             <Select
               value={filter.category}
               onValueChange={(value) => setFilter(prev => ({ ...prev, category: value }))}
@@ -240,7 +236,7 @@ const EventMonitor: React.FC = () => {
                 ))}
               </SelectContent>
             </Select>
-            
+
             <Select
               value={filter.severity}
               onValueChange={(value) => setFilter(prev => ({ ...prev, severity: value }))}
@@ -257,7 +253,7 @@ const EventMonitor: React.FC = () => {
                 ))}
               </SelectContent>
             </Select>
-            
+
             <Select
               value={filter.source}
               onValueChange={(value) => setFilter(prev => ({ ...prev, source: value }))}
@@ -274,7 +270,7 @@ const EventMonitor: React.FC = () => {
                 ))}
               </SelectContent>
             </Select>
-            
+
             <Select
               value={filter.eventType}
               onValueChange={(value) => setFilter(prev => ({ ...prev, eventType: value }))}
@@ -291,7 +287,7 @@ const EventMonitor: React.FC = () => {
                 ))}
               </SelectContent>
             </Select>
-            
+
             <div className="flex items-center gap-2">
               <Button
                 size="sm"
@@ -309,7 +305,7 @@ const EventMonitor: React.FC = () => {
               </Button>
             </div>
           </div>
-          
+
           {/* Settings */}
           <div className="flex items-center gap-4 mt-4 pt-4 border-t">
             <div className="flex items-center gap-2">
@@ -329,7 +325,7 @@ const EventMonitor: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -349,7 +345,7 @@ const EventMonitor: React.FC = () => {
       {/* Event List */}
       <Card>
         <CardContent className="p-0">
-          <ScrollArea className="h-[600px]" ref={scrollAreaRef}>
+          <div className="h-[600px] overflow-y-auto" ref={scrollAreaRef}>
             <div className="p-4 space-y-2">
               {filteredEvents.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
@@ -371,7 +367,7 @@ const EventMonitor: React.FC = () => {
                 filteredEvents.map((event) => {
                   const severityDisplay = getSeverityDisplay(event.severity);
                   const SeverityIcon = severityDisplay.icon;
-                  
+
                   return (
                     <div
                       key={event.id}
@@ -383,7 +379,7 @@ const EventMonitor: React.FC = () => {
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-start gap-3 flex-1 min-w-0">
                           <SeverityIcon className={cn("h-5 w-5 mt-0.5 flex-shrink-0", severityDisplay.color)} />
-                          
+
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <Badge variant="outline" className="text-xs">
@@ -400,7 +396,7 @@ const EventMonitor: React.FC = () => {
                                 </Badge>
                               )}
                             </div>
-                            
+
                             <div className="text-sm text-gray-900 mb-2">
                               {event.data && typeof event.data === 'object' ? (
                                 <pre className="whitespace-pre-wrap font-mono text-xs bg-gray-100 p-2 rounded overflow-x-auto">
@@ -410,7 +406,7 @@ const EventMonitor: React.FC = () => {
                                 <span>{event.data?.toString() || 'No data'}</span>
                               )}
                             </div>
-                            
+
                             {event.tags && event.tags.length > 0 && (
                               <div className="flex flex-wrap gap-1 mb-2">
                                 {event.tags.map((tag, index) => (
@@ -422,7 +418,7 @@ const EventMonitor: React.FC = () => {
                             )}
                           </div>
                         </div>
-                        
+
                         <div className="text-right text-xs text-gray-500 flex-shrink-0">
                           <div className="flex items-center gap-1 mb-1">
                             <Clock className="h-3 w-3" />
@@ -443,7 +439,7 @@ const EventMonitor: React.FC = () => {
                 })
               )}
             </div>
-          </ScrollArea>
+          </div>
         </CardContent>
       </Card>
     </div>

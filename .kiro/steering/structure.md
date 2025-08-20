@@ -24,18 +24,107 @@ backend/
 ├── Dockerfile                   # Container build configuration
 ├── main.py                      # FastAPI application entry point
 ├── requirements.txt             # Python dependencies
+├── alembic/                     # Database migrations
+│   └── versions/               # Migration files
+├── examples/                    # Sample data and import examples
+│   ├── domains.csv             # Sample domain lists
+│   ├── malware_domains.txt     # Sample threat data
+│   ├── rules.json              # Sample RPZ rules
+│   ├── sample_zone.bind        # BIND zone file examples
+│   ├── sample_zone.csv         # CSV import examples
+│   ├── sample_zone.json        # JSON import examples
+│   └── zone_import_examples.md # Import documentation
 └── app/                         # Application source code
     ├── core/                    # Core configuration and utilities
     │   ├── config.py           # Application settings
     │   ├── database.py         # Database connection setup
-    │   └── logging_config.py   # Logging configuration
+    │   ├── logging_config.py   # Logging configuration
+    │   ├── security.py         # Security utilities
+    │   ├── auth_context.py     # Authentication context
+    │   ├── dependencies.py     # FastAPI dependencies
+    │   ├── exceptions.py       # Custom exceptions
+    │   ├── error_handlers.py   # Error handling
+    │   ├── monitoring_config.py # Monitoring configuration
+    │   ├── validation_helpers.py # Input validation
+    │   └── websocket_auth.py   # WebSocket authentication
     ├── api/                     # REST API endpoints
-    │   └── routes/             # API route definitions
+    │   ├── routes.py           # Main route aggregator
+    │   ├── endpoints/          # Individual endpoint modules
+    │   │   ├── auth.py         # Authentication endpoints
+    │   │   ├── backup.py       # Backup management
+    │   │   ├── dashboard.py    # Dashboard data
+    │   │   ├── dns_records.py  # DNS record management
+    │   │   ├── events.py       # Event management
+    │   │   ├── forwarders.py   # DNS forwarder configuration
+    │   │   ├── forwarder_templates.py # Forwarder templates
+    │   │   ├── health.py       # Health checks
+    │   │   ├── realtime.py     # Real-time data
+    │   │   ├── reports.py      # Reporting endpoints
+    │   │   ├── rollback.py     # Configuration rollback
+    │   │   ├── rpz.py          # Response Policy Zones
+    │   │   ├── system.py       # System management
+    │   │   ├── users.py        # User management
+    │   │   ├── websocket.py    # WebSocket endpoints
+    │   │   └── zones.py        # DNS zone management
+    │   └── routes/             # Additional route modules
+    │       ├── analytics.py    # Analytics routes
+    │       └── websocket_demo.py # WebSocket demo
     ├── services/                # Business logic services
+    │   ├── base_service.py     # Base service class
     │   ├── bind_service.py     # BIND9 management
     │   ├── monitoring_service.py # Query log monitoring
-    │   └── health_service.py   # System health checks
-    └── models/                  # Database models and schemas
+    │   ├── health_service.py   # System health checks
+    │   ├── zone_service.py     # DNS zone management
+    │   ├── record_service.py   # DNS record management
+    │   ├── rpz_service.py      # RPZ management
+    │   ├── forwarder_service.py # Forwarder management
+    │   ├── forwarder_template_service.py # Forwarder templates
+    │   ├── threat_feed_service.py # Threat intelligence
+    │   ├── backup_service.py   # Backup operations
+    │   ├── reporting_service.py # Report generation
+    │   ├── analytics_service.py # Analytics processing
+    │   ├── event_service.py    # Event management
+    │   ├── event_integration.py # Event integration
+    │   ├── websocket_events.py # WebSocket event handling
+    │   ├── background_tasks.py # Background job processing
+    │   ├── scheduler_service.py # Task scheduling
+    │   ├── acl_service.py      # Access control lists
+    │   ├── record_history_service.py # Record change history
+    │   ├── record_import_export_service.py # Import/export
+    │   └── record_template_service.py # Record templates
+    ├── models/                  # Database models
+    │   ├── auth.py             # Authentication models
+    │   ├── dns.py              # DNS-related models
+    │   ├── events.py           # Event models
+    │   ├── monitoring.py       # Monitoring models
+    │   ├── security.py         # Security models
+    │   └── system.py           # System models
+    ├── schemas/                 # Pydantic schemas
+    │   ├── auth.py             # Authentication schemas
+    │   ├── dns.py              # DNS schemas
+    │   ├── monitoring.py       # Monitoring schemas
+    │   ├── reports.py          # Report schemas
+    │   ├── security.py         # Security schemas
+    │   ├── system.py           # System schemas
+    │   └── examples.py         # Schema examples
+    ├── templates/               # Jinja2 templates for config generation
+    │   ├── config/             # BIND9 configuration templates
+    │   │   ├── acl.j2          # Access control lists
+    │   │   ├── forwarders.j2   # Forwarder configuration
+    │   │   ├── logging.j2      # Logging configuration
+    │   │   └── statistics.j2   # Statistics configuration
+    │   ├── zones/              # Zone file templates
+    │   │   ├── master.j2       # Master zone template
+    │   │   ├── reverse.j2      # Reverse zone template
+    │   │   └── slave.j2        # Slave zone template
+    │   ├── rpz_*.j2            # RPZ templates (multiple files)
+    │   ├── threat_feed_*.j2    # Threat feed templates
+    │   ├── template_mapping.py # Template mapping logic
+    │   ├── template_validator.py # Template validation
+    │   └── threat_feed_template_validator.py # Threat feed validation
+    ├── utils/                   # Utility functions
+    └── websocket/               # WebSocket handling
+        └── manager.py          # WebSocket connection manager
 ```
 
 ## Frontend Structure (`frontend/`)
@@ -66,16 +155,9 @@ bind9/
 ├── Dockerfile                   # BIND9 container configuration
 ├── named.conf.options          # Main BIND9 configuration
 ├── named.conf.local            # Zone definitions and ACLs
-├── zones/                      # DNS zone files
-│   ├── db.internal.local       # Example authoritative zone
-│   └── db.192.168.1           # Reverse DNS zone
-└── rpz/                        # Response Policy Zone files
-    ├── db.rpz.malware          # Malware blocking rules
-    ├── db.rpz.phishing         # Phishing protection
-    ├── db.rpz.adult            # Adult content filtering
-    ├── db.rpz.social-media     # Social media blocking
-    ├── db.rpz.safesearch       # SafeSearch enforcement
-    └── db.rpz.custom           # Custom block/allow rules
+├── zones.conf                  # Zone configuration file
+├── zones/                      # DNS zone files (created dynamically)
+└── rpz/                        # Response Policy Zone files (created dynamically)
 ```
 
 ## System Services (`systemd/`)
@@ -83,9 +165,26 @@ bind9/
 ```
 systemd/
 ├── hybrid-dns-backend.service      # FastAPI backend service
-├── hybrid-dns-monitoring.service   # Log monitoring service
 ├── hybrid-dns-maintenance.service  # Maintenance tasks
 └── hybrid-dns-maintenance.timer    # Scheduled maintenance
+```
+
+## Monitoring Service (`monitoring/`)
+
+```
+monitoring/
+├── Dockerfile                      # Container build for monitoring
+├── requirements.txt                # Python dependencies for monitoring
+└── monitor.py                      # DNS log parser and analytics
+```
+
+## Maintenance Scripts (`scripts/`)
+
+```
+scripts/
+├── backup.sh                       # Backup utility script
+├── maintenance.sh                  # Daily maintenance tasks
+└── optimize_monitoring.py          # Monitoring optimization
 ```
 
 ## Documentation (`docs/`)

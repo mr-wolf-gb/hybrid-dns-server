@@ -1,8 +1,8 @@
 import React from 'react'
-import { 
-  LightBulbIcon, 
-  TrendingUpIcon, 
-  TrendingDownIcon,
+import {
+  LightBulbIcon,
+  ArrowTrendingUpIcon as TrendingUpIcon,
+  ArrowTrendingDownIcon as TrendingDownIcon,
   ExclamationTriangleIcon,
   InformationCircleIcon,
   CheckCircleIcon
@@ -221,7 +221,7 @@ export const AnalyticsInsights: React.FC<AnalyticsInsightsProps> = ({
                     )}
                   </div>
                 </div>
-                
+
                 {insight.metric && (
                   <div className="flex-shrink-0 text-right ml-4">
                     <div className="flex items-center space-x-1">
@@ -234,9 +234,8 @@ export const AnalyticsInsights: React.FC<AnalyticsInsightsProps> = ({
                       {getTrendIcon(insight.trend)}
                     </div>
                     {insight.metric.change !== 0 && (
-                      <div className={`text-sm ${
-                        insight.metric.change > 0 ? 'text-green-600' : 'text-red-600'
-                      }`}>
+                      <div className={`text-sm ${insight.metric.change > 0 ? 'text-green-600' : 'text-red-600'
+                        }`}>
                         {insight.metric.change > 0 ? '+' : ''}{insight.metric.change}%
                       </div>
                     )}

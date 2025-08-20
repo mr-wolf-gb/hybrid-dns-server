@@ -2,6 +2,7 @@
   "name": "hybrid-dns-frontend",
   "version": "1.0.0",
   "description": "React frontend for Hybrid DNS Server management",
+  "type": "module",
   "private": true,
   "dependencies": {
     "@headlessui/react": "^1.7.17",

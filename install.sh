@@ -182,6 +182,26 @@ check_os() {
     
     . /etc/os-release
     info "Detected OS: $NAME $VERSION"
+    
+    # Ubuntu 24.04 specific checks and warnings
+    if [[ "$VERSION_ID" == "24.04" ]]; then
+        info "Ubuntu 24.04 LTS detected - applying compatibility fixes"
+        
+        # Check for snap-installed packages that might conflict
+        if command -v snap &> /dev/null; then
+            if snap list | grep -q "node\|postgresql"; then
+                warning "Snap packages detected for Node.js or PostgreSQL"
+                warning "This may cause conflicts. Consider removing snap versions:"
+                warning "  sudo snap remove node postgresql"
+            fi
+        fi
+        
+        # Check Python version (Ubuntu 24.04 uses Python 3.12)
+        python_version=$(python3 --version 2>/dev/null | cut -d' ' -f2 | cut -d'.' -f1,2)
+        if [[ "$python_version" == "3.12" ]]; then
+            info "Python 3.12 detected - ensuring compatibility"
+        fi
+    fi
 }
 
 load_server_configuration() {
@@ -311,7 +331,10 @@ install_dependencies() {
         htop \
         nano \
         vim \
-        sudo
+        sudo \
+        systemd \
+        dbus \
+        apparmor-utils
     
     # BIND9 and DNS tools
     apt-get install -y -qq \
@@ -320,23 +343,58 @@ install_dependencies() {
         bind9-doc \
         dnsutils
     
-    # PostgreSQL
+    # PostgreSQL (Ubuntu 24.04 includes PostgreSQL 16)
     apt-get install -y -qq \
         postgresql \
         postgresql-contrib \
-        libpq-dev
+        postgresql-client \
+        libpq-dev \
+        postgresql-server-dev-all
     
-    # Python
+    # Verify PostgreSQL installation
+    if ! command -v psql &> /dev/null; then
+        error "PostgreSQL installation failed"
+    fi
+    
+    info "PostgreSQL version: $(psql --version)"
+    
+    # Python (Ubuntu 24.04 uses Python 3.12 by default)
     apt-get install -y -qq \
         python3 \
         python3-pip \
         python3-venv \
         python3-dev \
-        build-essential
+        python3-setuptools \
+        python3-wheel \
+        build-essential \
+        pkg-config \
+        libffi-dev \
+        libssl-dev
     
-    # Node.js (via NodeSource)
+    # Verify Python installation
+    if ! command -v python3 &> /dev/null; then
+        error "Python3 installation failed"
+    fi
+    
+    info "Python version: $(python3 --version)"
+    info "pip version: $(python3 -m pip --version)"
+    
+    # Node.js (via NodeSource) - Updated for Ubuntu 24.04 compatibility
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
     apt-get install -y -qq nodejs
+    
+    # Verify Node.js installation
+    if ! command -v node &> /dev/null; then
+        error "Node.js installation failed"
+    fi
+    
+    # Verify npm installation
+    if ! command -v npm &> /dev/null; then
+        error "npm installation failed"
+    fi
+    
+    info "Node.js version: $(node --version)"
+    info "npm version: $(npm --version)"
     
     # Nginx
     apt-get install -y -qq nginx
@@ -486,9 +544,21 @@ install_application() {
 cd "$INSTALL_DIR/backend"
 python3 -m venv venv
 source venv/bin/activate
-pip install --upgrade pip
+pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
+
+# Verify critical dependencies
+python -c "import fastapi; print('FastAPI:', fastapi.__version__)"
+python -c "import sqlalchemy; print('SQLAlchemy:', sqlalchemy.__version__)"
+python -c "import uvicorn; print('Uvicorn installed successfully')"
 EOF
+    
+    # Verify virtual environment was created successfully
+    if [[ ! -f "$INSTALL_DIR/backend/venv/bin/python" ]]; then
+        error "Python virtual environment creation failed"
+    fi
+    
+    success "Python dependencies installed successfully"
     
     # Configure frontend environment
     info "Configuring frontend environment..."
@@ -515,18 +585,34 @@ EOF
     # Clean any existing build artifacts
     sudo -u "$SERVICE_USER" rm -rf "$INSTALL_DIR/frontend/node_modules" "$INSTALL_DIR/frontend/package-lock.json" "$INSTALL_DIR/frontend/dist" 2>/dev/null || true
     
-    # Install dependencies
+    # Install dependencies with Ubuntu 24.04 compatibility
     info "Installing frontend dependencies..."
-    if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm install --silent --no-audit --no-fund 2>&1"; then
-        warning "npm install had warnings, but continuing..."
-        # Try again with verbose output for debugging
-        sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm install --no-audit --no-fund" || error "Failed to install frontend dependencies"
+    
+    # Set npm configuration for better compatibility
+    sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm config set fund false && npm config set audit false"
+    
+    # Install with legacy peer deps for better compatibility
+    if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm install --legacy-peer-deps --no-audit --no-fund 2>&1"; then
+        warning "npm install with legacy-peer-deps failed, trying without..."
+        if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm install --no-audit --no-fund"; then
+            error "Failed to install frontend dependencies"
+        fi
     fi
+    
+    # Verify critical dependencies
+    sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm list react vite typescript --depth=0" || warning "Some frontend dependencies may be missing"
     
     # Build the application
     info "Building frontend..."
-    if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm run build 2>&1"; then
-        error "Frontend build failed - check vite.config.ts syntax and dependencies"
+    
+    # Set NODE_OPTIONS for Ubuntu 24.04 compatibility
+    export NODE_OPTIONS="--max-old-space-size=4096"
+    
+    if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && NODE_OPTIONS='--max-old-space-size=4096' npm run build 2>&1"; then
+        warning "Frontend build failed, trying with legacy OpenSSL..."
+        if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && NODE_OPTIONS='--max-old-space-size=4096 --openssl-legacy-provider' npm run build 2>&1"; then
+            error "Frontend build failed - check vite.config.ts syntax and dependencies"
+        fi
     fi
     
     # Verify build output
@@ -591,9 +677,31 @@ configure_bind9() {
     chmod 755 /etc/bind/rpz
     chmod 755 /var/log/bind
     chmod 644 /etc/bind/*.conf
-    chmod 644 /etc/bind/*.key
-    chmod 644 /etc/bind/zones/db.*
-    chmod 644 /etc/bind/rpz/db.*
+    chmod 644 /etc/bind/*.key 2>/dev/null || true
+    chmod 644 /etc/bind/zones/db.* 2>/dev/null || true
+    chmod 644 /etc/bind/rpz/db.* 2>/dev/null || true
+    
+    # Fix AppArmor profile if it exists (Ubuntu 24.04 specific)
+    if [[ -f /etc/apparmor.d/usr.sbin.named ]]; then
+        info "Updating AppArmor profile for BIND9..."
+        
+        # Add necessary permissions to AppArmor profile
+        if ! grep -q "/var/log/bind/" /etc/apparmor.d/usr.sbin.named; then
+            cat >> /etc/apparmor.d/usr.sbin.named << 'EOF'
+
+  # Additional permissions for Hybrid DNS Server
+  /var/log/bind/ rw,
+  /var/log/bind/** rw,
+  /etc/bind/zones/ rw,
+  /etc/bind/zones/** rw,
+  /etc/bind/rpz/ rw,
+  /etc/bind/rpz/** rw,
+EOF
+            
+            # Reload AppArmor profile
+            apparmor_parser -r /etc/apparmor.d/usr.sbin.named || warning "Could not reload AppArmor profile"
+        fi
+    fi
     
     # Fix statistics-channels configuration issue (remove problematic CIDR line)
     sed -i '/inet 192\.168\.0\.0\/16 port 8053 allow { 192\.168\.0\.0\/16; };/d' /etc/bind/named.conf.options
@@ -616,16 +724,22 @@ configure_bind9() {
         error "BIND9 configuration is invalid"
     fi
     
-    # Start BIND9 (handle different service names)
+    # Start BIND9 (handle different service names and Ubuntu 24.04 specifics)
     if systemctl list-unit-files | grep -q "^named.service"; then
         systemctl restart named
         systemctl enable named
         BIND_SERVICE="named"
     else
+        # Ubuntu 24.04 uses bind9 service name
         systemctl restart bind9
-        # Try to enable, but don't fail if it's an alias
-        systemctl enable bind9 2>/dev/null || systemctl enable named 2>/dev/null || true
+        systemctl enable bind9
         BIND_SERVICE="bind9"
+    fi
+    
+    # Additional check for Ubuntu 24.04 systemd compatibility
+    if ! systemctl is-enabled $BIND_SERVICE &>/dev/null; then
+        warning "BIND9 service may not be properly enabled, attempting manual enable..."
+        systemctl enable $BIND_SERVICE || warning "Could not enable BIND9 service"
     fi
     
     # Wait for service to start
@@ -641,7 +755,17 @@ configure_bind9() {
         success "BIND9 started successfully"
         BIND_SERVICE="bind9"
     else
-        error "BIND9 failed to start"
+        warning "BIND9 failed to start, checking logs..."
+        journalctl -u $BIND_SERVICE --no-pager -n 10
+        error "BIND9 failed to start - check configuration"
+    fi
+    
+    # Test DNS resolution
+    info "Testing DNS resolution..."
+    if dig @localhost google.com +short > /dev/null 2>&1; then
+        success "DNS resolution test passed"
+    else
+        warning "DNS resolution test failed - may need manual configuration"
     fi
     
     success "BIND9 configured"
@@ -846,22 +970,22 @@ ProtectControlGroups=yes
 WantedBy=multi-user.target
 EOF
 
-    # Monitoring service
+    # Monitoring service - Use the existing monitoring script
     cat > /etc/systemd/system/hybrid-dns-monitor.service << EOF
 [Unit]
 Description=Hybrid DNS Server Monitoring
-After=network.target hybrid-dns-backend.service
-Wants=hybrid-dns-backend.service
+After=network.target hybrid-dns-backend.service bind9.service
+Wants=hybrid-dns-backend.service bind9.service
 Requires=network.target
 
 [Service]
 Type=exec
 User=$SERVICE_USER
 Group=$SERVICE_USER
-WorkingDirectory=$INSTALL_DIR/backend
+WorkingDirectory=$INSTALL_DIR/monitoring
 Environment=PATH=$INSTALL_DIR/backend/venv/bin
 EnvironmentFile=$INSTALL_DIR/.env
-ExecStart=/bin/bash -c 'cd $INSTALL_DIR/backend && source venv/bin/activate && python -c "import asyncio; from app.services.monitoring_service import MonitoringService; from app.services.health_service import HealthService; asyncio.run(asyncio.gather(MonitoringService().start_monitoring(), HealthService().start_health_checks()))"'
+ExecStart=$INSTALL_DIR/backend/venv/bin/python $INSTALL_DIR/monitoring/monitor.py
 Restart=always
 RestartSec=30
 StandardOutput=journal
@@ -1051,11 +1175,30 @@ initialize_database() {
     chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/backend/.env"
     chmod 600 "$INSTALL_DIR/backend/.env"
     
+    # Run database initialization
     sudo -u "$SERVICE_USER" bash << EOF
 cd "$INSTALL_DIR/backend"
 source venv/bin/activate
+
+# Set PYTHONPATH to ensure imports work
+export PYTHONPATH="\$PWD:\$PYTHONPATH"
+
+# Initialize database tables
 python init_db.py
+
+# Run any pending Alembic migrations
+if [[ -f "alembic.ini" ]]; then
+    info "Running database migrations..."
+    alembic upgrade head || true
+fi
 EOF
+    
+    # Verify database initialization
+    if sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/backend' && source venv/bin/activate && python -c 'import asyncio; from app.core.database import check_database_health; print(asyncio.run(check_database_health()))'"; then
+        success "Database initialization verified"
+    else
+        warning "Database initialization completed but verification failed"
+    fi
     
     # Remove the temporary .env file from backend directory
     rm -f "$INSTALL_DIR/backend/.env"
@@ -1094,26 +1237,55 @@ start_services() {
     
     # Check if backend is responding
     info "Testing backend API..."
-    if curl -f -s "http://localhost:$BACKEND_PORT/health" > /dev/null; then
-        success "Backend API is responding"
+    local retry_count=0
+    local max_retries=30
+    
+    while [[ $retry_count -lt $max_retries ]]; do
+        if curl -f -s "http://localhost:$BACKEND_PORT/health" > /dev/null; then
+            success "Backend API is responding"
+            break
+        else
+            ((retry_count++))
+            if [[ $retry_count -eq $max_retries ]]; then
+                warning "Backend API not responding after $max_retries attempts, checking logs..."
+                journalctl -u hybrid-dns-backend --no-pager -n 20
+                warning "Backend may need manual troubleshooting"
+            else
+                sleep 2
+            fi
+        fi
+    done
+    
+    # Test web interface accessibility
+    info "Testing web interface..."
+    if curl -f -s -k "https://localhost/health" > /dev/null; then
+        success "Web interface is accessible"
     else
-        warning "Backend API not responding, checking logs..."
-        journalctl -u hybrid-dns-backend --no-pager -n 20
+        warning "Web interface may not be fully accessible yet"
     fi
 }
 
 create_admin_user() {
     info "Creating admin user..."
     
+    # Copy .env file to backend directory for admin creation
+    cp "$INSTALL_DIR/.env" "$INSTALL_DIR/backend/.env"
+    chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/backend/.env"
+    chmod 600 "$INSTALL_DIR/backend/.env"
+    
     sudo -u "$SERVICE_USER" bash << EOF
 cd "$INSTALL_DIR/backend"
 source venv/bin/activate
-export ADMIN_USERNAME="$ADMIN_USERNAME"
-export ADMIN_PASSWORD="$ADMIN_PASSWORD"
-export ADMIN_EMAIL="$ADMIN_EMAIL"
-export ADMIN_FULL_NAME="$ADMIN_FULL_NAME"
+
+# Set PYTHONPATH to ensure imports work
+export PYTHONPATH="\$PWD:\$PYTHONPATH"
+
+# Create admin user
 python create_admin.py --username "$ADMIN_USERNAME" --password "$ADMIN_PASSWORD" --email "$ADMIN_EMAIL" --full-name "$ADMIN_FULL_NAME"
 EOF
+    
+    # Remove the temporary .env file from backend directory
+    rm -f "$INSTALL_DIR/backend/.env"
     
     success "Admin user created successfully"
     info "Admin credentials:"

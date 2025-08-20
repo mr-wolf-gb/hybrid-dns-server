@@ -5,7 +5,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { useWebSocket, WebSocketMessage, WebSocketState, WebSocketActions } from '../hooks/useWebSocket';
 import { useAuth } from './AuthContext';
-import { toast } from 'react-hot-toast';
+import { toast } from 'react-toastify';
 
 interface EventHandler {
   id: string;
@@ -20,22 +20,22 @@ interface WebSocketContextType {
   securityConnection: [WebSocketState, WebSocketActions];
   systemConnection: [WebSocketState, WebSocketActions];
   adminConnection?: [WebSocketState, WebSocketActions];
-  
+
   // Global event handling
   registerEventHandler: (id: string, eventTypes: string[], handler: (message: WebSocketMessage) => void) => void;
   unregisterEventHandler: (id: string) => void;
-  
+
   // Event broadcasting
   broadcastEvent: (eventData: any, connectionType?: string) => void;
-  
+
   // Event replay
   startEventReplay: (replayConfig: any) => void;
   stopEventReplay: (replayId: string) => void;
-  
+
   // Connection management
   connectAll: () => void;
   disconnectAll: () => void;
-  
+
   // Statistics
   getConnectionStats: () => any;
 }
@@ -174,7 +174,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
         // This is a simplified check - in practice you'd need to track connection types
         return true; // For now, broadcast to all
       });
-      
+
       if (targetConnection) {
         targetConnection[1].emitEvent(eventData);
       }

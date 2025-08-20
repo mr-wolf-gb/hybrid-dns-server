@@ -6,9 +6,12 @@
 - **FastAPI**: Python web framework for REST API
 - **Python 3.10+**: Primary backend language
 - **SQLAlchemy**: Database ORM
-- **PostgreSQL**: Primary database for configuration and logs
-- **Redis**: Caching and session storage
+- **SQLite/PostgreSQL**: Database for configuration and logs (SQLite for development, PostgreSQL for production)
+- **Redis**: Caching and session storage (optional)
 - **Uvicorn**: ASGI server for FastAPI
+- **Alembic**: Database migration tool
+- **Celery**: Background task processing
+- **Jinja2**: Template engine for configuration file generation
 
 ### Frontend
 - **React 18**: UI framework
@@ -16,8 +19,13 @@
 - **Vite**: Build tool and dev server
 - **TailwindCSS**: Utility-first CSS framework
 - **Chart.js & Recharts**: Data visualization
-- **React Query**: Server state management
+- **TanStack Query (React Query)**: Server state management
 - **React Hook Form**: Form handling
+- **React Router**: Client-side routing
+- **Headless UI**: Accessible UI components
+- **Heroicons**: Icon library
+- **React Toastify**: Toast notifications
+- **Axios**: HTTP client
 
 ### DNS & Infrastructure
 - **BIND9**: Core DNS server (version 9.16+)
@@ -27,9 +35,12 @@
 
 ### Development Tools
 - **pytest**: Python testing framework
+- **pytest-asyncio**: Async testing support
 - **Black**: Python code formatting
-- **ESLint**: JavaScript/TypeScript linting
+- **Flake8**: Python linting
 - **mypy**: Python type checking
+- **Prettier**: Frontend code formatting (via .prettierrc)
+- **TypeScript**: Type checking for frontend
 
 ## Build Commands
 
@@ -98,14 +109,19 @@ docker-compose -f docker-compose.prod.yml up -d
 
 ### Environment Files
 - `.env`: Main environment configuration
-- `backend/.env`: Backend-specific settings
-- `frontend/.env.local`: Frontend environment variables
+- `.env.example`: Example environment configuration
+- `frontend/.env.local.example`: Frontend environment example
+- `frontend/.env.production`: Frontend production settings
 
 ### Key Configuration Locations
-- `/etc/bind/`: BIND9 DNS configuration
-- `/opt/hybrid-dns-server/`: Application installation directory
-- `/var/log/hybrid-dns/`: Application logs
-- `/var/log/bind/`: DNS server logs
+- `/etc/bind/`: BIND9 DNS configuration (production)
+- `bind9/`: BIND9 configuration (development)
+- `/opt/hybrid-dns-server/`: Application installation directory (production)
+- `/var/log/hybrid-dns/`: Application logs (production)
+- `/var/log/bind/`: DNS server logs (production)
+- `.env`: Environment configuration
+- `backend/.env`: Backend-specific settings (if exists)
+- `frontend/.env.local`: Frontend environment variables (if exists)
 
 ### Database Migrations
 ```bash

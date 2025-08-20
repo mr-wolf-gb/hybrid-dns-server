@@ -42,7 +42,7 @@ A production-ready hybrid DNS server solution running on Linux (Debian/Ubuntu), 
 ## 📋 System Requirements
 
 ### Minimum Requirements
-- **OS**: Ubuntu 20.04+ or Debian 11+
+- **OS**: Ubuntu 22.04+ or Debian 11+ (Tested on Ubuntu 24.04 LTS)
 - **CPU**: 2 cores (x86_64)
 - **RAM**: 4GB RAM
 - **Storage**: 20GB available disk space
@@ -55,39 +55,41 @@ A production-ready hybrid DNS server solution running on Linux (Debian/Ubuntu), 
 - **Network**: Dual NICs for redundancy
 
 ### Software Dependencies
-- BIND9 9.16+
-- PostgreSQL 12+
-- Python 3.10+
-- Node.js 18+
+- BIND9 9.16+ (Ubuntu 24.04 includes BIND9 9.18+)
+- PostgreSQL 12+ (Ubuntu 24.04 includes PostgreSQL 16)
+- Python 3.10+ (Ubuntu 24.04 includes Python 3.12)
+- Node.js 18+ (Installed via NodeSource)
 - Nginx 1.18+
-- Redis 6+
+- Redis 6+ (Optional, for caching)
 
 ## 🚀 Quick Start
 
 ### Option 1: Automated Installation (Recommended)
 
-1. **Download and run the installation script:**
-   ```bash
-   wget https://github.com/mr-wolf-gb/hybrid-dns-server/raw/main/install.sh
-   chmod +x install.sh
-   sudo ./install.sh
-   ```
-   
-   The script will automatically download all required files from the GitHub repository.
-
-2. **Alternative: Clone the repository first (for development):**
+1. **Clone the repository and run the installation script:**
    ```bash
    git clone https://github.com/mr-wolf-gb/hybrid-dns-server.git
    cd hybrid-dns-server
    sudo ./install.sh
    ```
+   
+   The script will install all dependencies and configure the system automatically.
+
+2. **For quick deployment (download installer only):**
+   ```bash
+   wget https://raw.githubusercontent.com/mr-wolf-gb/hybrid-dns-server/main/install.sh
+   chmod +x install.sh
+   sudo ./install.sh
+   ```
+   
+   Note: This will download the full repository during installation.
 
 3. **Installation Features:**
-   - **Automatic Download**: Downloads all project files from GitHub automatically
+   - **Ubuntu 24.04 Compatible**: Fully tested and optimized for Ubuntu 24.04 LTS
    - **Resume Support**: Installation can be resumed from checkpoints if interrupted
-   - **Automatic Fixes**: Handles BIND9 configuration issues automatically
+   - **Automatic Configuration**: Handles BIND9, database, and service configuration
    - **Comprehensive Setup**: Installs all dependencies and configures services
-   - **Security Hardening**: Configures firewall, fail2ban, and SSL certificates
+   - **Security Hardening**: Configures firewall, fail2ban, SSL certificates, and AppArmor
 
 4. **Installation Options:**
    ```bash
@@ -98,15 +100,24 @@ A production-ready hybrid DNS server solution running on Linux (Debian/Ubuntu), 
    ```
 
 5. **Follow the interactive prompts:**
-   - Set admin password
-   - Configure network settings
-   - Choose deployment options
+   - Configure server IP address and domain name
+   - Set admin username, password, email, and full name
+   - Installation will automatically handle all dependencies
 
-6. **Access the web interface:**
+6. **What gets installed:**
+   - BIND9 DNS server with custom configuration
+   - PostgreSQL database with initialized schema
+   - Python FastAPI backend with virtual environment
+   - React frontend built and served via Nginx
+   - Systemd services for automatic startup
+   - UFW firewall rules and Fail2ban protection
+   - SSL certificates (self-signed, upgrade to Let's Encrypt recommended)
+
+7. **Access the web interface:**
    ```
    https://your-server-ip
    ```
-   Default credentials will be provided during installation.
+   Use the admin credentials you set during installation.
 
 ### Option 2: Docker Deployment
 
@@ -129,7 +140,7 @@ A production-ready hybrid DNS server solution running on Linux (Debian/Ubuntu), 
 
 4. **Access the interface:**
    ```
-   http://localhost:3000
+   https://your-server-ip
    ```
 
 ## 📚 Documentation
@@ -281,10 +292,13 @@ safesearch:
 ### Manual Backup
 ```bash
 # Create immediate backup
-sudo /opt/hybrid-dns-server/scripts/backup.sh --compress
+sudo systemctl start hybrid-dns-backup
 
-# Restore from backup
-sudo /opt/hybrid-dns-server/scripts/restore.sh /path/to/backup.tar.gz
+# View backup files
+ls -la /opt/hybrid-dns-server/backups/
+
+# Backup script location
+sudo /opt/hybrid-dns-server/scripts/backup.sh
 ```
 
 ### Recovery Procedures
@@ -305,15 +319,15 @@ sudo /opt/hybrid-dns-server/scripts/restore.sh /path/to/backup.tar.gz
 ```bash
 # View service status
 sudo systemctl status hybrid-dns-backend
-sudo systemctl status hybrid-dns-monitoring
+sudo systemctl status hybrid-dns-monitor
 sudo systemctl status bind9
 
 # View logs
 sudo journalctl -u bind9 -f
-sudo tail -f /var/log/hybrid-dns/backend.log
+sudo journalctl -u hybrid-dns-backend -f
 
-# Manual threat feed update
-sudo /opt/hybrid-dns-server/scripts/update-threats.sh
+# Manual backup
+sudo systemctl start hybrid-dns-backup
 
 # Cache management
 sudo rndc flush  # Clear DNS cache
@@ -354,9 +368,8 @@ sudo ./install.sh --fresh
 # Check installation logs
 tail -f /tmp/hybrid-dns-install.log
 
-# If download fails, check internet connectivity
-wget -q --spider https://github.com/mr-wolf-gb/hybrid-dns-server/archive/refs/heads/main.zip
-echo $?  # Should return 0 if successful
+# Test database connection
+sudo -u dns-server bash -c "cd /opt/hybrid-dns-server/backend && source venv/bin/activate && python -c 'from app.core.database import check_database_health; import asyncio; print(asyncio.run(check_database_health()))'"
 ```
 
 **Web Interface Not Accessible**
@@ -381,6 +394,42 @@ max-cache-size 512M;
 
 For more troubleshooting guidance, see the [Troubleshooting Guide](docs/troubleshooting.md).
 
+## 🏗️ Project Structure
+
+```
+hybrid-dns-server/
+├── 📄 README.md                     # Project documentation
+├── 🚀 install.sh                   # Automated installation script
+├── 🐳 docker-compose.yml           # Container orchestration
+├── 📁 backend/                     # FastAPI backend application
+│   ├── 📄 main.py                  # Application entry point
+│   ├── 📄 init_db.py               # Database initialization
+│   ├── 📄 create_admin.py          # Admin user creation
+│   ├── 📄 alembic.ini              # Database migration config
+│   ├── 📁 alembic/                 # Database migrations
+│   ├── 📁 app/                     # Application source code
+│   │   ├── 📁 api/                 # REST API endpoints
+│   │   ├── 📁 core/                # Core configuration
+│   │   ├── 📁 models/              # Database models
+│   │   ├── 📁 schemas/             # Pydantic schemas
+│   │   ├── 📁 services/            # Business logic
+│   │   ├── 📁 templates/           # Jinja2 templates
+│   │   └── 📁 websocket/           # WebSocket handling
+│   └── 📁 examples/                # Sample data and imports
+├── 📁 frontend/                    # React web interface
+│   ├── 📄 package.json             # Node.js dependencies
+│   ├── 📄 vite.config.ts           # Vite configuration
+│   └── 📁 src/                     # React application source
+├── 📁 bind9/                       # BIND9 DNS configuration
+│   ├── 📄 named.conf.options       # Main BIND9 config
+│   ├── 📄 named.conf.local         # Zone definitions
+│   ├── 📁 zones/                   # DNS zone files
+│   └── 📁 rpz/                     # Response Policy Zones
+├── 📁 monitoring/                  # DNS monitoring service
+├── 📁 systemd/                     # System service configs
+└── 📁 scripts/                     # Maintenance scripts
+```
+
 ## 🤝 Contributing
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
@@ -393,12 +442,17 @@ cd hybrid-dns-server
 
 # Backend development
 cd backend
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload
 
-# Frontend development  
+# Initialize database
+python init_db.py
+
+# Start development server
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# Frontend development (in another terminal)
 cd frontend
 npm install
 npm run dev
@@ -415,8 +469,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Discussions](https://github.com/mr-wolf-gb/hybrid-dns-server/discussions) - Community Q&A
 - [Documentation](docs/) - Comprehensive guides and tutorials
 
-### Commercial Support
-For enterprise deployments and commercial support, contact us at enterprise@hybridns.com
+### Installation Support
+- Tested on fresh Ubuntu 24.04 LTS installations
+- Comprehensive error handling and logging
+- Resume capability for interrupted installations
+- Automatic dependency resolution
 
 ## 📈 Roadmap
 
@@ -425,12 +482,15 @@ For enterprise deployments and commercial support, contact us at enterprise@hybr
 - [ ] Active Directory integration for user management  
 - [ ] DNS over HTTPS (DoH) and DNS over TLS (DoT)
 - [ ] Geographic DNS routing
-- [ ] Integration with external threat feeds
+- [ ] Enhanced threat feed integration
 - [ ] Mobile app for monitoring
 - [ ] Load balancing between multiple DNS servers
 - [ ] Advanced analytics and reporting
+- [ ] Debian 12 support
+- [ ] ARM64 architecture support
 
 ### Version History
+- **v1.2.0** - Ubuntu 24.04 LTS support, enhanced installer, database migrations
 - **v1.1.0** - Fixed BIND9 configuration issues, added installation resume support
 - **v1.0.0** - Initial release with core functionality
 - **v0.9.0** - Beta release with web interface

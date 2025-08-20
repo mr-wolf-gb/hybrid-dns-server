@@ -3,18 +3,11 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { Label } from '../ui/label';
-import { Textarea } from '../ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Badge } from '../ui/badge';
-import { Progress } from '../ui/progress';
+import { Card, Button, Input, Badge, Select } from '../ui';
 import { useWebSocketContext } from '../../contexts/WebSocketContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { toast } from 'react-hot-toast';
-import { Play, Square, RotateCcw, Clock, Filter, Settings } from 'lucide-react';
+import { toast } from 'react-toastify';
+import { PlayIcon as Play, StopIcon as Square, ArrowPathIcon as RotateCcw, ClockIcon as Clock, FunnelIcon as Filter, Cog6ToothIcon as Settings } from '@heroicons/react/24/outline';
 import { format } from 'date-fns';
 
 interface EventReplayConfig {
@@ -47,7 +40,7 @@ interface ActiveReplay {
 const EventReplay: React.FC = () => {
   const { user } = useAuth();
   const { registerEventHandler, unregisterEventHandler, startEventReplay, stopEventReplay } = useWebSocketContext();
-  
+
   const [isConfiguring, setIsConfiguring] = useState(false);
   const [activeReplays, setActiveReplays] = useState<ActiveReplay[]>([]);
   const [replayConfig, setReplayConfig] = useState<EventReplayConfig>({
@@ -87,7 +80,7 @@ const EventReplay: React.FC = () => {
       toast.success(`Event replay "${message.data.name}" started`);
       setIsConfiguring(false);
     } else if (message.type === 'replay_status') {
-      setActiveReplays(prev => prev.map(replay => 
+      setActiveReplays(prev => prev.map(replay =>
         replay.replay_id === message.data.replay_id
           ? { ...replay, ...message.data }
           : replay
@@ -159,7 +152,7 @@ const EventReplay: React.FC = () => {
   const setDefaultTimeRange = () => {
     const now = new Date();
     const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    
+
     setReplayConfig(prev => ({
       ...prev,
       start_time: yesterday.toISOString().slice(0, 16),
@@ -171,7 +164,7 @@ const EventReplay: React.FC = () => {
   const setLastWeekRange = () => {
     const now = new Date();
     const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    
+
     setReplayConfig(prev => ({
       ...prev,
       start_time: lastWeek.toISOString().slice(0, 16),
@@ -215,7 +208,7 @@ const EventReplay: React.FC = () => {
                       </Button>
                     </div>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span>Progress: {replay.processed_events} / {replay.total_events} events</span>
@@ -251,7 +244,7 @@ const EventReplay: React.FC = () => {
             </Button>
           </CardTitle>
         </CardHeader>
-        
+
         {isConfiguring && (
           <CardContent className="space-y-6">
             {/* Basic Configuration */}
@@ -265,7 +258,7 @@ const EventReplay: React.FC = () => {
                   placeholder="Enter replay name"
                 />
               </div>
-              
+
               <div>
                 <Label htmlFor="replay-speed">Replay Speed</Label>
                 <Select
@@ -313,7 +306,7 @@ const EventReplay: React.FC = () => {
                   </Button>
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="start-time">Start Time</Label>
@@ -324,7 +317,7 @@ const EventReplay: React.FC = () => {
                     onChange={(e) => handleInputChange('start_time', e.target.value)}
                   />
                 </div>
-                
+
                 <div>
                   <Label htmlFor="end-time">End Time</Label>
                   <Input
@@ -343,7 +336,7 @@ const EventReplay: React.FC = () => {
                 <Filter className="h-4 w-4" />
                 Event Filters (Optional)
               </Label>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label>Event Categories</Label>
@@ -366,7 +359,7 @@ const EventReplay: React.FC = () => {
                     ))}
                   </div>
                 </div>
-                
+
                 <div>
                   <Label>Severity Levels</Label>
                   <div className="flex flex-wrap gap-2 mt-2">
