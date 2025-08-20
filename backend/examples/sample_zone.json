@@ -1,0 +1,69 @@
+{
+  "zone": {
+    "name": "sample.local",
+    "zone_type": "master",
+    "email": "admin.sample.local",
+    "description": "Sample zone for testing import functionality",
+    "refresh": 10800,
+    "retry": 3600,
+    "expire": 604800,
+    "minimum": 86400
+  },
+  "records": [
+    {
+      "name": "@",
+      "record_type": "A",
+      "value": "192.168.1.10",
+      "ttl": 3600
+    },
+    {
+      "name": "www",
+      "record_type": "A",
+      "value": "192.168.1.10",
+      "ttl": 3600
+    },
+    {
+      "name": "api",
+      "record_type": "A",
+      "value": "192.168.1.11",
+      "ttl": 3600
+    },
+    {
+      "name": "db",
+      "record_type": "A",
+      "value": "192.168.1.12",
+      "ttl": 3600
+    },
+    {
+      "name": "blog",
+      "record_type": "CNAME",
+      "value": "www.sample.local",
+      "ttl": 3600
+    },
+    {
+      "name": "@",
+      "record_type": "MX",
+      "value": "mail.sample.local",
+      "ttl": 3600,
+      "priority": 10
+    },
+    {
+      "name": "@",
+      "record_type": "TXT",
+      "value": "v=spf1 mx a -all",
+      "ttl": 3600
+    },
+    {
+      "name": "_http._tcp",
+      "record_type": "SRV",
+      "value": "www.sample.local",
+      "ttl": 3600,
+      "priority": 10,
+      "weight": 5,
+      "port": 80
+    }
+  ],
+  "format": "json",
+  "validate_only": false,
+  "overwrite_existing": false
+}

@@ -50,6 +50,9 @@ class RecordService(BaseService[DNSRecord]):
         # Create the record
         record = await self.create(record_data, track_action=True)
         
+        # Create history entry
+        await self._create_history_entry(record, "create")
+        
         logger.info(f"Created DNS record {record.name} {record.record_type} in zone {zone.name}")
         
         # Track specific action with more details
@@ -72,6 +75,18 @@ class RecordService(BaseService[DNSRecord]):
         if not record:
             logger.warning(f"DNS record {record_id} not found for update")
             return None
+        
+        # Store previous values for history
+        previous_values = {
+            'name': record.name,
+            'record_type': record.record_type,
+            'value': record.value,
+            'ttl': record.ttl,
+            'priority': record.priority,
+            'weight': record.weight,
+            'port': record.port,
+            'is_active': record.is_active
+        }
         
         # Get zone for validation
         zone = await self._get_zone(record.zone_id)
@@ -101,6 +116,10 @@ class RecordService(BaseService[DNSRecord]):
         updated_record = await self.update(record_id, record_data, track_action=True)
         
         if updated_record:
+            # Create history entry with previous values
+            change_details = {field: record_data[field] for field in record_data.keys()}
+            await self._create_history_entry(updated_record, "update", previous_values, change_details)
+            
             logger.info(f"Updated DNS record {updated_record.name} {updated_record.record_type} in zone {zone.name}")
             
             # Track specific action with more details
@@ -123,6 +142,9 @@ class RecordService(BaseService[DNSRecord]):
         if not record:
             logger.warning(f"DNS record {record_id} not found for deletion")
             return False
+        
+        # Create history entry before deletion
+        await self._create_history_entry(record, "delete")
         
         # Get zone for logging
         zone = await self._get_zone(record.zone_id)
@@ -274,10 +296,17 @@ class RecordService(BaseService[DNSRecord]):
         if not record:
             return None
         
+        previous_status = record.is_active
         new_status = not record.is_active
         updated_record = await self.update(record_id, {"is_active": new_status}, track_action=True)
         
         if updated_record:
+            # Create history entry
+            change_type = "activate" if new_status else "deactivate"
+            previous_values = {"is_active": previous_status}
+            change_details = {"is_active": new_status}
+            await self._create_history_entry(updated_record, change_type, previous_values, change_details)
+            
             status_text = "activated" if new_status else "deactivated"
             logger.info(f"DNS record {record.name} {record.record_type} {status_text}")
             
@@ -609,14 +638,71 @@ class RecordService(BaseService[DNSRecord]):
             if record_data.get('port') is None:
                 raise ValueError("SRV records must have a port value")
         
+        # NAPTR records require priority (order) and weight (preference)
+        if record_type == 'NAPTR':
+            if record_data.get('priority') is None:
+                raise ValueError("NAPTR records must have a priority (order) value")
+            if record_data.get('weight') is None:
+                raise ValueError("NAPTR records must have a weight (preference) value")
+        
+        # CAA records require priority (flags)
+        if record_type == 'CAA' and record_data.get('priority') is None:
+            raise ValueError("CAA records must have a priority (flags) value")
+        
         # Other record types should not have priority, weight, or port
-        if record_type not in ['MX', 'SRV']:
+        if record_type not in ['MX', 'SRV', 'NAPTR', 'CAA']:
             if record_data.get('priority') is not None:
                 raise ValueError(f"{record_type} records cannot have a priority value")
             if record_data.get('weight') is not None:
                 raise ValueError(f"{record_type} records cannot have a weight value")
             if record_data.get('port') is not None:
                 raise ValueError(f"{record_type} records cannot have a port value")
+        
+        # Validate record name format for specific types
+        record_name = record_data.get('name', '').lower()
+        
+        # SRV records must follow _service._proto.name format
+        if record_type == 'SRV':
+            if not record_name.startswith('_') or record_name.count('._') < 1:
+                raise ValueError("SRV record name must follow _service._proto.name format (e.g., _http._tcp)")
+        
+        # DMARC records must be _dmarc
+        if record_type == 'TXT' and 'v=DMARC1' in record_data.get('value', ''):
+            if not record_name.startswith('_dmarc'):
+                raise ValueError("DMARC TXT records must have name starting with '_dmarc'")
+        
+        # SPF records should be at zone apex or specific subdomain
+        if record_type == 'TXT' and record_data.get('value', '').startswith('v=spf1'):
+            # SPF records are typically at @ (zone apex) but can be elsewhere
+            pass  # No specific name validation needed
+        
+        # DKIM records must follow _selector._domainkey format
+        if record_type == 'TXT' and 'v=DKIM1' in record_data.get('value', ''):
+            if not (record_name.startswith('_') and '._domainkey' in record_name):
+                raise ValueError("DKIM TXT records must follow _selector._domainkey.domain format")
+        
+        # Validate CNAME restrictions
+        if record_type == 'CNAME':
+            if record_name in ['@', '']:
+                raise ValueError("CNAME records cannot be created at the zone apex (@)")
+        
+        # Validate PTR record names for reverse zones
+        if record_type == 'PTR':
+            # PTR records in reverse zones should have numeric names
+            if record_name.replace('.', '').isdigit():
+                # This looks like a reverse zone PTR record, which is valid
+                pass
+            elif not record_name or record_name == '@':
+                # PTR at zone apex might be valid in some cases
+                pass
+            else:
+                # Regular PTR record, validate as hostname
+                try:
+                    from ..schemas.dns import DNSValidators
+                    DNSValidators.validate_hostname_format(record_name)
+                except ValueError:
+                    # Allow it anyway, as PTR records can have various formats
+                    pass
     
     async def _validate_record_value_format(self, record_type: str, value: str) -> None:
         """Validate record value format based on record type"""
@@ -639,6 +725,18 @@ class RecordService(BaseService[DNSRecord]):
                 DNSValidators.validate_txt_record_format(value)
             elif record_type == 'SOA':
                 DNSValidators.validate_soa_record_format(value)
+            elif record_type == 'CAA':
+                DNSValidators.validate_caa_record_format(value)
+            elif record_type == 'SSHFP':
+                DNSValidators.validate_sshfp_record_format(value)
+            elif record_type == 'TLSA':
+                DNSValidators.validate_tlsa_record_format(value)
+            elif record_type == 'NAPTR':
+                DNSValidators.validate_naptr_record_format(value)
+            elif record_type == 'LOC':
+                DNSValidators.validate_loc_record_format(value)
+            elif record_type == 'URL':
+                DNSValidators.validate_url_record_format(value)
             # Add more record type validations as needed
         except ValueError as e:
             raise ValueError(f"Invalid {record_type} record format: {str(e)}")
@@ -807,3 +905,15 @@ class RecordService(BaseService[DNSRecord]):
             zone_file_lines.append(line)
         
         return '\n'.join(zone_file_lines)
+    
+    async def _create_history_entry(self, record: DNSRecord, change_type: str, 
+                                   previous_values: Optional[Dict[str, Any]] = None,
+                                   change_details: Optional[Dict[str, Any]] = None) -> None:
+        """Create a history entry for a DNS record change"""
+        try:
+            from .record_history_service import RecordHistoryService
+            history_service = RecordHistoryService(self.db)
+            await history_service.create_history_entry(record, change_type, previous_values, change_details)
+        except Exception as e:
+            # Log error but don't fail the main operation
+            logger.error(f"Failed to create history entry for record {record.id}: {e}")

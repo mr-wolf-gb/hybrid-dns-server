@@ -27,6 +27,28 @@ from .dns import (
     HealthCheckResult,
     ZoneValidationResult,
     ValidationResult,
+    RecordStatistics,
+    # Record History schemas
+    DNSRecordHistoryBase,
+    DNSRecordHistory,
+    # Record Import/Export schemas
+    RecordImportFormat,
+    RecordExportFormat,
+    RecordImportRequest,
+    RecordImportResult,
+    RecordExportRequest,
+    RecordExportResult,
+    # Enhanced Record Validation schemas
+    RecordValidationRequest,
+    RecordValidationError,
+    RecordValidationResult,
+    # Enhanced Record Statistics schemas
+    RecordTypeStatistics,
+    ZoneRecordStatistics,
+    GlobalRecordStatistics,
+    # Record History Query schemas
+    RecordHistoryQuery,
+    RecordHistoryResponse,
     # Enums
     ZoneType,
     RecordType,
@@ -180,7 +202,29 @@ __all__ = [
     "HealthCheckResult",
     "ZoneValidationResult",
     "ValidationResult",
+    "RecordStatistics",
     "SystemStatus",
+    # Record History schemas
+    "DNSRecordHistoryBase",
+    "DNSRecordHistory",
+    # Record Import/Export schemas
+    "RecordImportFormat",
+    "RecordExportFormat",
+    "RecordImportRequest",
+    "RecordImportResult",
+    "RecordExportRequest",
+    "RecordExportResult",
+    # Enhanced Record Validation schemas
+    "RecordValidationRequest",
+    "RecordValidationError",
+    "RecordValidationResult",
+    # Enhanced Record Statistics schemas
+    "RecordTypeStatistics",
+    "ZoneRecordStatistics",
+    "GlobalRecordStatistics",
+    # Record History Query schemas
+    "RecordHistoryQuery",
+    "RecordHistoryResponse",
     # ThreatFeed schemas
     "ThreatFeedBase",
     "ThreatFeedCreate", 

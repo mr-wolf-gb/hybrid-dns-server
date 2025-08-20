@@ -170,6 +170,56 @@ class ForwarderHealth(Base):
         return f"Health Check: {self.server_ip} - {self.status}"
 
 
+class DNSRecordHistory(Base):
+    """DNS Record History model for tracking changes to DNS records"""
+    __tablename__ = "dns_record_history"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    record_id = Column(Integer, nullable=False)  # Original record ID (may not exist anymore)
+    zone_id = Column(Integer, ForeignKey("zones.id", ondelete="CASCADE"), nullable=False)
+    
+    # Record data at time of change
+    name = Column(String(255), nullable=False)
+    record_type = Column(String(10), nullable=False)
+    value = Column(String(500), nullable=False)
+    ttl = Column(Integer, nullable=True)
+    priority = Column(Integer, nullable=True)
+    weight = Column(Integer, nullable=True)
+    port = Column(Integer, nullable=True)
+    is_active = Column(Boolean, nullable=False)
+    
+    # Change tracking
+    change_type = Column(String(20), nullable=False)  # create, update, delete, activate, deactivate
+    changed_at = Column(DateTime, server_default=func.now(), nullable=False)
+    changed_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    
+    # Change details
+    change_details = Column(JSON, nullable=True)  # What fields changed
+    previous_values = Column(JSON, nullable=True)  # Previous values for updates
+    
+    # Relationships
+    zone = relationship("Zone")
+    changed_by_user = relationship("User", foreign_keys=[changed_by])
+    
+    # Table constraints
+    __table_args__ = (
+        CheckConstraint("change_type IN ('create', 'update', 'delete', 'activate', 'deactivate')", name='check_change_type'),
+        CheckConstraint("length(name) >= 1", name='check_history_name_not_empty'),
+        CheckConstraint("length(record_type) >= 1", name='check_history_record_type_not_empty'),
+        CheckConstraint("length(value) >= 1", name='check_history_value_not_empty'),
+        CheckConstraint("ttl IS NULL OR ttl > 0", name='check_history_ttl_positive'),
+        CheckConstraint("priority IS NULL OR priority >= 0", name='check_history_priority_non_negative'),
+        CheckConstraint("weight IS NULL OR weight >= 0", name='check_history_weight_non_negative'),
+        CheckConstraint("port IS NULL OR (port >= 1 AND port <= 65535)", name='check_history_port_range'),
+    )
+    
+    def __repr__(self):
+        return f"<DNSRecordHistory(id={self.id}, record_id={self.record_id}, change_type='{self.change_type}')>"
+    
+    def __str__(self):
+        return f"History: {self.change_type} {self.record_type} record '{self.name}' at {self.changed_at}"
+
+
 # Security models moved to security.py
 
 
@@ -202,6 +252,15 @@ Index('idx_forwarders_type_active', Forwarder.forwarder_type, Forwarder.is_activ
 Index('idx_forwarders_active', Forwarder.is_active)
 Index('idx_forwarders_created_by', Forwarder.created_by)
 Index('idx_forwarders_updated_by', Forwarder.updated_by)
+
+# DNS Record History indexes for audit and tracking
+Index('idx_dns_record_history_record_id', DNSRecordHistory.record_id)
+Index('idx_dns_record_history_zone_id', DNSRecordHistory.zone_id)
+Index('idx_dns_record_history_changed_at', DNSRecordHistory.changed_at)
+Index('idx_dns_record_history_changed_by', DNSRecordHistory.changed_by)
+Index('idx_dns_record_history_change_type', DNSRecordHistory.change_type)
+Index('idx_dns_record_history_record_type', DNSRecordHistory.record_type)
+Index('idx_dns_record_history_name', DNSRecordHistory.name)
 
 # Security-related indexes moved to security.py
 

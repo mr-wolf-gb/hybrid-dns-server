@@ -1,0 +1,15 @@
+name,type,value,ttl,priority,weight,port
+@,A,192.168.1.10,3600,,,
+www,A,192.168.1.10,3600,,,
+api,A,192.168.1.11,3600,,,
+db,A,192.168.1.12,3600,,,
+mail,A,192.168.1.13,3600,,,
+ns1,A,192.168.1.14,3600,,,
+ns2,A,192.168.1.15,3600,,,
+blog,CNAME,www.sample.local,3600,,,
+shop,CNAME,www.sample.local,3600,,,
+@,MX,mail.sample.local,3600,10,,
+@,TXT,"v=spf1 mx a -all",3600,,,
+_dmarc,TXT,"v=DMARC1; p=quarantine",3600,,,
+_http._tcp,SRV,www.sample.local,3600,10,5,80
+_https._tcp,SRV,www.sample.local,3600,10,5,443

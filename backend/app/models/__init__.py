@@ -1,6 +1,6 @@
 # Models package
 
-from .dns import Zone, DNSRecord, Forwarder, ForwarderHealth
+from .dns import Zone, DNSRecord, Forwarder, ForwarderHealth, DNSRecordHistory
 from .security import RPZRule, ThreatFeed
 from .system import SystemConfig, ACL, ACLEntry
 from .auth import User, Session
@@ -10,6 +10,7 @@ __all__ = [
     # DNS Models
     "Zone",
     "DNSRecord", 
+    "DNSRecordHistory",
     "Forwarder",
     "ForwarderHealth",
     "RPZRule",

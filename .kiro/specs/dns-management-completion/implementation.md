@@ -686,20 +686,40 @@ This document outlines the specific implementation tasks required to complete th
 
 #### Subtasks:
 1. **CRUD Endpoints**
-   - [ ] Implement `GET /api/zones` with filtering and pagination
-   - [ ] Implement `POST /api/zones` for zone creation
+   - [x] Implement `GET /api/zones` with filtering and pagination
+
+
+
+
+
+   - [x] Implement `POST,GET,PUT,DELETE /api/zones` for zone creation
+
+
+
+
+
    - [ ] Implement `GET /api/zones/{id}` for zone details
    - [ ] Implement `PUT /api/zones/{id}` for zone updates
    - [ ] Implement `DELETE /api/zones/{id}` for zone deletion
 
 2. **Zone Management Endpoints**
-   - [ ] Implement `POST /api/zones/{id}/validate` for validation
+   - [x] Implement `POST /api/zones/{id}/validate` for validation, `POST /api/zones/{id}/reload` for BIND reload, `POST /api/zones/{id}/toggle` for enable/disable, `GET /api/zones/{id}/statistics` for zone stats
+
+
+
+
+
    - [ ] Implement `POST /api/zones/{id}/reload` for BIND reload
    - [ ] Implement `POST /api/zones/{id}/toggle` for enable/disable
    - [ ] Implement `GET /api/zones/{id}/statistics` for zone stats
 
 3. **Import/Export Endpoints**
-   - [ ] Implement `POST /api/zones/import` for zone import
+   - [x] Implement `POST /api/zones/import` for zone import, `GET /api/zones/{id}/export` for zone export, Add support for multiple zone file formats, Add validation for imported zones
+
+
+
+
+
    - [ ] Implement `GET /api/zones/{id}/export` for zone export
    - [ ] Add support for multiple zone file formats
    - [ ] Add validation for imported zones
@@ -724,20 +744,39 @@ This document outlines the specific implementation tasks required to complete th
 
 #### Subtasks:
 1. **CRUD Endpoints**
-   - [ ] Implement `GET /api/zones/{zone_id}/records` with filtering
+   - [x] Implement `GET /api/zones/{zone_id}/records` with filtering, `POST /api/zones/{zone_id}/records` for creation, `GET /api/records/{id}` for record details,`PUT /api/records/{id}` for record updates, `DELETE /api/records/{id}` for record deletion
+
+
+
+
+
+   
    - [ ] Implement `POST /api/zones/{zone_id}/records` for creation
    - [ ] Implement `GET /api/records/{id}` for record details
    - [ ] Implement `PUT /api/records/{id}` for record updates
    - [ ] Implement `DELETE /api/records/{id}` for record deletion
 
 2. **Record Management**
-   - [ ] Add record type-specific validation
+   - [x] Add record type-specific validation, Implement bulk record operations, Add record search functionality, Create record templates for common types
+
+
+
+
+
    - [ ] Implement bulk record operations
    - [ ] Add record search functionality
    - [ ] Create record templates for common types
 
 3. **Advanced Features**
-   - [ ] Implement record import/export
+   - [x] Implement record import/export, Add record history tracking, Create record validation endpoints, Add record statistics
+
+
+
+
+
+
+
+
    - [ ] Add record history tracking
    - [ ] Create record validation endpoints
    - [ ] Add record statistics

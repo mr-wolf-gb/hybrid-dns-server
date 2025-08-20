@@ -1608,3 +1608,607 @@ class ZoneService(BaseService[Zone]):
         zone_service = ZoneService(db)
         record_info = record_name if record_name else "unknown"
         return await zone_service.increment_serial_for_record_change(zone_id, change_type, record_info)
+    
+    # Import/Export functionality
+    async def import_zone_from_data(self, import_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Import zone from various formats"""
+        from ..schemas.dns import ZoneImportFormat, ZoneImportResult
+        
+        format_type = import_data.get('format', ZoneImportFormat.JSON)
+        validate_only = import_data.get('validate_only', False)
+        overwrite_existing = import_data.get('overwrite_existing', False)
+        
+        zone_data = import_data.get('zone', {})
+        records_data = import_data.get('records', [])
+        
+        errors = []
+        warnings = []
+        zone_id = None
+        zone_name = zone_data.get('name', 'unknown')
+        records_imported = 0
+        records_skipped = 0
+        
+        try:
+            # Validate zone data first
+            zone_validation = await self.validate_zone_data(zone_data)
+            if not zone_validation["valid"]:
+                errors.extend(zone_validation["errors"])
+                warnings.extend(zone_validation["warnings"])
+            
+            # Check if zone already exists
+            existing_zone = None
+            if zone_name != 'unknown':
+                if self.is_async:
+                    result = await self.db.execute(
+                        select(Zone).filter(Zone.name == zone_name)
+                    )
+                    existing_zone = result.scalar_one_or_none()
+                else:
+                    existing_zone = self.db.query(Zone).filter(Zone.name == zone_name).first()
+            
+            if existing_zone and not overwrite_existing:
+                errors.append(f"Zone '{zone_name}' already exists. Use overwrite_existing=true to replace it.")
+                return {
+                    "success": False,
+                    "zone_id": None,
+                    "zone_name": zone_name,
+                    "records_imported": 0,
+                    "records_skipped": 0,
+                    "errors": errors,
+                    "warnings": warnings,
+                    "validation_only": validate_only
+                }
+            
+            # Validate records
+            valid_records = []
+            for i, record_data in enumerate(records_data):
+                record_validation = await self.validate_import_record(record_data, i + 1)
+                if record_validation["valid"]:
+                    valid_records.append(record_data)
+                else:
+                    errors.extend(record_validation["errors"])
+                    warnings.extend(record_validation["warnings"])
+                    records_skipped += 1
+            
+            # If validation only, return results without importing
+            if validate_only:
+                return {
+                    "success": len(errors) == 0,
+                    "zone_id": None,
+                    "zone_name": zone_name,
+                    "records_imported": 0,
+                    "records_skipped": records_skipped,
+                    "errors": errors,
+                    "warnings": warnings,
+                    "validation_only": True,
+                    "records_to_import": len(valid_records)
+                }
+            
+            # Stop if there are validation errors
+            if errors:
+                return {
+                    "success": False,
+                    "zone_id": None,
+                    "zone_name": zone_name,
+                    "records_imported": 0,
+                    "records_skipped": records_skipped,
+                    "errors": errors,
+                    "warnings": warnings,
+                    "validation_only": False
+                }
+            
+            # Import the zone
+            if existing_zone and overwrite_existing:
+                # Update existing zone
+                zone = await self.update_zone(existing_zone.id, zone_data)
+                zone_id = existing_zone.id
+                
+                # Delete existing records if overwriting
+                if self.is_async:
+                    await self.db.execute(
+                        DNSRecord.__table__.delete().where(DNSRecord.zone_id == zone_id)
+                    )
+                else:
+                    self.db.query(DNSRecord).filter(DNSRecord.zone_id == zone_id).delete()
+            else:
+                # Create new zone
+                zone = await self.create_zone(zone_data)
+                zone_id = zone.id
+            
+            # Import records
+            from ..services.record_service import RecordService
+            record_service = RecordService(self.db)
+            
+            for record_data in valid_records:
+                try:
+                    await record_service.create_record(zone_id, record_data)
+                    records_imported += 1
+                except Exception as e:
+                    errors.append(f"Failed to import record {record_data.get('name', 'unknown')}: {str(e)}")
+                    records_skipped += 1
+            
+            # Commit transaction
+            if self.is_async:
+                await self.db.commit()
+            else:
+                self.db.commit()
+            
+            logger.info(f"Imported zone '{zone_name}' with {records_imported} records")
+            
+            return {
+                "success": len(errors) == 0,
+                "zone_id": zone_id,
+                "zone_name": zone_name,
+                "records_imported": records_imported,
+                "records_skipped": records_skipped,
+                "errors": errors,
+                "warnings": warnings,
+                "validation_only": False
+            }
+            
+        except Exception as e:
+            logger.error(f"Zone import failed: {str(e)}")
+            errors.append(f"Import failed: {str(e)}")
+            
+            # Rollback transaction
+            if self.is_async:
+                await self.db.rollback()
+            else:
+                self.db.rollback()
+            
+            return {
+                "success": False,
+                "zone_id": None,
+                "zone_name": zone_name,
+                "records_imported": 0,
+                "records_skipped": records_skipped,
+                "errors": errors,
+                "warnings": warnings,
+                "validation_only": validate_only
+            }
+    
+    async def export_zone_in_format(self, zone_id: int, format_type: str = "json") -> Optional[Dict[str, Any]]:
+        """Export zone in specified format"""
+        from ..schemas.dns import ZoneExportFormat
+        
+        # Get zone with records
+        zone_data = await self.get_zone_with_records(zone_id)
+        if not zone_data:
+            return None
+        
+        zone = zone_data["zone"]
+        records = zone_data["records"]
+        
+        if format_type.lower() == ZoneExportFormat.JSON.value:
+            return await self._export_zone_json(zone, records)
+        elif format_type.lower() == ZoneExportFormat.BIND.value:
+            return await self._export_zone_bind(zone, records)
+        elif format_type.lower() == ZoneExportFormat.CSV.value:
+            return await self._export_zone_csv(zone, records)
+        else:
+            raise ValueError(f"Unsupported export format: {format_type}")
+    
+    async def _export_zone_json(self, zone: Zone, records: List[DNSRecord]) -> Dict[str, Any]:
+        """Export zone in JSON format"""
+        from datetime import datetime
+        
+        export_data = {
+            "format": "json",
+            "export_timestamp": datetime.now().isoformat(),
+            "export_version": "1.0",
+            "zone": {
+                "name": zone.name,
+                "zone_type": zone.zone_type,
+                "email": zone.email,
+                "description": zone.description,
+                "refresh": zone.refresh,
+                "retry": zone.retry,
+                "expire": zone.expire,
+                "minimum": zone.minimum,
+                "master_servers": zone.master_servers,
+                "forwarders": zone.forwarders,
+                "serial": zone.serial,
+                "is_active": zone.is_active,
+                "created_at": zone.created_at.isoformat() if zone.created_at else None,
+                "updated_at": zone.updated_at.isoformat() if zone.updated_at else None
+            },
+            "records": [
+                {
+                    "name": record.name,
+                    "record_type": record.record_type,
+                    "value": record.value,
+                    "ttl": record.ttl,
+                    "priority": record.priority,
+                    "weight": record.weight,
+                    "port": record.port,
+                    "is_active": record.is_active
+                }
+                for record in records if record.is_active
+            ],
+            "statistics": {
+                "total_records": len([r for r in records if r.is_active]),
+                "record_types": list(set(r.record_type for r in records if r.is_active))
+            }
+        }
+        
+        return export_data
+    
+    async def _export_zone_bind(self, zone: Zone, records: List[DNSRecord]) -> Dict[str, Any]:
+        """Export zone in BIND zone file format"""
+        from datetime import datetime
+        
+        # Generate BIND zone file content
+        zone_file_lines = []
+        
+        # Zone header
+        zone_file_lines.append(f"; Zone file for {zone.name}")
+        zone_file_lines.append(f"; Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        zone_file_lines.append(f"; Zone type: {zone.zone_type}")
+        zone_file_lines.append("")
+        
+        # TTL directive
+        zone_file_lines.append(f"$TTL {zone.minimum}")
+        zone_file_lines.append("")
+        
+        # SOA record (if exists)
+        soa_records = [r for r in records if r.record_type == 'SOA' and r.is_active]
+        if soa_records:
+            soa = soa_records[0]
+            zone_file_lines.append(f"@\tIN\tSOA\t{soa.value}")
+        else:
+            # Generate default SOA
+            zone_file_lines.append(f"@\tIN\tSOA\tns1.{zone.name}. {zone.email}. (")
+            zone_file_lines.append(f"\t\t\t{zone.serial}\t; Serial")
+            zone_file_lines.append(f"\t\t\t{zone.refresh}\t; Refresh")
+            zone_file_lines.append(f"\t\t\t{zone.retry}\t; Retry")
+            zone_file_lines.append(f"\t\t\t{zone.expire}\t; Expire")
+            zone_file_lines.append(f"\t\t\t{zone.minimum}\t; Minimum TTL")
+            zone_file_lines.append("\t\t\t)")
+        
+        zone_file_lines.append("")
+        
+        # Other records grouped by type
+        record_types = ['NS', 'A', 'AAAA', 'CNAME', 'MX', 'TXT', 'SRV', 'PTR']
+        
+        for record_type in record_types:
+            type_records = [r for r in records if r.record_type == record_type and r.is_active]
+            if type_records:
+                zone_file_lines.append(f"; {record_type} records")
+                for record in type_records:
+                    ttl_str = f"{record.ttl}\t" if record.ttl else ""
+                    priority_str = f"{record.priority} " if record.priority else ""
+                    
+                    if record.record_type == 'SRV':
+                        srv_data = f"{record.priority} {record.weight} {record.port} {record.value}"
+                        zone_file_lines.append(f"{record.name}\t{ttl_str}IN\t{record.record_type}\t{srv_data}")
+                    else:
+                        zone_file_lines.append(f"{record.name}\t{ttl_str}IN\t{record.record_type}\t{priority_str}{record.value}")
+                
+                zone_file_lines.append("")
+        
+        # Add any other record types not in the standard list
+        other_records = [r for r in records if r.record_type not in record_types + ['SOA'] and r.is_active]
+        if other_records:
+            zone_file_lines.append("; Other records")
+            for record in other_records:
+                ttl_str = f"{record.ttl}\t" if record.ttl else ""
+                priority_str = f"{record.priority} " if record.priority else ""
+                zone_file_lines.append(f"{record.name}\t{ttl_str}IN\t{record.record_type}\t{priority_str}{record.value}")
+        
+        zone_file_content = "\n".join(zone_file_lines)
+        
+        return {
+            "format": "bind",
+            "export_timestamp": datetime.now().isoformat(),
+            "export_version": "1.0",
+            "zone_name": zone.name,
+            "zone_file_content": zone_file_content,
+            "filename": f"db.{zone.name}",
+            "statistics": {
+                "total_records": len([r for r in records if r.is_active]),
+                "zone_file_lines": len(zone_file_lines)
+            }
+        }
+    
+    async def _export_zone_csv(self, zone: Zone, records: List[DNSRecord]) -> Dict[str, Any]:
+        """Export zone in CSV format"""
+        from datetime import datetime
+        import csv
+        from io import StringIO
+        
+        # Create CSV content
+        csv_buffer = StringIO()
+        csv_writer = csv.writer(csv_buffer)
+        
+        # CSV header
+        csv_writer.writerow([
+            'name', 'type', 'value', 'ttl', 'priority', 'weight', 'port', 'active'
+        ])
+        
+        # Write records
+        for record in records:
+            if record.is_active:
+                csv_writer.writerow([
+                    record.name,
+                    record.record_type,
+                    record.value,
+                    record.ttl or '',
+                    record.priority or '',
+                    record.weight or '',
+                    record.port or '',
+                    'yes' if record.is_active else 'no'
+                ])
+        
+        csv_content = csv_buffer.getvalue()
+        csv_buffer.close()
+        
+        return {
+            "format": "csv",
+            "export_timestamp": datetime.now().isoformat(),
+            "export_version": "1.0",
+            "zone_name": zone.name,
+            "csv_content": csv_content,
+            "filename": f"{zone.name}_records.csv",
+            "zone_info": {
+                "name": zone.name,
+                "type": zone.zone_type,
+                "email": zone.email,
+                "serial": zone.serial
+            },
+            "statistics": {
+                "total_records": len([r for r in records if r.is_active])
+            }
+        }
+    
+    async def validate_import_record(self, record_data: Dict[str, Any], line_number: int = 0) -> Dict[str, Any]:
+        """Validate a single record for import"""
+        errors = []
+        warnings = []
+        
+        # Required fields
+        required_fields = ['name', 'record_type', 'value']
+        for field in required_fields:
+            if field not in record_data or not record_data[field]:
+                errors.append(f"Line {line_number}: Missing required field '{field}'")
+        
+        if errors:
+            return {"valid": False, "errors": errors, "warnings": warnings}
+        
+        # Validate record type
+        valid_types = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'SRV', 'PTR', 'NS', 'SOA']
+        record_type = record_data.get('record_type', '').upper()
+        if record_type not in valid_types:
+            errors.append(f"Line {line_number}: Invalid record type '{record_type}'")
+        
+        # Validate based on record type
+        value = record_data.get('value', '')
+        name = record_data.get('name', '')
+        
+        if record_type == 'A':
+            import ipaddress
+            try:
+                ipaddress.IPv4Address(value)
+            except ValueError:
+                errors.append(f"Line {line_number}: Invalid IPv4 address '{value}' for A record")
+        
+        elif record_type == 'AAAA':
+            import ipaddress
+            try:
+                ipaddress.IPv6Address(value)
+            except ValueError:
+                errors.append(f"Line {line_number}: Invalid IPv6 address '{value}' for AAAA record")
+        
+        elif record_type in ['MX', 'SRV']:
+            if 'priority' not in record_data or record_data['priority'] is None:
+                errors.append(f"Line {line_number}: {record_type} record requires priority field")
+        
+        elif record_type == 'SRV':
+            if 'weight' not in record_data or record_data['weight'] is None:
+                errors.append(f"Line {line_number}: SRV record requires weight field")
+            if 'port' not in record_data or record_data['port'] is None:
+                errors.append(f"Line {line_number}: SRV record requires port field")
+        
+        # Validate TTL if provided
+        ttl = record_data.get('ttl')
+        if ttl is not None:
+            try:
+                ttl_int = int(ttl)
+                if ttl_int < 1 or ttl_int > 2147483647:
+                    errors.append(f"Line {line_number}: TTL must be between 1 and 2147483647")
+            except (ValueError, TypeError):
+                errors.append(f"Line {line_number}: TTL must be a valid integer")
+        
+        return {
+            "valid": len(errors) == 0,
+            "errors": errors,
+            "warnings": warnings
+        }
+    
+    async def parse_bind_zone_file(self, zone_file_content: str, zone_name: str) -> Dict[str, Any]:
+        """Parse BIND zone file format for import"""
+        lines = zone_file_content.strip().split('\n')
+        records = []
+        errors = []
+        warnings = []
+        
+        current_ttl = None
+        current_origin = zone_name
+        
+        for line_num, line in enumerate(lines, 1):
+            line = line.strip()
+            
+            # Skip comments and empty lines
+            if not line or line.startswith(';'):
+                continue
+            
+            # Handle $TTL directive
+            if line.startswith('$TTL'):
+                try:
+                    current_ttl = int(line.split()[1])
+                except (IndexError, ValueError):
+                    errors.append(f"Line {line_num}: Invalid $TTL directive")
+                continue
+            
+            # Handle $ORIGIN directive
+            if line.startswith('$ORIGIN'):
+                try:
+                    current_origin = line.split()[1]
+                except IndexError:
+                    errors.append(f"Line {line_num}: Invalid $ORIGIN directive")
+                continue
+            
+            # Parse DNS record
+            try:
+                parts = line.split()
+                if len(parts) < 4:
+                    warnings.append(f"Line {line_num}: Incomplete record, skipping")
+                    continue
+                
+                name = parts[0] if parts[0] != '@' else current_origin
+                
+                # Handle TTL and class
+                ttl = None
+                class_pos = 1
+                
+                # Check if second field is TTL
+                try:
+                    ttl = int(parts[1])
+                    class_pos = 2
+                except ValueError:
+                    ttl = current_ttl
+                
+                # Skip class field (usually IN)
+                if parts[class_pos].upper() == 'IN':
+                    type_pos = class_pos + 1
+                else:
+                    type_pos = class_pos
+                
+                if type_pos >= len(parts):
+                    warnings.append(f"Line {line_num}: Missing record type, skipping")
+                    continue
+                
+                record_type = parts[type_pos].upper()
+                value_parts = parts[type_pos + 1:]
+                
+                if not value_parts:
+                    warnings.append(f"Line {line_num}: Missing record value, skipping")
+                    continue
+                
+                # Handle different record types
+                record_data = {
+                    'name': name,
+                    'record_type': record_type,
+                    'ttl': ttl
+                }
+                
+                if record_type == 'MX':
+                    if len(value_parts) >= 2:
+                        record_data['priority'] = int(value_parts[0])
+                        record_data['value'] = value_parts[1]
+                    else:
+                        errors.append(f"Line {line_num}: MX record missing priority or value")
+                        continue
+                
+                elif record_type == 'SRV':
+                    if len(value_parts) >= 4:
+                        record_data['priority'] = int(value_parts[0])
+                        record_data['weight'] = int(value_parts[1])
+                        record_data['port'] = int(value_parts[2])
+                        record_data['value'] = value_parts[3]
+                    else:
+                        errors.append(f"Line {line_num}: SRV record missing required fields")
+                        continue
+                
+                else:
+                    record_data['value'] = ' '.join(value_parts)
+                
+                records.append(record_data)
+                
+            except Exception as e:
+                errors.append(f"Line {line_num}: Error parsing record - {str(e)}")
+        
+        return {
+            "records": records,
+            "errors": errors,
+            "warnings": warnings,
+            "total_lines": len(lines),
+            "records_parsed": len(records)
+        }
+    
+    async def parse_csv_zone_data(self, csv_content: str) -> Dict[str, Any]:
+        """Parse CSV format for zone import"""
+        import csv
+        from io import StringIO
+        
+        records = []
+        errors = []
+        warnings = []
+        
+        try:
+            csv_buffer = StringIO(csv_content)
+            csv_reader = csv.DictReader(csv_buffer)
+            
+            for line_num, row in enumerate(csv_reader, 2):  # Start at 2 because of header
+                try:
+                    # Clean up the row data
+                    record_data = {}
+                    for key, value in row.items():
+                        if key and value and str(value).strip():
+                            clean_key = key.strip().lower()
+                            clean_value = str(value).strip()
+                            
+                            # Map common field names
+                            if clean_key in ['name', 'hostname', 'record_name']:
+                                record_data['name'] = clean_value
+                            elif clean_key in ['type', 'record_type', 'rtype']:
+                                record_data['record_type'] = clean_value.upper()
+                            elif clean_key in ['value', 'data', 'target']:
+                                record_data['value'] = clean_value
+                            elif clean_key == 'ttl':
+                                try:
+                                    record_data['ttl'] = int(clean_value)
+                                except ValueError:
+                                    warnings.append(f"Line {line_num}: Invalid TTL value '{clean_value}', ignoring")
+                            elif clean_key == 'priority':
+                                try:
+                                    record_data['priority'] = int(clean_value)
+                                except ValueError:
+                                    warnings.append(f"Line {line_num}: Invalid priority value '{clean_value}', ignoring")
+                            elif clean_key == 'weight':
+                                try:
+                                    record_data['weight'] = int(clean_value)
+                                except ValueError:
+                                    warnings.append(f"Line {line_num}: Invalid weight value '{clean_value}', ignoring")
+                            elif clean_key == 'port':
+                                try:
+                                    record_data['port'] = int(clean_value)
+                                except ValueError:
+                                    warnings.append(f"Line {line_num}: Invalid port value '{clean_value}', ignoring")
+                    
+                    # Validate required fields
+                    if 'name' in record_data and 'record_type' in record_data and 'value' in record_data:
+                        records.append(record_data)
+                    else:
+                        missing_fields = []
+                        if 'name' not in record_data:
+                            missing_fields.append('name')
+                        if 'record_type' not in record_data:
+                            missing_fields.append('record_type')
+                        if 'value' not in record_data:
+                            missing_fields.append('value')
+                        warnings.append(f"Line {line_num}: Missing required fields: {', '.join(missing_fields)}, skipping")
+                
+                except Exception as e:
+                    errors.append(f"Line {line_num}: Error parsing CSV row - {str(e)}")
+            
+            csv_buffer.close()
+            
+        except Exception as e:
+            errors.append(f"Error parsing CSV content: {str(e)}")
+        
+        return {
+            "records": records,
+            "errors": errors,
+            "warnings": warnings,
+            "records_parsed": len(records)
+        }

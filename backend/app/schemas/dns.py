@@ -704,6 +704,59 @@ class ForwarderType(str, Enum):
 # RPZAction is imported from security module to avoid duplication
 
 
+# Zone Import/Export Schemas
+class ZoneImportFormat(str, Enum):
+    """Supported zone import formats"""
+    BIND = "bind"
+    JSON = "json"
+    CSV = "csv"
+
+
+class ZoneExportFormat(str, Enum):
+    """Supported zone export formats"""
+    BIND = "bind"
+    JSON = "json"
+    CSV = "csv"
+
+
+class ZoneImportRecord(BaseModel):
+    """Schema for importing DNS records"""
+    name: str = Field(..., description="DNS record name")
+    record_type: str = Field(..., description="DNS record type")
+    value: str = Field(..., description="DNS record value")
+    ttl: Optional[int] = Field(None, description="Time to live in seconds")
+    priority: Optional[int] = Field(None, description="Priority for MX and SRV records")
+    weight: Optional[int] = Field(None, description="Weight for SRV records")
+    port: Optional[int] = Field(None, description="Port for SRV records")
+
+
+
+    errors: List[str] = Field(default=[], description="Import errors")
+    warnings: List[str] = Field(default=[], description="Import warnings")
+    validation_only: bool = Field(default=False, description="Whether this was validation only")
+
+
+
+
+class ZoneValidationError(BaseModel):
+    """Schema for zone validation errors"""
+    field: str = Field(..., description="Field with error")
+    message: str = Field(..., description="Error message")
+    line_number: Optional[int] = Field(None, description="Line number in import file")
+    record_name: Optional[str] = Field(None, description="Record name with error")
+
+
+class ZoneValidationResult(BaseModel):
+    """Schema for zone validation results"""
+    valid: bool = Field(..., description="Whether validation passed")
+    errors: List[ZoneValidationError] = Field(default=[], description="Validation errors")
+    warnings: List[str] = Field(default=[], description="Validation warnings")
+    records_validated: int = Field(default=0, description="Number of records validated")
+
+
+# RPZAction is imported from security module to avoid duplication
+
+
 # Zone Schemas
 class ZoneBase(BaseModel):
     """Base schema for DNS zones with common fields"""
@@ -896,6 +949,29 @@ class Zone(ZoneBase):
         json_encoders = {
             datetime: lambda v: v.isoformat()
         }
+
+
+class ZoneImportData(BaseModel):
+    """Schema for zone import data"""
+    zone: ZoneCreate = Field(..., description="Zone configuration")
+    records: List[ZoneImportRecord] = Field(default=[], description="DNS records to import")
+    format: ZoneImportFormat = Field(default=ZoneImportFormat.JSON, description="Import format")
+    validate_only: bool = Field(default=False, description="Only validate, don't import")
+    overwrite_existing: bool = Field(default=False, description="Overwrite existing zone if it exists")
+
+
+class ZoneImportResult(BaseModel):
+    """Schema for zone import results"""
+    success: bool = Field(..., description="Whether import was successful")
+    zone_id: Optional[int] = Field(None, description="ID of imported zone")
+    zone_name: str = Field(..., description="Name of the zone")
+    records_imported: int = Field(default=0, description="Number of records imported")
+    records_skipped: int = Field(default=0, description="Number of records skipped")
+    errors: List[str] = Field(default=[], description="Import errors")
+    warnings: List[str] = Field(default=[], description="Import warnings")
+
+
+
 
 
 class ZoneQueryParams(BaseModel):
@@ -1177,6 +1253,15 @@ class DNSRecord(DNSRecordBase):
         json_encoders = {
             datetime: lambda v: v.isoformat()
         }
+
+
+class ZoneExportData(BaseModel):
+    """Schema for zone export data"""
+    zone: Zone = Field(..., description="Zone configuration")
+    records: List[DNSRecord] = Field(default=[], description="DNS records")
+    format: ZoneExportFormat = Field(default=ZoneExportFormat.JSON, description="Export format")
+    export_timestamp: datetime = Field(..., description="Export timestamp")
+    export_version: str = Field(default="1.0", description="Export format version")
 
 
 # Forwarder Schemas
@@ -1570,3 +1655,354 @@ class HealthSummary(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+# Zone Management Schemas
+class ZoneValidationResult(BaseModel):
+    """Schema for zone validation results"""
+    valid: bool = Field(..., description="Whether the zone configuration is valid")
+    errors: List[str] = Field(default_factory=list, description="List of validation errors")
+    warnings: List[str] = Field(default_factory=list, description="List of validation warnings")
+    details: Optional[Dict[str, Any]] = Field(None, description="Additional validation details")
+    
+    class Config:
+        from_attributes = True
+        json_schema_extra = {
+            "example": {
+                "valid": True,
+                "errors": [],
+                "warnings": ["Zone has no NS records"],
+                "details": {
+                    "zone_name": "example.com",
+                    "zone_type": "master",
+                    "record_count": 5
+                }
+            }
+        }
+
+
+class SerialValidationResult(BaseModel):
+    """Schema for serial number validation results"""
+    valid: bool = Field(..., description="Whether the serial number is valid")
+    format: str = Field(..., description="Serial number format (YYYYMMDDNN, timestamp, etc.)")
+    year: Optional[int] = Field(None, description="Year component if YYYYMMDDNN format")
+    month: Optional[int] = Field(None, description="Month component if YYYYMMDDNN format")
+    day: Optional[int] = Field(None, description="Day component if YYYYMMDDNN format")
+    sequence: Optional[int] = Field(None, description="Sequence number if YYYYMMDDNN format")
+    date_valid: Optional[bool] = Field(None, description="Whether the date component is valid")
+    date_str: Optional[str] = Field(None, description="Date string representation")
+    error: Optional[str] = Field(None, description="Error message if invalid")
+    
+    class Config:
+        from_attributes = True
+        json_schema_extra = {
+            "example": {
+                "valid": True,
+                "format": "YYYYMMDDNN",
+                "year": 2024,
+                "month": 1,
+                "day": 15,
+                "sequence": 1,
+                "date_valid": True,
+                "date_str": "2024-01-15",
+                "error": None
+            }
+        }
+
+
+class SerialHistoryEntry(BaseModel):
+    """Schema for a single serial history entry"""
+    serial: int = Field(..., description="Serial number")
+    updated_at: datetime = Field(..., description="When the serial was set")
+    updated_by: Optional[int] = Field(None, description="User ID who updated the serial")
+    reason: Optional[str] = Field(None, description="Reason for the serial change")
+    current: bool = Field(default=False, description="Whether this is the current serial")
+    
+    class Config:
+        from_attributes = True
+
+
+class SerialHistoryResponse(BaseModel):
+    """Schema for serial number history response"""
+    zone_id: int = Field(..., description="Zone ID")
+    zone_name: str = Field(..., description="Zone name")
+    history: List[SerialHistoryEntry] = Field(..., description="Serial number history")
+    
+    class Config:
+        from_attributes = True
+
+
+class ZoneQueryParams(BaseModel):
+    """Schema for zone query parameters"""
+    skip: int = Field(default=0, ge=0, description="Number of items to skip")
+    limit: int = Field(default=100, ge=1, le=1000, description="Maximum number of items to return")
+    zone_type: Optional[str] = Field(None, description="Filter by zone type")
+    active_only: bool = Field(default=True, description="Filter to active zones only")
+    search: Optional[str] = Field(None, description="Search term")
+    sort_by: Optional[str] = Field(default="name", description="Field to sort by")
+    sort_order: str = Field(default="asc", pattern="^(asc|desc)$", description="Sort order")
+    
+    class Config:
+        from_attributes = True
+
+
+class ZoneStatistics(BaseModel):
+    """Schema for zone statistics"""
+    zone_id: int = Field(..., description="Zone ID")
+    zone_name: str = Field(..., description="Zone name")
+    zone_type: str = Field(..., description="Zone type")
+    is_active: bool = Field(..., description="Whether the zone is active")
+    total_records: int = Field(..., description="Total number of records")
+    record_counts: Dict[str, int] = Field(default_factory=dict, description="Record counts by type")
+    serial: Optional[int] = Field(None, description="Current serial number")
+    serial_info: Optional[Dict[str, Any]] = Field(None, description="Serial number information")
+    refresh: int = Field(..., description="SOA refresh interval")
+    retry: int = Field(..., description="SOA retry interval")
+    expire: int = Field(..., description="SOA expire interval")
+    minimum: int = Field(..., description="SOA minimum TTL")
+    created_at: datetime = Field(..., description="Zone creation timestamp")
+    updated_at: datetime = Field(..., description="Zone last update timestamp")
+    created_by: Optional[int] = Field(None, description="User ID who created the zone")
+    updated_by: Optional[int] = Field(None, description="User ID who last updated the zone")
+    
+    class Config:
+        from_attributes = True
+        json_schema_extra = {
+            "example": {
+                "zone_id": 1,
+                "zone_name": "example.com",
+                "zone_type": "master",
+                "is_active": True,
+                "total_records": 10,
+                "record_counts": {
+                    "A": 5,
+                    "AAAA": 2,
+                    "CNAME": 2,
+                    "MX": 1
+                },
+                "serial": 2024011501,
+                "serial_info": {
+                    "valid": True,
+                    "format": "YYYYMMDDNN",
+                    "date_str": "2024-01-15"
+                },
+                "refresh": 10800,
+                "retry": 3600,
+                "expire": 604800,
+                "minimum": 86400,
+                "created_at": "2024-01-15T10:00:00Z",
+                "updated_at": "2024-01-15T15:30:00Z",
+                "created_by": 1,
+                "updated_by": 1
+            }
+        }
+
+
+class ZoneValidationResult(BaseModel):
+    """Schema for zone/record validation results"""
+    valid: bool = Field(..., description="Whether the validation passed")
+    errors: List[str] = Field(default_factory=list, description="List of validation errors")
+    warnings: List[str] = Field(default_factory=list, description="List of validation warnings")
+    
+    class Config:
+        from_attributes = True
+        schema_extra = {
+            "example": {
+                "valid": False,
+                "errors": ["Invalid IPv4 address format", "Record name too long"],
+                "warnings": ["TTL value is very low"]
+            }
+        }
+
+
+class RecordStatistics(BaseModel):
+    """Schema for DNS record statistics"""
+    total_records: int = Field(..., description="Total number of records")
+    active_records: int = Field(..., description="Number of active records")
+    inactive_records: int = Field(..., description="Number of inactive records")
+    records_by_type: Dict[str, int] = Field(..., description="Count of records by type")
+    zone_id: Optional[int] = Field(None, description="Zone ID if statistics are zone-specific")
+    
+    class Config:
+        from_attributes = True
+        schema_extra = {
+            "example": {
+                "total_records": 25,
+                "active_records": 23,
+                "inactive_records": 2,
+                "records_by_type": {
+                    "A": 10,
+                    "AAAA": 5,
+                    "CNAME": 8,
+                    "MX": 2
+                },
+                "zone_id": 1
+            }
+        }
+
+
+# DNS Record History Schemas
+
+class DNSRecordHistoryBase(BaseModel):
+    """Base schema for DNS record history"""
+    record_id: int = Field(..., description="Original record ID")
+    zone_id: int = Field(..., description="Zone ID")
+    name: str = Field(..., description="Record name at time of change")
+    record_type: str = Field(..., description="Record type at time of change")
+    value: str = Field(..., description="Record value at time of change")
+    ttl: Optional[int] = Field(None, description="TTL at time of change")
+    priority: Optional[int] = Field(None, description="Priority at time of change")
+    weight: Optional[int] = Field(None, description="Weight at time of change")
+    port: Optional[int] = Field(None, description="Port at time of change")
+    is_active: bool = Field(..., description="Active status at time of change")
+    change_type: str = Field(..., description="Type of change (create, update, delete, activate, deactivate)")
+    change_details: Optional[Dict[str, Any]] = Field(None, description="Details about what changed")
+    previous_values: Optional[Dict[str, Any]] = Field(None, description="Previous values for updates")
+
+class DNSRecordHistory(DNSRecordHistoryBase):
+    """Schema for DNS record history with metadata"""
+    id: int = Field(..., description="History record ID")
+    changed_at: datetime = Field(..., description="When the change occurred")
+    changed_by: Optional[int] = Field(None, description="User ID who made the change")
+    changed_by_username: Optional[str] = Field(None, description="Username who made the change")
+    
+    class Config:
+        from_attributes = True
+
+
+# Record Import/Export Schemas
+
+class RecordImportFormat(str, Enum):
+    """Supported record import formats"""
+    BIND_ZONE = "bind_zone"
+    CSV = "csv"
+    JSON = "json"
+
+class RecordExportFormat(str, Enum):
+    """Supported record export formats"""
+    BIND_ZONE = "bind_zone"
+    CSV = "csv"
+    JSON = "json"
+
+class RecordImportRequest(BaseModel):
+    """Schema for record import request"""
+    format: RecordImportFormat = Field(..., description="Import format")
+    data: str = Field(..., description="Import data content")
+    zone_id: int = Field(..., description="Target zone ID")
+    overwrite_existing: bool = Field(False, description="Whether to overwrite existing records")
+    validate_only: bool = Field(False, description="Only validate, don't import")
+
+class RecordImportResult(BaseModel):
+    """Schema for record import result"""
+    success: bool = Field(..., description="Whether import was successful")
+    imported_count: int = Field(0, description="Number of records imported")
+    skipped_count: int = Field(0, description="Number of records skipped")
+    error_count: int = Field(0, description="Number of records with errors")
+    errors: List[str] = Field(default_factory=list, description="Import errors")
+    warnings: List[str] = Field(default_factory=list, description="Import warnings")
+    imported_records: List[DNSRecord] = Field(default_factory=list, description="Successfully imported records")
+
+class RecordExportRequest(BaseModel):
+    """Schema for record export request"""
+    format: RecordExportFormat = Field(..., description="Export format")
+    zone_id: Optional[int] = Field(None, description="Zone ID to export (all zones if not specified)")
+    record_types: Optional[List[str]] = Field(None, description="Record types to export")
+    active_only: bool = Field(True, description="Export only active records")
+    include_metadata: bool = Field(False, description="Include creation/modification metadata")
+
+class RecordExportResult(BaseModel):
+    """Schema for record export result"""
+    success: bool = Field(..., description="Whether export was successful")
+    format: RecordExportFormat = Field(..., description="Export format used")
+    data: str = Field(..., description="Exported data content")
+    record_count: int = Field(..., description="Number of records exported")
+    filename: Optional[str] = Field(None, description="Suggested filename for download")
+
+
+# Enhanced Record Validation Schemas
+
+class RecordValidationRequest(BaseModel):
+    """Schema for record validation request"""
+    records: List[DNSRecordCreate] = Field(..., description="Records to validate")
+    zone_id: int = Field(..., description="Target zone ID")
+    check_conflicts: bool = Field(True, description="Check for conflicts with existing records")
+    check_dns_compliance: bool = Field(True, description="Check DNS compliance")
+
+class RecordValidationError(BaseModel):
+    """Schema for individual record validation error"""
+    record_index: int = Field(..., description="Index of the record in the validation request")
+    field: Optional[str] = Field(None, description="Field that caused the error")
+    error_type: str = Field(..., description="Type of validation error")
+    message: str = Field(..., description="Error message")
+    severity: str = Field(..., description="Error severity (error, warning)")
+
+class RecordValidationResult(BaseModel):
+    """Schema for record validation result"""
+    valid: bool = Field(..., description="Whether all records are valid")
+    total_records: int = Field(..., description="Total number of records validated")
+    valid_records: int = Field(..., description="Number of valid records")
+    error_count: int = Field(..., description="Number of records with errors")
+    warning_count: int = Field(..., description="Number of records with warnings")
+    errors: List[RecordValidationError] = Field(default_factory=list, description="Validation errors")
+    warnings: List[RecordValidationError] = Field(default_factory=list, description="Validation warnings")
+
+
+# Enhanced Record Statistics Schemas
+
+class RecordTypeStatistics(BaseModel):
+    """Schema for statistics by record type"""
+    record_type: str = Field(..., description="DNS record type")
+    total_count: int = Field(..., description="Total records of this type")
+    active_count: int = Field(..., description="Active records of this type")
+    inactive_count: int = Field(..., description="Inactive records of this type")
+    percentage: float = Field(..., description="Percentage of total records")
+
+class ZoneRecordStatistics(BaseModel):
+    """Schema for zone-specific record statistics"""
+    zone_id: int = Field(..., description="Zone ID")
+    zone_name: str = Field(..., description="Zone name")
+    total_records: int = Field(..., description="Total records in zone")
+    active_records: int = Field(..., description="Active records in zone")
+    inactive_records: int = Field(..., description="Inactive records in zone")
+    record_types: List[RecordTypeStatistics] = Field(..., description="Statistics by record type")
+    last_modified: Optional[datetime] = Field(None, description="Last modification time")
+
+class GlobalRecordStatistics(BaseModel):
+    """Schema for global record statistics across all zones"""
+    total_records: int = Field(..., description="Total records across all zones")
+    active_records: int = Field(..., description="Active records across all zones")
+    inactive_records: int = Field(..., description="Inactive records across all zones")
+    total_zones: int = Field(..., description="Total number of zones")
+    zones_with_records: int = Field(..., description="Number of zones with records")
+    record_types: List[RecordTypeStatistics] = Field(..., description="Global statistics by record type")
+    zone_statistics: List[ZoneRecordStatistics] = Field(..., description="Per-zone statistics")
+    most_common_types: List[str] = Field(..., description="Most common record types")
+    recent_changes: int = Field(..., description="Number of changes in last 24 hours")
+
+
+# Record History Query Schemas
+
+class RecordHistoryQuery(BaseModel):
+    """Schema for querying record history"""
+    record_id: Optional[int] = Field(None, description="Filter by specific record ID")
+    zone_id: Optional[int] = Field(None, description="Filter by zone ID")
+    change_type: Optional[str] = Field(None, description="Filter by change type")
+    changed_by: Optional[int] = Field(None, description="Filter by user who made changes")
+    date_from: Optional[datetime] = Field(None, description="Filter changes from this date")
+    date_to: Optional[datetime] = Field(None, description="Filter changes to this date")
+    record_type: Optional[str] = Field(None, description="Filter by record type")
+    record_name: Optional[str] = Field(None, description="Filter by record name")
+    skip: int = Field(0, ge=0, description="Number of records to skip")
+    limit: int = Field(100, ge=1, le=1000, description="Maximum number of records to return")
+    sort_by: str = Field("changed_at", description="Field to sort by")
+    sort_order: str = Field("desc", regex="^(asc|desc)$", description="Sort order")
+
+class RecordHistoryResponse(BaseModel):
+    """Schema for record history response"""
+    items: List[DNSRecordHistory] = Field(..., description="History records")
+    total: int = Field(..., description="Total number of history records")
+    page: int = Field(..., description="Current page number")
+    per_page: int = Field(..., description="Records per page")
+    pages: int = Field(..., description="Total number of pages")
+    has_next: bool = Field(..., description="Whether there are more pages")
+    has_prev: bool = Field(..., description="Whether there are previous pages")

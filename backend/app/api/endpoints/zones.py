@@ -2,9 +2,9 @@
 DNS zones management endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 from ...core.database import get_database_session
 from ...core.dependencies import get_current_user
@@ -12,7 +12,8 @@ from ...models.dns import Zone as ZoneModel
 from ...schemas.dns import (
     ZoneCreate, ZoneUpdate, Zone as ZoneSchema, 
     PaginatedResponse, ZoneQueryParams, ZoneValidationResult,
-    SerialValidationResult, SerialHistoryResponse
+    SerialValidationResult, SerialHistoryResponse,
+    ZoneImportFormat, ZoneExportFormat, ZoneImportResult
 )
 from ...services.zone_service import ZoneService
 from ...services.bind_service import BindService
@@ -402,17 +403,194 @@ async def get_zones_summary_statistics(
 @router.get("/{zone_id}/export")
 async def export_zone(
     zone_id: int,
+    format: str = Query("json", description="Export format: json, bind, csv"),
     db: Session = Depends(get_database_session),
     current_user: dict = Depends(get_current_user)
 ):
-    """Export zone data for backup/transfer"""
+    """Export zone data in various formats"""
+    from ...schemas.dns import ZoneExportFormat
+    
+    # Validate format
+    valid_formats = [f.value for f in ZoneExportFormat]
+    if format.lower() not in valid_formats:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid export format '{format}'. Supported formats: {', '.join(valid_formats)}"
+        )
+    
     zone_service = ZoneService(db)
     
-    export_data = await zone_service.export_zone_data(zone_id)
-    if not export_data:
+    # Check if zone exists
+    zone = await zone_service.get_zone(zone_id)
+    if not zone:
         raise HTTPException(status_code=404, detail="Zone not found")
     
-    return export_data
+    try:
+        export_data = await zone_service.export_zone_in_format(zone_id, format.lower())
+        if not export_data:
+            raise HTTPException(status_code=404, detail="Zone not found or has no data to export")
+        
+        # Set appropriate response headers based on format
+        from fastapi import Response
+        
+        if format.lower() == "bind":
+            return Response(
+                content=export_data["zone_file_content"],
+                media_type="text/plain",
+                headers={
+                    "Content-Disposition": f"attachment; filename={export_data['filename']}"
+                }
+            )
+        elif format.lower() == "csv":
+            return Response(
+                content=export_data["csv_content"],
+                media_type="text/csv",
+                headers={
+                    "Content-Disposition": f"attachment; filename={export_data['filename']}"
+                }
+            )
+        else:
+            # JSON format
+            return export_data
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to export zone: {str(e)}"
+        )
+
+
+@router.post("/import")
+async def import_zone(
+    import_data: Dict[str, Any],
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Import zone from various formats"""
+    from ...schemas.dns import ZoneImportFormat, ZoneImportResult
+    
+    zone_service = ZoneService(db)
+    bind_service = BindService(db)
+    
+    try:
+        # Handle different import formats
+        format_type = import_data.get('format', 'json')
+        
+        if format_type == ZoneImportFormat.BIND.value:
+            # Parse BIND zone file
+            zone_file_content = import_data.get('zone_file_content', '')
+            zone_name = import_data.get('zone_name', '')
+            
+            if not zone_file_content or not zone_name:
+                raise HTTPException(
+                    status_code=400,
+                    detail="BIND format requires 'zone_file_content' and 'zone_name' fields"
+                )
+            
+            # Parse the zone file
+            parse_result = await zone_service.parse_bind_zone_file(zone_file_content, zone_name)
+            
+            if parse_result["errors"]:
+                return ZoneImportResult(
+                    success=False,
+                    zone_name=zone_name,
+                    errors=parse_result["errors"],
+                    warnings=parse_result["warnings"]
+                )
+            
+            # Create zone data from parsed content
+            zone_data = {
+                'name': zone_name,
+                'zone_type': 'master',
+                'email': import_data.get('email', f'admin.{zone_name}'),
+                'description': f'Imported from BIND zone file'
+            }
+            
+            import_data = {
+                'zone': zone_data,
+                'records': parse_result["records"],
+                'format': format_type,
+                'validate_only': import_data.get('validate_only', False),
+                'overwrite_existing': import_data.get('overwrite_existing', False)
+            }
+        
+        elif format_type == ZoneImportFormat.CSV.value:
+            # Parse CSV content
+            csv_content = import_data.get('csv_content', '')
+            zone_name = import_data.get('zone_name', '')
+            
+            if not csv_content or not zone_name:
+                raise HTTPException(
+                    status_code=400,
+                    detail="CSV format requires 'csv_content' and 'zone_name' fields"
+                )
+            
+            # Parse the CSV
+            parse_result = await zone_service.parse_csv_zone_data(csv_content)
+            
+            if parse_result["errors"]:
+                return ZoneImportResult(
+                    success=False,
+                    zone_name=zone_name,
+                    errors=parse_result["errors"],
+                    warnings=parse_result["warnings"]
+                )
+            
+            # Create zone data from CSV
+            zone_data = {
+                'name': zone_name,
+                'zone_type': 'master',
+                'email': import_data.get('email', f'admin.{zone_name}'),
+                'description': f'Imported from CSV file'
+            }
+            
+            import_data = {
+                'zone': zone_data,
+                'records': parse_result["records"],
+                'format': format_type,
+                'validate_only': import_data.get('validate_only', False),
+                'overwrite_existing': import_data.get('overwrite_existing', False)
+            }
+        
+        # Import the zone
+        result = await zone_service.import_zone_from_data(import_data)
+        
+        # Update BIND9 configuration if import was successful and not validation only
+        if result["success"] and not result["validation_only"] and result["zone_id"]:
+            try:
+                zone = await zone_service.get_zone(result["zone_id"])
+                if zone:
+                    await bind_service.create_zone_file(zone)
+                    await bind_service.reload_configuration()
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to update BIND9 configuration after import: {e}")
+                result["warnings"].append("Zone imported but BIND9 configuration update failed")
+        
+        return ZoneImportResult(**result)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Import failed: {str(e)}"
+        )
+
+
+@router.post("/import/validate")
+async def validate_zone_import(
+    import_data: Dict[str, Any],
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Validate zone import data without actually importing"""
+    # Set validation only flag
+    import_data['validate_only'] = True
+    
+    # Use the same import endpoint but with validation only
+    return await import_zone(import_data, db, current_user)
 
 
 @router.post("/{zone_id}/serial/increment")
