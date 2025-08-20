@@ -1,0 +1,24 @@
+//
+// CONDITIONAL FORWARDING CONFIGURATION
+// Generated automatically by Hybrid DNS Server
+// Generated at: {{ generated_at }}
+//
+
+{% for forwarder in forwarders %}
+{% if forwarder.is_active %}
+// {{ forwarder.name }} ({{ forwarder.forwarder_type }})
+{% if forwarder.description %}// Description: {{ forwarder.description }}{% endif %}
+{% for domain in forwarder.domains %}
+zone "{{ domain }}" {
+    type forward;
+    forward first;
+    forwarders {
+{% for server in forwarder.servers | sort(attribute='priority') %}
+        {{ server.ip }}{% if server.port != 53 %} port {{ server.port }}{% endif %};{% if server.priority > 1 %}  // Priority {{ server.priority }}{% endif %}
+{% endfor %}
+    };
+};
+
+{% endfor %}
+{% endif %}
+{% endfor %}

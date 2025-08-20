@@ -17,23 +17,58 @@ $ORIGIN {{ zone.name }}.
 		)
 
 {% if records %}
-; Reverse DNS Records (PTR)
+{% set ns_records = [] %}
+{% set ptr_records = [] %}
+{% set txt_records = [] %}
+{% set other_records = [] %}
+
+{# Group records by type for reverse zone organization #}
 {% for record in records %}
-{% if record.is_active and record.record_type == 'PTR' %}
-{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	PTR	{{ record.value }}.
+{% if record.is_active %}
+{% if record.record_type == 'NS' %}
+{% set _ = ns_records.append(record) %}
+{% elif record.record_type == 'PTR' %}
+{% set _ = ptr_records.append(record) %}
+{% elif record.record_type == 'TXT' %}
+{% set _ = txt_records.append(record) %}
+{% else %}
+{% set _ = other_records.append(record) %}
+{% endif %}
 {% endif %}
 {% endfor %}
 
-; Other records
-{% for record in records %}
-{% if record.is_active and record.record_type != 'PTR' %}
-{% if record.record_type == 'NS' %}
-{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	NS	{{ record.value }}.
-{% elif record.record_type == 'TXT' %}
-{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	TXT	"{{ record.value }}"
-{% endif %}
-{% endif %}
+{# NS Records (Name Servers) - should come first after SOA #}
+{% if ns_records %}
+; Name Server Records
+{% for record in ns_records %}
+{{ "%-20s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	NS	{{ record.value | ensure_trailing_dot }}
 {% endfor %}
+
+{% endif %}
+{# PTR Records (Reverse DNS mappings) #}
+{% if ptr_records %}
+; PTR Records (Reverse DNS mappings)
+{% for record in ptr_records | sort(attribute='name') %}
+{{ "%-20s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	PTR	{{ record.value | ensure_trailing_dot }}
+{% endfor %}
+
+{% endif %}
+{# TXT Records (Text records) #}
+{% if txt_records %}
+; TXT Records (Text records)
+{% for record in txt_records %}
+{{ "%-20s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	TXT	"{{ record.value | replace('"', '\\"') }}"
+{% endfor %}
+
+{% endif %}
+{# Other record types #}
+{% if other_records %}
+; Other Records
+{% for record in other_records %}
+{{ "%-20s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	{{ record.record_type }}	{{ record.value }}
+{% endfor %}
+
+{% endif %}
 {% else %}
 ; No reverse DNS records defined for this zone
 {% endif %}

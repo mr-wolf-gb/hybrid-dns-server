@@ -64,7 +64,7 @@ async def create_zone(
 ):
     """Create a new DNS zone"""
     zone_service = ZoneService(db)
-    bind_service = BindService()
+    bind_service = BindService(db)
     
     # Validate zone data
     validation_result = await zone_service.validate_zone_data(zone_data.dict())
@@ -76,6 +76,14 @@ async def create_zone(
                 "errors": validation_result["errors"],
                 "warnings": validation_result["warnings"]
             }
+        )
+    
+    # Create backup before zone creation
+    backup_success = await bind_service.backup_before_zone_changes(zone_data.name, "create")
+    if not backup_success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create backup before zone creation"
         )
     
     # Create zone in database
@@ -118,7 +126,12 @@ async def update_zone(
 ):
     """Update a DNS zone"""
     zone_service = ZoneService(db)
-    bind_service = BindService()
+    bind_service = BindService(db)
+    
+    # Get existing zone for backup
+    existing_zone = await zone_service.get_zone(zone_id)
+    if not existing_zone:
+        raise HTTPException(status_code=404, detail="Zone not found")
     
     # Validate zone data
     validation_result = await zone_service.validate_zone_data(zone_data.dict(exclude_unset=True), zone_id)
@@ -130,6 +143,14 @@ async def update_zone(
                 "errors": validation_result["errors"],
                 "warnings": validation_result["warnings"]
             }
+        )
+    
+    # Create backup before zone update
+    backup_success = await bind_service.backup_before_zone_changes(existing_zone.name, "update")
+    if not backup_success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create backup before zone update"
         )
     
     zone = await zone_service.update_zone(zone_id, zone_data.dict(exclude_unset=True))
@@ -156,12 +177,20 @@ async def delete_zone(
 ):
     """Delete a DNS zone"""
     zone_service = ZoneService(db)
-    bind_service = BindService()
+    bind_service = BindService(db)
     
     # Get zone info before deletion
     zone = await zone_service.get_zone(zone_id)
     if not zone:
         raise HTTPException(status_code=404, detail="Zone not found")
+    
+    # Create backup before zone deletion
+    backup_success = await bind_service.backup_before_zone_changes(zone.name, "delete")
+    if not backup_success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create backup before zone deletion"
+        )
     
     zone_name = zone.name
     success = await zone_service.delete_zone(zone_id)

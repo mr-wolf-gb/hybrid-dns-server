@@ -65,7 +65,7 @@ A complete production-ready hybrid DNS server solution based on BIND9 that provi
 ```
 hybrid-dns-server/
 ├── 📄 README.md                     # Comprehensive project documentation
-├── 📄 PROJECT_OVERVIEW.md          # This overview file
+├── 📁 docs/                        # Comprehensive documentation
 ├── 🚀 install.sh                   # Automated installation script
 ├── 🐳 docker-compose.yml           # Container orchestration
 ├── 📁 backend/                     # FastAPI backend application

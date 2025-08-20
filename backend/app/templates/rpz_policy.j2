@@ -1,0 +1,23 @@
+// Response Policy Zone (RPZ) Configuration
+// Generated automatically by Hybrid DNS Server
+// Generated at: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+// Total Categories: {{ categories|length }}
+
+{% if enabled %}
+response-policy {
+{% for category, config in categories.items() | sort(attribute='1.priority') %}
+    // {{ config.description }}
+    zone "{{ config.zone_name }}" policy {{ config.policy.lower() }};
+{% endfor %}
+} qname-wait-recurse {{ 'yes' if qname_wait_recurse else 'no' }}{% if break_dnssec %} break-dnssec yes{% endif %}{% if max_policy_ttl %} max-policy-ttl {{ max_policy_ttl }}{% endif %};
+{% else %}
+// RPZ is disabled
+// response-policy { };
+{% endif %}
+
+// RPZ Configuration Summary:
+// Enabled: {{ enabled }}
+// Break DNSSEC: {{ break_dnssec }}
+// Max Policy TTL: {{ max_policy_ttl }}
+// QName Wait Recurse: {{ qname_wait_recurse }}
+// Min Update Interval: {{ min_update_interval }}

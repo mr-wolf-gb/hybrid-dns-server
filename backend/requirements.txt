@@ -39,6 +39,7 @@ pydantic-settings==2.1.0
 # Background tasks
 celery==5.3.4
 redis==5.0.1
+greenlet==3.2.4
 
 # Logging and monitoring
 structlog==23.2.0

@@ -18,27 +18,113 @@ $ORIGIN {{ zone.name }}.
 
 {% if records %}
 ; DNS Records
+{% set ns_records = [] %}
+{% set a_records = [] %}
+{% set aaaa_records = [] %}
+{% set cname_records = [] %}
+{% set mx_records = [] %}
+{% set txt_records = [] %}
+{% set srv_records = [] %}
+{% set ptr_records = [] %}
+{% set other_records = [] %}
+
+{# Group records by type for better organization #}
 {% for record in records %}
 {% if record.is_active %}
-{% if record.record_type == 'A' %}
-{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	A	{{ record.value }}
+{% if record.record_type == 'NS' %}
+{% set _ = ns_records.append(record) %}
+{% elif record.record_type == 'A' %}
+{% set _ = a_records.append(record) %}
 {% elif record.record_type == 'AAAA' %}
-{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	AAAA	{{ record.value }}
+{% set _ = aaaa_records.append(record) %}
 {% elif record.record_type == 'CNAME' %}
-{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	CNAME	{{ record.value }}.
+{% set _ = cname_records.append(record) %}
 {% elif record.record_type == 'MX' %}
-{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	MX	{{ record.priority }}	{{ record.value }}.
+{% set _ = mx_records.append(record) %}
 {% elif record.record_type == 'TXT' %}
-{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	TXT	"{{ record.value }}"
+{% set _ = txt_records.append(record) %}
 {% elif record.record_type == 'SRV' %}
-{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	SRV	{{ record.priority }}	{{ record.weight }}	{{ record.port }}	{{ record.value }}.
+{% set _ = srv_records.append(record) %}
 {% elif record.record_type == 'PTR' %}
-{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	PTR	{{ record.value }}.
-{% elif record.record_type == 'NS' %}
-{{ record.name }}	{% if record.ttl %}{{ record.ttl }}{% endif %}	IN	NS	{{ record.value }}.
+{% set _ = ptr_records.append(record) %}
+{% else %}
+{% set _ = other_records.append(record) %}
 {% endif %}
 {% endif %}
 {% endfor %}
+
+{# NS Records (Name Servers) - should come first after SOA #}
+{% if ns_records %}
+; Name Server Records
+{% for record in ns_records %}
+{{ "%-20s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	NS	{{ record.value | ensure_trailing_dot }}
+{% endfor %}
+
+{% endif %}
+{# A Records (IPv4 addresses) #}
+{% if a_records %}
+; A Records (IPv4 addresses)
+{% for record in a_records %}
+{{ "%-20s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	A	{{ record.value }}
+{% endfor %}
+
+{% endif %}
+{# AAAA Records (IPv6 addresses) #}
+{% if aaaa_records %}
+; AAAA Records (IPv6 addresses)
+{% for record in aaaa_records %}
+{{ "%-20s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	AAAA	{{ record.value }}
+{% endfor %}
+
+{% endif %}
+{# CNAME Records (Canonical names) #}
+{% if cname_records %}
+; CNAME Records (Canonical names)
+{% for record in cname_records %}
+{{ "%-20s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	CNAME	{{ record.value | ensure_trailing_dot }}
+{% endfor %}
+
+{% endif %}
+{# MX Records (Mail exchangers) #}
+{% if mx_records %}
+; MX Records (Mail exchangers)
+{% for record in mx_records | sort(attribute='priority') %}
+{{ "%-20s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	MX	{{ "%d"|format(record.priority if record.priority is not none else 10) }}	{{ record.value | ensure_trailing_dot }}
+{% endfor %}
+
+{% endif %}
+{# TXT Records (Text records) #}
+{% if txt_records %}
+; TXT Records (Text records)
+{% for record in txt_records %}
+{{ "%-20s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	TXT	"{{ record.value | replace('"', '\\"') }}"
+{% endfor %}
+
+{% endif %}
+{# SRV Records (Service records) #}
+{% if srv_records %}
+; SRV Records (Service records)
+{% for record in srv_records | sort(attribute='priority') %}
+{{ "%-20s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	SRV	{{ "%d"|format(record.priority if record.priority is not none else 0) }}	{{ "%d"|format(record.weight if record.weight is not none else 0) }}	{{ "%d"|format(record.port if record.port is not none else 0) }}	{{ record.value | ensure_trailing_dot }}
+{% endfor %}
+
+{% endif %}
+{# PTR Records (Pointer records) - usually for reverse zones but can appear in forward zones #}
+{% if ptr_records %}
+; PTR Records (Pointer records)
+{% for record in ptr_records %}
+{{ "%-20s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	PTR	{{ record.value | ensure_trailing_dot }}
+{% endfor %}
+
+{% endif %}
+{# Other record types #}
+{% if other_records %}
+; Other Records
+{% for record in other_records %}
+{{ "%-20s"|format(record.name) }}	{{ "%s"|format(record.ttl if record.ttl else "") }}	IN	{{ record.record_type }}	{{ record.value }}
+{% endfor %}
+
+{% endif %}
 {% else %}
 ; No DNS records defined for this zone
 {% endif %}

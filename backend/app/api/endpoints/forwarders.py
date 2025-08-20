@@ -56,7 +56,15 @@ async def create_forwarder(
 ):
     """Create a new DNS forwarder with automatic health checking"""
     forwarder_service = ForwarderService(db)
-    bind_service = BindService()
+    bind_service = BindService(db)
+    
+    # Create backup before forwarder creation
+    backup_success = await bind_service.backup_before_forwarder_changes("create")
+    if not backup_success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create backup before forwarder creation"
+        )
     
     # Create forwarder in database (includes initial health check)
     forwarder = await forwarder_service.create_forwarder(forwarder_data.dict())
@@ -90,7 +98,15 @@ async def update_forwarder(
 ):
     """Update a DNS forwarder with health check validation"""
     forwarder_service = ForwarderService(db)
-    bind_service = BindService()
+    bind_service = BindService(db)
+    
+    # Create backup before forwarder update
+    backup_success = await bind_service.backup_before_forwarder_changes("update")
+    if not backup_success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create backup before forwarder update"
+        )
     
     forwarder = await forwarder_service.update_forwarder(forwarder_id, forwarder_data.dict(exclude_unset=True))
     if not forwarder:
@@ -111,7 +127,15 @@ async def delete_forwarder(
 ):
     """Delete a DNS forwarder"""
     forwarder_service = ForwarderService(db)
-    bind_service = BindService()
+    bind_service = BindService(db)
+    
+    # Create backup before forwarder deletion
+    backup_success = await bind_service.backup_before_forwarder_changes("delete")
+    if not backup_success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create backup before forwarder deletion"
+        )
     
     success = await forwarder_service.delete_forwarder(forwarder_id)
     if not success:

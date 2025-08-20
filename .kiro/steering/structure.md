@@ -5,7 +5,7 @@
 ```
 hybrid-dns-server/
 ├── README.md                     # Main project documentation
-├── PROJECT_OVERVIEW.md          # Detailed project summary
+├── docs/                        # Comprehensive documentation
 ├── install.sh                   # Automated installation script
 ├── docker-compose.yml           # Container orchestration
 ├── backend/                     # FastAPI backend application

@@ -1,0 +1,94 @@
+; RPZ Category Zone file for {{ category }}
+; Generated automatically by Hybrid DNS Server
+; Category: {{ category_info.display_name }}
+; Description: {{ category_info.description }}
+; Total Rules: {{ rules|length }}
+; Active Rules: {{ active_rules_count }}
+; Last Updated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+$TTL {{ ttl | default(300) }}
+$ORIGIN {{ category }}.rpz.
+
+; SOA Record for RPZ category zone
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
+		{{ refresh | default(3600) }}		; Refresh interval
+		{{ retry | default(1800) }}		; Retry interval
+		{{ expire | default(604800) }}		; Expire time
+		{{ minimum | default(300) }}		; Minimum TTL
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+{% if rules %}
+; {{ category_info.display_name }} RPZ Rules
+; Category: {{ category }}
+; Rules by Action: {% for action, count in rules_by_action.items() %}{{ action }}={{ count }}{% if not loop.last %}, {% endif %}{% endfor %}
+
+{% set block_rules = [] %}
+{% set redirect_rules = [] %}
+{% set passthru_rules = [] %}
+
+{# Group and filter active rules by action #}
+{% for rule in rules %}
+{% if rule.is_active %}
+{% if rule.action == 'block' %}
+{% set _ = block_rules.append(rule) %}
+{% elif rule.action == 'redirect' %}
+{% set _ = redirect_rules.append(rule) %}
+{% elif rule.action == 'passthru' %}
+{% set _ = passthru_rules.append(rule) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+{# Block Rules Section #}
+{% if block_rules %}
+; ========================================
+; BLOCK RULES ({{ block_rules|length }} rules)
+; These domains will return NXDOMAIN
+; ========================================
+{% for rule in block_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Redirect Rules Section #}
+{% if redirect_rules %}
+; ========================================
+; REDIRECT RULES ({{ redirect_rules|length }} rules)
+; These domains will redirect to specified targets
+; ========================================
+{% for rule in redirect_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ rule.redirect_target | ensure_trailing_dot }}{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{# Passthrough Rules Section #}
+{% if passthru_rules %}
+; ========================================
+; PASSTHROUGH RULES ({{ passthru_rules|length }} rules)
+; These domains are explicitly allowed (whitelist)
+; ========================================
+{% for rule in passthru_rules | sort(attribute='domain') %}
+{% if rule.description %}; {{ rule.description }}{% endif %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-passthru.{% if rule.source %} ; Source: {{ rule.source }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% else %}
+; No active RPZ rules defined for category: {{ category }}
+; This category is currently empty or all rules are disabled.
+{% endif %}
+
+; Statistics Summary:
+; Total Rules: {{ rules|length }}
+; Active Rules: {{ active_rules_count }}
+; Block Rules: {{ block_rules|length if block_rules else 0 }}
+; Redirect Rules: {{ redirect_rules|length if redirect_rules else 0 }}
+; Passthrough Rules: {{ passthru_rules|length if passthru_rules else 0 }}
+
+; End of RPZ category zone file for {{ category }}

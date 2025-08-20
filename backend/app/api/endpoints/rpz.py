@@ -60,7 +60,15 @@ async def create_rpz_rule(
 ):
     """Create a new RPZ rule"""
     rpz_service = RPZService(db)
-    bind_service = BindService()
+    bind_service = BindService(db)
+    
+    # Create backup before RPZ rule creation
+    backup_success = await bind_service.backup_before_rpz_changes(rule_data.rpz_zone, "create_rule")
+    if not backup_success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create backup before RPZ rule creation"
+        )
     
     # Create rule in database
     rule = await rpz_service.create_rule(rule_data.model_dump())
@@ -81,7 +89,20 @@ async def update_rpz_rule(
 ):
     """Update an RPZ rule"""
     rpz_service = RPZService(db)
-    bind_service = BindService()
+    bind_service = BindService(db)
+    
+    # Get existing rule for backup
+    existing_rule = await rpz_service.get_rule(rule_id)
+    if not existing_rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    
+    # Create backup before RPZ rule update
+    backup_success = await bind_service.backup_before_rpz_changes(existing_rule.rpz_zone, "update_rule")
+    if not backup_success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create backup before RPZ rule update"
+        )
     
     rule = await rpz_service.update_rule(rule_id, rule_data.model_dump(exclude_unset=True))
     if not rule:
@@ -181,6 +202,15 @@ async def bulk_import_rules(
             
             rules_data.append(rule_data)
         
+        # Create backup before bulk import
+        bind_service = BindService(db)
+        backup_success = await bind_service.backup_before_rpz_changes(rpz_zone, "bulk_import")
+        if not backup_success:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to create backup before bulk import"
+            )
+        
         # Perform bulk import
         rpz_service = RPZService(db)
         created_count, error_count, errors = await rpz_service.bulk_create_rules(
@@ -234,14 +264,24 @@ async def bulk_import_rules_json(
             rule_dict['source'] = source
             rules_data.append(rule_dict)
         
+        # Get unique RPZ zones for backup
+        rpz_zones = list(set(rule.rpz_zone for rule in rules))
+        
+        # Create backup before bulk import for each affected zone
+        bind_service = BindService(db)
+        for zone in rpz_zones:
+            backup_success = await bind_service.backup_before_rpz_changes(zone, "bulk_import")
+            if not backup_success:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to create backup before bulk import for zone {zone}"
+                )
+        
         # Perform bulk import
         rpz_service = RPZService(db)
         created_count, error_count, errors = await rpz_service.bulk_create_rules(
             rules_data, source=source
         )
-        
-        # Get unique RPZ zones for BIND9 update
-        rpz_zones = list(set(rule.rpz_zone for rule in rules))
         
         # Schedule BIND9 configuration updates in background
         for zone in rpz_zones:

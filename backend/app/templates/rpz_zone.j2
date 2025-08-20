@@ -1,0 +1,69 @@
+; RPZ Zone file for {{ rpz_zone }}
+; Generated automatically by Hybrid DNS Server
+; Category: {{ rpz_zone }}
+; Total Rules: {{ rules|length }}
+; Last Updated: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+$TTL 300
+$ORIGIN {{ rpz_zone }}.rpz.
+
+; SOA Record for RPZ zone
+@	IN	SOA	{{ primary_ns | default('localhost.') }} {{ admin_email | default('admin.localhost.') }} (
+		{{ serial | default(generated_at.strftime('%Y%m%d%H')) }}	; Serial number (YYYYMMDDHH)
+		3600		; Refresh interval (1 hour)
+		1800		; Retry interval (30 minutes)
+		604800		; Expire time (1 week)
+		300		; Minimum TTL (5 minutes)
+		)
+
+; Name Server Record
+@	IN	NS	{{ primary_ns | default('localhost.') }}
+
+{% if rules %}
+; RPZ Rules ({{ rules|length }} total)
+{% set block_rules = [] %}
+{% set redirect_rules = [] %}
+{% set passthru_rules = [] %}
+
+{# Group rules by action for better organization #}
+{% for rule in rules %}
+{% if rule.is_active %}
+{% if rule.action == 'block' %}
+{% set _ = block_rules.append(rule) %}
+{% elif rule.action == 'redirect' %}
+{% set _ = redirect_rules.append(rule) %}
+{% elif rule.action == 'passthru' %}
+{% set _ = passthru_rules.append(rule) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+{# Block Rules - Return NXDOMAIN #}
+{% if block_rules %}
+; Block Rules ({{ block_rules|length }} rules) - Return NXDOMAIN
+{% for rule in block_rules | sort(attribute='domain') %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	.
+{% endfor %}
+
+{% endif %}
+{# Redirect Rules - Redirect to specified target #}
+{% if redirect_rules %}
+; Redirect Rules ({{ redirect_rules|length }} rules) - Redirect to target
+{% for rule in redirect_rules | sort(attribute='domain') %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	{{ rule.redirect_target | ensure_trailing_dot }}
+{% endfor %}
+
+{% endif %}
+{# Passthrough Rules - Allow through (whitelist) #}
+{% if passthru_rules %}
+; Passthrough Rules ({{ passthru_rules|length }} rules) - Allow through
+{% for rule in passthru_rules | sort(attribute='domain') %}
+{{ rule.domain | rpz_format_domain }}	IN	CNAME	rpz-passthru.
+{% endfor %}
+
+{% endif %}
+{% else %}
+; No active RPZ rules defined for this category
+{% endif %}
+
+; End of RPZ zone file for {{ rpz_zone }}
