@@ -687,8 +687,11 @@ configure_bind9() {
         
         # Add necessary permissions to AppArmor profile
         if ! grep -q "/var/log/bind/" /etc/apparmor.d/usr.sbin.named; then
-            cat >> /etc/apparmor.d/usr.sbin.named << 'EOF'
-
+            # Create a backup of the original profile
+            cp /etc/apparmor.d/usr.sbin.named /etc/apparmor.d/usr.sbin.named.backup
+            
+            # Create a temporary file with the additions
+            cat > /tmp/apparmor_additions << 'EOF'
   # Additional permissions for Hybrid DNS Server
   /var/log/bind/ rw,
   /var/log/bind/** rw,
@@ -698,9 +701,57 @@ configure_bind9() {
   /etc/bind/rpz/** rw,
 EOF
             
-            # Reload AppArmor profile
-            apparmor_parser -r /etc/apparmor.d/usr.sbin.named || warning "Could not reload AppArmor profile"
+            # Find the last closing brace and insert before it
+            if grep -q "^}$" /etc/apparmor.d/usr.sbin.named; then
+                # Use awk to insert before the last closing brace
+                awk '
+                    /^}$/ && !found_last {
+                        # Check if this is the last closing brace
+                        rest = $0
+                        getline rest
+                        if (rest == "") {
+                            # This is the last line, insert before it
+                            while ((getline line < "/tmp/apparmor_additions") > 0) {
+                                print line
+                            }
+                            close("/tmp/apparmor_additions")
+                            print $0
+                            found_last = 1
+                        } else {
+                            print $0
+                            print rest
+                        }
+                    }
+                    !/^}$/ { print }
+                ' /etc/apparmor.d/usr.sbin.named > /tmp/usr.sbin.named.new
+                
+                # Validate the new profile syntax
+                if apparmor_parser -Q /tmp/usr.sbin.named.new; then
+                    # Syntax is valid, replace the original
+                    mv /tmp/usr.sbin.named.new /etc/apparmor.d/usr.sbin.named
+                    
+                    # Reload AppArmor profile
+                    if apparmor_parser -r /etc/apparmor.d/usr.sbin.named; then
+                        success "AppArmor profile updated successfully"
+                    else
+                        warning "Could not reload AppArmor profile - restoring backup"
+                        mv /etc/apparmor.d/usr.sbin.named.backup /etc/apparmor.d/usr.sbin.named
+                    fi
+                else
+                    warning "AppArmor profile syntax validation failed - keeping original profile"
+                    rm -f /tmp/usr.sbin.named.new
+                fi
+            else
+                warning "Could not find proper location to insert AppArmor rules - skipping AppArmor update"
+            fi
+            
+            # Clean up temporary files
+            rm -f /tmp/apparmor_additions
+        else
+            info "AppArmor profile already contains required permissions"
         fi
+    else
+        info "AppArmor profile for BIND9 not found - skipping AppArmor configuration"
     fi
     
     # Fix statistics-channels configuration issue (remove problematic CIDR line)
@@ -725,21 +776,51 @@ EOF
     fi
     
     # Start BIND9 (handle different service names and Ubuntu 24.04 specifics)
+    # First determine the correct service name
     if systemctl list-unit-files | grep -q "^named.service"; then
-        systemctl restart named
-        systemctl enable named
         BIND_SERVICE="named"
-    else
-        # Ubuntu 24.04 uses bind9 service name
-        systemctl restart bind9
-        systemctl enable bind9
+    elif systemctl list-unit-files | grep -q "^bind9.service"; then
         BIND_SERVICE="bind9"
+    else
+        # Check for actual service files, not aliases
+        if [[ -f /lib/systemd/system/named.service ]]; then
+            BIND_SERVICE="named"
+        elif [[ -f /lib/systemd/system/bind9.service ]]; then
+            BIND_SERVICE="bind9"
+        else
+            # Default to named for most distributions
+            BIND_SERVICE="named"
+        fi
     fi
     
-    # Additional check for Ubuntu 24.04 systemd compatibility
-    if ! systemctl is-enabled $BIND_SERVICE &>/dev/null; then
-        warning "BIND9 service may not be properly enabled, attempting manual enable..."
-        systemctl enable $BIND_SERVICE || warning "Could not enable BIND9 service"
+    info "Using BIND9 service name: $BIND_SERVICE"
+    
+    # Enable and start the service
+    if systemctl enable $BIND_SERVICE 2>/dev/null; then
+        success "BIND9 service enabled successfully"
+    else
+        warning "Could not enable BIND9 service - it may be an alias or masked"
+        # Try to unmask if it's masked
+        systemctl unmask $BIND_SERVICE 2>/dev/null || true
+        # Try enabling again
+        systemctl enable $BIND_SERVICE 2>/dev/null || warning "BIND9 service enable failed - will try to start anyway"
+    fi
+    
+    # Start the service
+    if systemctl restart $BIND_SERVICE; then
+        success "BIND9 service started successfully"
+    else
+        warning "Failed to start $BIND_SERVICE, trying alternative service names..."
+        # Try alternative service names
+        for service in named bind9; do
+            if [[ "$service" != "$BIND_SERVICE" ]]; then
+                if systemctl restart $service 2>/dev/null; then
+                    BIND_SERVICE="$service"
+                    success "BIND9 started successfully as $service"
+                    break
+                fi
+            fi
+        done
     fi
     
     # Wait for service to start
@@ -932,12 +1013,20 @@ EOF
 create_systemd_services() {
     info "Creating systemd services..."
     
+    # Determine the correct BIND service name for systemd dependencies
+    local bind_service_name="named.service"
+    if systemctl list-unit-files | grep -q "^bind9.service"; then
+        bind_service_name="bind9.service"
+    elif [[ -f /lib/systemd/system/bind9.service ]]; then
+        bind_service_name="bind9.service"
+    fi
+    
     # Backend service
     cat > /etc/systemd/system/hybrid-dns-backend.service << EOF
 [Unit]
 Description=Hybrid DNS Server Backend
-After=network.target postgresql.service bind9.service
-Wants=postgresql.service bind9.service
+After=network.target postgresql.service $bind_service_name
+Wants=postgresql.service $bind_service_name
 Requires=network.target
 
 [Service]
@@ -974,8 +1063,8 @@ EOF
     cat > /etc/systemd/system/hybrid-dns-monitor.service << EOF
 [Unit]
 Description=Hybrid DNS Server Monitoring
-After=network.target hybrid-dns-backend.service bind9.service
-Wants=hybrid-dns-backend.service bind9.service
+After=network.target hybrid-dns-backend.service $bind_service_name
+Wants=hybrid-dns-backend.service $bind_service_name
 Requires=network.target
 
 [Service]
