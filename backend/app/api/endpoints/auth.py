@@ -34,6 +34,7 @@ security = HTTPBearer()
 @limiter.limit("5/minute")
 async def login(request: Request, login_data: LoginRequest):
     """User login with optional 2FA"""
+    settings = get_settings()
     ip_address = get_client_ip(request)
     
     # Get user from database
