@@ -16,12 +16,9 @@ This guide covers deploying the Hybrid DNS Server to a production Ubuntu server.
 ### 1. Database Setup
 
 ```bash
-# Run database initialization
+# Run database initialization (creates/updates schema automatically)
 cd /opt/hybrid-dns-server/backend
 python init_db.py
-
-# Run database migrations
-alembic upgrade head
 ```
 
 ### 2. Environment Configuration

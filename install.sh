@@ -1353,19 +1353,8 @@ EOF
         warning "Database initialization script failed, but continuing..."
     fi
     
-    # Run any pending Alembic migrations if alembic is available
-    info "Checking for database migrations..."
-    sudo -u "$SERVICE_USER" bash << EOF
-cd "$INSTALL_DIR/backend"
-source venv/bin/activate
-
-if command -v alembic &> /dev/null && [[ -f "alembic.ini" ]]; then
-    info "Running database migrations..."
-    alembic upgrade head || echo "Migration failed or no migrations to run"
-else
-    echo "Alembic not available or no alembic.ini found - skipping migrations"
-fi
-EOF
+    # Alembic is no longer required; migrations handled in-app
+    info "Skipping Alembic migrations (managed by application)"
     
     # Verify database initialization
     info "Verifying database health..."

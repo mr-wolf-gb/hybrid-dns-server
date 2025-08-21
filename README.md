@@ -90,6 +90,7 @@ A production-ready hybrid DNS server solution running on Linux (Debian/Ubuntu), 
    - **Automatic Configuration**: Handles BIND9, database, and service configuration
    - **Comprehensive Setup**: Installs all dependencies and configures services
    - **Security Hardening**: Configures firewall, fail2ban, SSL certificates, and AppArmor
+   - **Alembic-free**: Schema is created/updated by the app during startup
 
 4. **Installation Options:**
    ```bash
@@ -405,8 +406,7 @@ hybrid-dns-server/
 │   ├── 📄 main.py                  # Application entry point
 │   ├── 📄 init_db.py               # Database initialization
 │   ├── 📄 create_admin.py          # Admin user creation
-│   ├── 📄 alembic.ini              # Database migration config
-│   ├── 📁 alembic/                 # Database migrations
+│   ├── 📁 alembic/                 # (Removed) Alembic migrations are no longer used
 │   ├── 📁 app/                     # Application source code
 │   │   ├── 📁 api/                 # REST API endpoints
 │   │   ├── 📁 core/                # Core configuration

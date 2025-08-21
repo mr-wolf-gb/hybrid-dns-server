@@ -156,6 +156,9 @@ async def init_database():
         
         logger.info("Database tables created successfully")
         
+        # Apply application-managed migrations (idempotent)
+        await apply_app_migrations()
+
         # Log the tables that were created
         table_names = [table.name for table in metadata.tables.values()]
         logger.info(f"Created tables: {', '.join(sorted(table_names))}")
@@ -217,6 +220,159 @@ async def verify_indexes():
     except Exception as e:
         logger.warning(f"Could not verify indexes: {e}")
         # Don't fail initialization if index verification fails
+
+
+async def apply_app_migrations():
+    """Apply idempotent, application-level migrations to align DB with current models.
+    This replaces Alembic for environments where migrations aren't used.
+    """
+    _initialize_database_engine()
+    logger = get_logger(__name__)
+
+    async with engine.begin() as conn:
+        # Determine dialect
+        is_postgres = 'postgresql' in str(engine.url)
+
+        # Helper to check column existence
+        async def column_exists(table: str, column: str) -> bool:
+            if is_postgres:
+                res = await conn.execute(text(
+                    """
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = :table
+                      AND column_name = :column
+                    """
+                ), {"table": table, "column": column})
+                return res.scalar() is not None
+            else:
+                res = await conn.execute(text(
+                    """
+                    PRAGMA table_info(:table)
+                    """
+                ), {"table": table})
+                return any(row[1] == column for row in res.fetchall())
+
+        # Helper to check index existence (best-effort)
+        async def index_exists(table: str, index_name: str) -> bool:
+            if is_postgres:
+                res = await conn.execute(text(
+                    """
+                    SELECT 1 FROM pg_indexes
+                    WHERE schemaname = 'public'
+                      AND tablename = :table
+                      AND indexname = :index
+                    """
+                ), {"table": table, "index": index_name})
+                return res.scalar() is not None
+            else:
+                res = await conn.execute(text(
+                    """
+                    SELECT name FROM sqlite_master
+                    WHERE type='index' AND tbl_name = :table AND name = :index
+                    """
+                ), {"table": table, "index": index_name})
+                return res.scalar() is not None
+
+        # 1) forwarders: ensure priority/grouping/template columns exist
+        forwarders_adds = [
+            ("priority", "INTEGER NOT NULL DEFAULT 5"),
+            ("group_name", "VARCHAR(100)"),
+            ("group_priority", "INTEGER NOT NULL DEFAULT 5"),
+            ("is_template", "BOOLEAN NOT NULL DEFAULT FALSE" if is_postgres else "BOOLEAN NOT NULL DEFAULT 0"),
+            ("template_name", "VARCHAR(255)"),
+            ("created_from_template", "VARCHAR(255)"),
+        ]
+
+        for col, ddl in forwarders_adds:
+            try:
+                if not await column_exists('forwarders', col):
+                    await conn.execute(text(f"ALTER TABLE forwarders ADD COLUMN {col} {ddl}"))
+                    logger.info(f"Added column forwarders.{col}")
+            except Exception as e:
+                logger.warning(f"Skipping add column forwarders.{col}: {e}")
+
+        # 2) Create forwarder_templates table if missing
+        try:
+            if is_postgres:
+                res = await conn.execute(text(
+                    """
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = 'forwarder_templates'
+                    """
+                ))
+                has_templates = res.scalar() is not None
+            else:
+                res = await conn.execute(text(
+                    """
+                    SELECT name FROM sqlite_master WHERE type='table' AND name='forwarder_templates'
+                    """
+                ))
+                has_templates = res.scalar() is not None
+
+            if not has_templates:
+                # Use a portable subset of types for compatibility
+                await conn.execute(text(
+                    """
+                    CREATE TABLE forwarder_templates (
+                        id INTEGER PRIMARY KEY,
+                        name VARCHAR(255) NOT NULL UNIQUE,
+                        description VARCHAR(500),
+                        forwarder_type VARCHAR(20) NOT NULL,
+                        default_domains TEXT,
+                        default_servers TEXT,
+                        default_priority INTEGER NOT NULL DEFAULT 5,
+                        default_group_name VARCHAR(100),
+                        default_health_check_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                        is_system_template BOOLEAN NOT NULL DEFAULT FALSE,
+                        usage_count INTEGER NOT NULL DEFAULT 0,
+                        created_by INTEGER,
+                        updated_by INTEGER,
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                ))
+                logger.info("Created table forwarder_templates")
+        except Exception as e:
+            logger.warning(f"Skipping create table forwarder_templates: {e}")
+
+        # 3) Ensure expected indexes on forwarders
+        forwarder_indexes = {
+            'idx_forwarders_priority': ('forwarders', 'priority'),
+            'idx_forwarders_group_name': ('forwarders', 'group_name'),
+            'idx_forwarders_group_priority': ('forwarders', 'group_name, group_priority'),
+            'idx_forwarders_is_template': ('forwarders', 'is_template'),
+            'idx_forwarders_template_name': ('forwarders', 'template_name'),
+            'idx_forwarders_created_from_template': ('forwarders', 'created_from_template'),
+        }
+        for idx_name, (tbl, cols) in forwarder_indexes.items():
+            try:
+                if not await index_exists(tbl, idx_name):
+                    await conn.execute(text(f"CREATE INDEX {idx_name} ON {tbl} ({cols})"))
+                    logger.info(f"Created index {idx_name}")
+            except Exception as e:
+                logger.warning(f"Skipping create index {idx_name}: {e}")
+
+        # 4) Ensure expected indexes on forwarder_templates
+        template_indexes = {
+            'idx_forwarder_templates_name': ('forwarder_templates', 'name'),
+            'idx_forwarder_templates_type': ('forwarder_templates', 'forwarder_type'),
+            'idx_forwarder_templates_system': ('forwarder_templates', 'is_system_template'),
+            'idx_forwarder_templates_usage': ('forwarder_templates', 'usage_count'),
+            'idx_forwarder_templates_created_by': ('forwarder_templates', 'created_by'),
+        }
+        for idx_name, (tbl, cols) in template_indexes.items():
+            try:
+                if not await index_exists(tbl, idx_name):
+                    await conn.execute(text(f"CREATE INDEX {idx_name} ON {tbl} ({cols})"))
+                    logger.info(f"Created index {idx_name}")
+            except Exception as e:
+                logger.warning(f"Skipping create index {idx_name}: {e}")
+
+    # No exception bubbling; we want init to continue even if best-effort fixes fail
+    logger.info("Application-level migrations applied (best-effort)")
 
 
 async def create_default_admin():

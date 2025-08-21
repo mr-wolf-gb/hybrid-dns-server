@@ -64,8 +64,6 @@ jinja2==3.1.2
 
 # Data analysis and reporting (pandas removed - not currently used)
 
-# Database migrations
-alembic==1.13.1
 
 # PostgreSQL support
 asyncpg==0.29.0

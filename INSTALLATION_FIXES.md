@@ -16,10 +16,9 @@ This document summarizes the fixes applied to resolve installation issues on Ubu
 - `backend/app/api/routes/analytics.py`
 **Fix**: Changed imports to use `UserInfo` schema and updated all references from `is_admin` to `is_superuser`
 
-### 3. Alembic Configuration Issue
-**Problem**: Unescaped `%` character in `version_num_format = %04d` causing interpolation errors
-**Location**: `backend/alembic.ini`
-**Fix**: Changed to `version_num_format = %%04d` (escaped the %)
+### 3. Migration Handling Update
+**Change**: Removed Alembic in favor of app-managed, idempotent migrations executed at startup.
+**Impact**: No Alembic required during install; schema is created/updated by the app.
 
 ### 4. FastAPI Parameter Ordering Issues
 **Problem**: `BackgroundTasks` parameters without defaults placed after parameters with defaults
