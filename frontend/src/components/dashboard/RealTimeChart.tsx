@@ -167,9 +167,10 @@ const RealTimeChart: React.FC<RealTimeChartProps> = ({
           afterLabel: (context: any) => {
             const dataPoint = streamData[context.dataIndex]
             if (dataPoint) {
+              const avg = Number(dataPoint.avg_response_time ?? 0)
               return [
-                `Unique Clients: ${dataPoint.unique_clients}`,
-                `Avg Response: ${dataPoint.avg_response_time.toFixed(1)}ms`
+                `Unique Clients: ${Number(dataPoint.unique_clients ?? 0)}`,
+                `Avg Response: ${avg.toFixed(1)}ms`
               ]
             }
             return []

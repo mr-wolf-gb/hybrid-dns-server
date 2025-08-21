@@ -109,9 +109,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         )
         http_exc = create_validation_error_response(validation_error, context)
         return await http_exception_handler(request, http_exc)
-    except Exception as e:
-        logger.error(f"Error processing validation exception: {e}")
-        # Fallback to basic error handling
+    except Exception:
+        # Fallback to basic error handling (avoid noisy stacktraces)
         return await _handle_validation_fallback(request, exc, context)
 
 

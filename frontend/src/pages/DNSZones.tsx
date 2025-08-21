@@ -60,7 +60,12 @@ const DNSZones: React.FC = () => {
     queryFn: () => zonesService.getZones(),
   })
 
-  const zones = zonesResponse?.data || []
+  // Support both array and paginated response shapes
+  const zones: Zone[] = useMemo(() => {
+    const payload = zonesResponse?.data as any
+    if (!payload) return []
+    return Array.isArray(payload) ? payload : (payload.items ?? [])
+  }, [zonesResponse])
 
   // Debounced search function
   const debouncedSearch = useMemo(

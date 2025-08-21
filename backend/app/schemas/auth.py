@@ -87,7 +87,7 @@ class UserInfo(BaseModel):
     """User information schema"""
     id: int
     username: str
-    email: EmailStr
+    email: str
     is_active: bool
     is_superuser: bool
     two_factor_enabled: bool

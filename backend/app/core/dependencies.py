@@ -5,7 +5,8 @@ FastAPI dependencies for authentication and user context
 from typing import Dict, Any, Optional
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from .database import get_database_session
 from .security import verify_token, get_client_ip
@@ -32,7 +33,7 @@ async def get_current_user_payload(
 async def get_current_user_from_db(
     request: Request,
     payload: Dict[str, Any] = Depends(get_current_user_payload),
-    db: Session = Depends(get_database_session)
+    db: AsyncSession = Depends(get_database_session)
 ) -> Dict[str, Any]:
     """Get current user from database and set context"""
     username = payload.get("sub")
@@ -44,8 +45,11 @@ async def get_current_user_from_db(
             detail="Invalid token payload"
         )
     
-    # Get user from database
-    user = db.query(User).filter(User.username == username, User.id == user_id).first()
+    # Get user from database (async)
+    result = await db.execute(
+        select(User).where(User.username == username, User.id == user_id)
+    )
+    user = result.scalars().first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -98,7 +102,7 @@ async def get_current_superuser(
 async def get_optional_current_user(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False)),
-    db: Session = Depends(get_database_session)
+    db: AsyncSession = Depends(get_database_session)
 ) -> Optional[Dict[str, Any]]:
     """Get current user if authenticated, otherwise return None"""
     if not credentials:
@@ -115,8 +119,11 @@ async def get_optional_current_user(
         if not username or not user_id:
             return None
         
-        # Get user from database
-        user = db.query(User).filter(User.username == username, User.id == user_id).first()
+        # Get user from database (async)
+        result = await db.execute(
+            select(User).where(User.username == username, User.id == user_id)
+        )
+        user = result.scalars().first()
         if not user or not user.is_active:
             return None
         

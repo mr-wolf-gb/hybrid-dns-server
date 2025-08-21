@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_database_session
+from sqlalchemy import text
 from ...core.logging_config import get_logger
 from ...services.monitoring_service import MonitoringService
 from ...services.health_service import get_health_service
@@ -85,7 +86,7 @@ async def get_recent_queries(
             LIMIT :limit
         """
         
-        result = await db.execute(query, {"limit": limit})
+        result = await db.execute(text(query), {"limit": limit})
         queries = result.fetchall()
         
         return {
@@ -132,7 +133,7 @@ async def get_query_stream(
             ORDER BY minute
         """
         
-        result = await db.execute(query, {"since": since})
+        result = await db.execute(text(query), {"since": since})
         stream_data = result.fetchall()
         
         return {
@@ -164,35 +165,13 @@ async def get_live_health_status(db: AsyncSession = Depends(get_database_session
         # Get forwarder health summary
         health_summary = await health_service.get_forwarder_health_summary(db)
         
-        # Get recent health alerts
-        alerts_query = """
-            SELECT 
-                id, type, level, forwarder_id, message, details, created_at, acknowledged
-            FROM health_alerts 
-            WHERE created_at >= :since
-            ORDER BY created_at DESC
-            LIMIT 10
-        """
-        
-        since = datetime.utcnow() - timedelta(hours=1)
-        result = await db.execute(alerts_query, {"since": since})
-        alerts = result.fetchall()
+        # Get recent health alerts (derived from current health status; no DB table)
+        alerts_payload = await health_service.get_health_alerts_with_tracking(db)
+        recent_alerts = alerts_payload.get("alerts", [])
         
         return {
             "health_summary": health_summary,
-            "recent_alerts": [
-                {
-                    "id": alert.id,
-                    "type": alert.type,
-                    "level": alert.level,
-                    "forwarder_id": alert.forwarder_id,
-                    "message": alert.message,
-                    "details": alert.details,
-                    "created_at": alert.created_at.isoformat(),
-                    "acknowledged": alert.acknowledged
-                }
-                for alert in alerts
-            ],
+            "recent_alerts": recent_alerts,
             "timestamp": datetime.utcnow().isoformat()
         }
     except Exception as e:
@@ -267,7 +246,7 @@ async def get_live_security_status(
             LIMIT 50
         """
         
-        result = await db.execute(security_query, {"since": since})
+        result = await db.execute(text(security_query), {"since": since})
         security_events = result.fetchall()
         
         # Get threat statistics
@@ -285,7 +264,7 @@ async def get_live_security_status(
             ORDER BY threat_count DESC
         """
         
-        result = await db.execute(threat_stats_query, {"since": since})
+        result = await db.execute(text(threat_stats_query), {"since": since})
         threat_stats = result.fetchall()
         
         return {
@@ -324,24 +303,7 @@ async def acknowledge_alert(
 ):
     """Acknowledge a health or security alert"""
     try:
-        # Update alert in database
-        update_query = """
-            UPDATE health_alerts 
-            SET acknowledged = true, acknowledged_at = :now
-            WHERE id = :alert_id
-        """
-        
-        result = await db.execute(update_query, {
-            "alert_id": alert_id,
-            "now": datetime.utcnow()
-        })
-        
-        if result.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Alert not found")
-        
-        await db.commit()
-        
-        # Broadcast alert acknowledgment
+        # No persistent alerts table; treat this as a no-op and broadcast acknowledgment
         websocket_manager = get_websocket_manager()
         await websocket_manager.emit_event(
             EventType.HEALTH_ALERT,
@@ -351,7 +313,6 @@ async def acknowledge_alert(
                 "timestamp": datetime.utcnow().isoformat()
             }
         )
-        
         return {
             "success": True,
             "message": "Alert acknowledged",

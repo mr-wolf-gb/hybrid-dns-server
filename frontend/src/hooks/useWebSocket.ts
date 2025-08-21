@@ -95,7 +95,7 @@ export enum EventType {
 }
 
 export const useWebSocket = (config: WebSocketConfig): [WebSocketState, WebSocketActions] => {
-  const { token } = useAuth();
+  const { accessToken } = useAuth();
   const [state, setState] = useState<WebSocketState>({
     isConnected: false,
     isConnecting: false,
@@ -127,7 +127,7 @@ export const useWebSocket = (config: WebSocketConfig): [WebSocketState, WebSocke
   }, []);
 
   const connect = useCallback(() => {
-    if (!token || state.isConnecting || state.isConnected) {
+    if (!accessToken || state.isConnecting || state.isConnected) {
       return;
     }
 
@@ -136,7 +136,7 @@ export const useWebSocket = (config: WebSocketConfig): [WebSocketState, WebSocke
     try {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.host;
-      const wsUrl = `${protocol}//${host}/api/websocket/ws/${config.connectionType}?token=${encodeURIComponent(token)}`;
+      const wsUrl = `${protocol}//${host}/api/websocket/ws/${config.connectionType}?token=${encodeURIComponent(accessToken)}`;
 
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
@@ -220,7 +220,7 @@ export const useWebSocket = (config: WebSocketConfig): [WebSocketState, WebSocke
         isConnecting: false
       }));
     }
-  }, [token, state.isConnecting, state.isConnected, config.connectionType, cleanup]);
+  }, [accessToken, state.isConnecting, state.isConnected, config.connectionType, cleanup]);
 
   const disconnect = useCallback(() => {
     cleanup();
@@ -293,10 +293,10 @@ export const useWebSocket = (config: WebSocketConfig): [WebSocketState, WebSocke
 
   // Auto-connect when token is available
   useEffect(() => {
-    if (token && !state.isConnected && !state.isConnecting) {
+    if (accessToken && !state.isConnected && !state.isConnecting) {
       connect();
     }
-  }, [token, connect, state.isConnected, state.isConnecting]);
+  }, [accessToken, connect, state.isConnected, state.isConnecting]);
 
   // Cleanup on unmount
   useEffect(() => {

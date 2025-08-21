@@ -174,15 +174,15 @@ def is_account_locked(user: Dict[str, Any]) -> bool:
 def log_security_event(event_type: str, details: Dict[str, Any], ip_address: str = None):
     """Log security events"""
     logger = get_security_logger()
-    logger.info(f"Security event: {event_type}", extra={
-        "event_type": event_type,
-        "details": details,
-        "ip_address": ip_address
-    })
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-    
-    logger.info(f"Created access token for user: {data.get('sub', 'unknown')}")
-    return encoded_jwt
+    logger.info(
+        f"Security event: {event_type}",
+        extra={
+            "event_type": event_type,
+            "details": details,
+            "ip_address": ip_address,
+            "timestamp": datetime.utcnow().isoformat(),
+        },
+    )
 
 
 def create_refresh_token(data: Dict[str, Any]) -> str:
@@ -192,11 +192,13 @@ def create_refresh_token(data: Dict[str, Any]) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode.update({"exp": expire, "type": "refresh"})
-    
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-    
-    logger.info(f"Created refresh token for user: {data.get('sub', 'unknown')}")
-    return encoded_jwt
+    try:
+        encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+        logger.debug(f"Created refresh token for user: {data.get('sub', 'unknown')}")
+        return encoded_jwt
+    except Exception as e:
+        logger.error(f"Failed to create refresh token: {e}")
+        raise
 
 
 def verify_token(token: str) -> Optional[Dict[str, Any]]:
@@ -204,7 +206,7 @@ def verify_token(token: str) -> Optional[Dict[str, Any]]:
     settings = get_settings()
     logger = get_security_logger()
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
         return payload
     except JWTError as e:
         logger.warning(f"Token verification failed: {e}")
@@ -216,44 +218,35 @@ def generate_session_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-# Two-Factor Authentication
+# Two-Factor Authentication (PNG base64 QR for broad compatibility)
 def generate_totp_secret() -> str:
-    """Generate a new TOTP secret for 2FA"""
+    """Generate TOTP secret for 2FA"""
     return pyotp.random_base32()
 
 
-def generate_totp_qr_code(secret: str, email: str, issuer_name: str = "Hybrid DNS Server") -> str:
-    """Generate QR code for TOTP setup"""
+def generate_totp_qr_code(secret: str, user_email: str) -> str:
+    """Generate QR code (PNG base64) for TOTP setup"""
+    settings = get_settings()
     totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(
-        name=email,
-        issuer_name=issuer_name
+        name=user_email,
+        issuer_name=settings.TOTP_ISSUER_NAME
     )
-    
-    # Generate QR code as SVG
-    qr = qrcode.QRCode(
-        version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_L,
-        box_size=10,
-        border=4,
-    )
+    qr = qrcode.QRCode(version=1, box_size=10, border=5)
     qr.add_data(totp_uri)
     qr.make(fit=True)
-    
-    # Create SVG image
-    factory = qrcode.image.svg.SvgPathImage
-    img = qr.make_image(image_factory=factory)
-    
-    # Convert to string
+    img = qr.make_image(fill_color="black", back_color="white")
     buffer = BytesIO()
-    img.save(buffer)
-    return buffer.getvalue().decode()
+    img.save(buffer, format='PNG')
+    buffer.seek(0)
+    import base64
+    return base64.b64encode(buffer.getvalue()).decode()
 
 
 def verify_totp_token(secret: str, token: str) -> bool:
-    """Verify TOTP token"""
+    """Verify TOTP token with configured time window"""
+    settings = get_settings()
     totp = pyotp.TOTP(secret)
-    # Allow for clock drift
-    return totp.verify(token, valid_window=1)
+    return totp.verify(token, valid_window=settings.TOTP_VALID_WINDOW)
 
 
 def generate_backup_codes(count: int = 8) -> list[str]:
@@ -323,22 +316,13 @@ def get_client_ip(request) -> str:
     forwarded_for = request.headers.get("X-Forwarded-For")
     if forwarded_for:
         return forwarded_for.split(",")[0].strip()
-    
     real_ip = request.headers.get("X-Real-IP")
     if real_ip:
         return real_ip
-    
     return request.client.host if request.client else "unknown"
 
 
-def log_security_event(event_type: str, details: Dict[str, Any], ip_address: str = None):
-    """Log security-related events"""
-    logger.warning(f"Security Event: {event_type}", extra={
-        "event_type": event_type,
-        "details": details,
-        "ip_address": ip_address,
-        "timestamp": datetime.utcnow().isoformat()
-    })
+# (Consolidated above) log_security_event defined once
 
 
 # API Key management (for service-to-service communication)
