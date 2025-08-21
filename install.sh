@@ -1264,8 +1264,18 @@ initialize_database() {
     chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/backend/.env"
     chmod 600 "$INSTALL_DIR/backend/.env"
     
-    # Run database initialization
+    # Reinstall requirements to ensure alembic is available
+    info "Ensuring all Python dependencies are installed..."
     sudo -u "$SERVICE_USER" bash << EOF
+cd "$INSTALL_DIR/backend"
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+EOF
+    
+    # Run database initialization
+    info "Running database initialization script..."
+    if sudo -u "$SERVICE_USER" bash << EOF
 cd "$INSTALL_DIR/backend"
 source venv/bin/activate
 
@@ -1274,15 +1284,29 @@ export PYTHONPATH="\$PWD:\$PYTHONPATH"
 
 # Initialize database tables
 python init_db.py
+EOF
+    then
+        success "Database tables created successfully"
+    else
+        warning "Database initialization script failed, but continuing..."
+    fi
+    
+    # Run any pending Alembic migrations if alembic is available
+    info "Checking for database migrations..."
+    sudo -u "$SERVICE_USER" bash << EOF
+cd "$INSTALL_DIR/backend"
+source venv/bin/activate
 
-# Run any pending Alembic migrations
-if [[ -f "alembic.ini" ]]; then
+if command -v alembic &> /dev/null && [[ -f "alembic.ini" ]]; then
     info "Running database migrations..."
-    alembic upgrade head || true
+    alembic upgrade head || echo "Migration failed or no migrations to run"
+else
+    echo "Alembic not available or no alembic.ini found - skipping migrations"
 fi
 EOF
     
     # Verify database initialization
+    info "Verifying database health..."
     if sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/backend' && source venv/bin/activate && python -c 'import asyncio; from app.core.database import check_database_health; print(asyncio.run(check_database_health()))'"; then
         success "Database initialization verified"
     else
@@ -1298,25 +1322,50 @@ EOF
 start_services() {
     info "Starting services..."
     
-    # Start all services
-    systemctl start hybrid-dns-backend
-    systemctl start hybrid-dns-monitor
-    systemctl start hybrid-dns-backup.timer
-    
-    # Wait a moment for services to start
-    sleep 5
-    
-    # Check service status
-    if systemctl is-active --quiet hybrid-dns-backend; then
-        success "Backend service started"
+    # Start backend service first
+    info "Starting backend service..."
+    if systemctl start hybrid-dns-backend; then
+        success "Backend service start command executed"
     else
-        error "Failed to start backend service"
+        warning "Backend service start command failed"
     fi
     
-    if systemctl is-active --quiet hybrid-dns-monitor; then
-        success "Monitoring service started"
+    # Wait a moment for backend to start
+    sleep 3
+    
+    # Check backend service status
+    if systemctl is-active --quiet hybrid-dns-backend; then
+        success "Backend service is running"
     else
-        warning "Monitoring service not started"
+        warning "Backend service failed to start, checking logs..."
+        journalctl -u hybrid-dns-backend --no-pager -n 20
+        error "Failed to start backend service - check logs above"
+    fi
+    
+    # Start monitoring service
+    info "Starting monitoring service..."
+    if systemctl start hybrid-dns-monitor; then
+        success "Monitoring service start command executed"
+    else
+        warning "Monitoring service start command failed"
+    fi
+    
+    # Start backup timer
+    info "Starting backup timer..."
+    if systemctl start hybrid-dns-backup.timer; then
+        success "Backup timer started"
+    else
+        warning "Backup timer failed to start"
+    fi
+    
+    # Wait a moment for services to start
+    sleep 2
+    
+    # Final status check
+    if systemctl is-active --quiet hybrid-dns-monitor; then
+        success "Monitoring service is running"
+    else
+        warning "Monitoring service not started - check logs: journalctl -u hybrid-dns-monitor"
     fi
     
     success "Services started"

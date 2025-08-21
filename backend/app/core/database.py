@@ -16,23 +16,13 @@ from sqlalchemy.orm import sessionmaker
 from .config import get_settings
 from .logging_config import get_logger
 
-# Import all models to ensure they are registered with Base
-from ..models.dns import Base as DNSBase
-from ..models import (
-    Zone, DNSRecord, Forwarder, ForwarderHealth, RPZRule, ThreatFeed, SystemConfig,
-    User, Session, DNSLog, SystemStats, AuditLog
-)
-
-# Import all model modules to ensure all models are registered
-from ..models import dns, auth, monitoring, system, security
+# Create base class for models
+from sqlalchemy.ext.declarative import declarative_base
+Base = declarative_base()
 
 # Database setup will be initialized when needed
 engine = None
-
 async_session = None
-
-# Base class for models - use the same base as DNS models
-Base = DNSBase
 
 # Metadata for table creation
 metadata = Base.metadata
@@ -152,6 +142,9 @@ async def get_database_session() -> AsyncGenerator[AsyncSession, None]:
 
 async def init_database():
     """Initialize database tables and create default data"""
+    # Import models here to avoid circular imports
+    from ..models import dns, auth, monitoring, system, security, events
+    
     _initialize_database_engine()
     logger = get_logger(__name__)
     logger.info("Initializing database...")
@@ -230,6 +223,7 @@ async def create_default_admin():
     """Create default admin user if none exists"""
     from passlib.context import CryptContext
     from sqlalchemy import select
+    from ..models.auth import User
     
     _initialize_database_engine()
     logger = get_logger(__name__)
@@ -262,6 +256,7 @@ async def create_default_admin():
 async def create_default_system_config():
     """Create default system configuration if none exists"""
     from sqlalchemy import select
+    from ..models.system import SystemConfig
     
     _initialize_database_engine()
     logger = get_logger(__name__)

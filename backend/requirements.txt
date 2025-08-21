@@ -61,3 +61,10 @@ slowapi==0.1.9
 
 # Template engine for zone file generation
 jinja2==3.1.2
+
+# Database migrations
+alembic==1.13.1
+
+# PostgreSQL support
+asyncpg==0.29.0
+psycopg2-binary==2.9.9

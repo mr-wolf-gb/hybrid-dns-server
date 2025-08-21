@@ -3,11 +3,12 @@ DNS-related SQLAlchemy models for the Hybrid DNS Server
 """
 
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, JSON, Index, CheckConstraint
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-Base = declarative_base()
+# Import Base from database module to ensure all models use the same Base
+# This import is safe because database.py no longer imports from models
+from ..core.database import Base
 
 
 class Zone(Base):

@@ -10,6 +10,8 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 import uuid
 
+# Import Base from database module to ensure all models use the same Base
+# This import is safe because database.py no longer imports from models
 from ..core.database import Base
 
 
