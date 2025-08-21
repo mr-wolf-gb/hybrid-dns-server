@@ -136,9 +136,10 @@ async def login(request: Request, login_data: LoginRequest):
         "user_agent": request.headers.get("User-Agent", "")[:500]
     })
     
-    # Create tokens
-    access_token = create_access_token({"sub": user["username"], "user_id": user["id"]})
-    refresh_token = create_refresh_token({"sub": user["username"], "user_id": user["id"]})
+    # Create tokens (embed minimal role claim for websocket auth fallback)
+    is_admin = bool(user.get("is_superuser", False))
+    access_token = create_access_token({"sub": user["username"], "user_id": user["id"], "is_admin": is_admin})
+    refresh_token = create_refresh_token({"sub": user["username"], "user_id": user["id"], "is_admin": is_admin})
     
     log_security_event("login_success", {
         "user_id": user["id"],

@@ -104,6 +104,22 @@ def verify_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def verify_token_flexible(token: str) -> Optional[Dict[str, Any]]:
+    """Verify token using primary JWT settings, with fallback to legacy SECRET_KEY/ALGORITHM.
+    Returns payload or None if verification fails.
+    """
+    settings = get_settings()
+    # Try primary
+    payload = verify_token(token)
+    if payload is not None:
+        return payload
+    # Fallback to legacy SECRET_KEY if configured
+    try:
+        return jwt.decode(token, settings.SECRET_KEY, algorithms=[getattr(settings, 'ALGORITHM', 'HS256')])
+    except Exception:
+        return None
+
+
 def generate_session_token() -> str:
     """Generate a secure session token"""
     return secrets.token_urlsafe(32)

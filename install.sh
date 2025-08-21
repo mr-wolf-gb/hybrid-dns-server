@@ -970,10 +970,29 @@ server {
         add_header Cache-Control "public, immutable";
     }
 
-    # API endpoints
+    # API endpoints (HTTP + WebSocket)
     location /api/ {
         limit_req zone=api burst=20 nodelay;
         
+        proxy_pass http://backend;
+        proxy_http_version 1.1;
+        # Upgrade when header present; keep-alive otherwise
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \${connection_upgrade};
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        
+        # Timeouts (WS needs long read timeout)
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 3600s;
+    }
+
+    # Explicit WebSocket path for extra safety
+    location /api/websocket/ {
         proxy_pass http://backend;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
@@ -982,12 +1001,8 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
-        
-        # Timeouts
-        proxy_connect_timeout 30s;
-        proxy_send_timeout 30s;
-        proxy_read_timeout 30s;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
     }
 
     # Login rate limiting
