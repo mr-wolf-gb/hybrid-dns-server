@@ -3,6 +3,7 @@ System administration endpoints
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+import asyncio
 from sqlalchemy.orm import Session
 from typing import Dict, Any, List, Optional
 
@@ -29,19 +30,80 @@ async def get_system_status(
         # Get BIND9 service status
         bind_status = await bind_service.get_service_status()
         
-        # Get basic system information
-        system_info = {
-            "bind9": bind_status,
-            "database": {
-                "connected": db is not None,
-                "status": "connected" if db else "disconnected"
-            }
+        # Return simplified wrapper expected by frontend
+        return {
+            "data": {
+                "status": bind_status.get("status", "unknown"),
+                "version": bind_status.get("version", "unknown"),
+                # Ensure uptime is numeric seconds; fallback to 0
+                "uptime": bind_status.get("uptime", 0) if isinstance(bind_status.get("uptime", 0), (int, float)) else 0,
+            },
+            "success": True
         }
-        
-        return system_info
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get system status: {str(e)}")
+
+@router.get("/bind/status")
+async def get_bind_service_status(
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get BIND9 service running status"""
+    try:
+        bind_service = BindService(db)
+        status = await bind_service.get_service_status()
+        return {
+            "data": {
+                "running": status.get("status") == "active"
+            },
+            "success": True
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get BIND status: {str(e)}")
+
+@router.post("/bind/reload")
+async def reload_bind_configuration(
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Reload BIND9 configuration"""
+    try:
+        bind_service = BindService(db)
+        success = await bind_service.reload_service()
+        return {"data": success, "success": success}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to reload BIND: {str(e)}")
+
+@router.post("/bind/restart")
+async def restart_bind_service(
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Restart BIND9 service"""
+    try:
+        bind_service = BindService(db)
+        stopped = await bind_service.stop_service()
+        # small delay to allow service to stop cleanly
+        await asyncio.sleep(0.3)
+        started = await bind_service.start_service()
+        success = stopped and started
+        return {"data": success, "success": success}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to restart BIND: {str(e)}")
+
+@router.post("/bind/flush-cache")
+async def flush_bind_cache(
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Flush DNS cache via rndc"""
+    try:
+        bind_service = BindService(db)
+        success = await bind_service.flush_cache()
+        return {"data": success, "success": success}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to flush DNS cache: {str(e)}")
 
 @router.get("/validate")
 async def validate_system_configuration(
