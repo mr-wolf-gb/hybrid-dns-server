@@ -40,7 +40,6 @@ async def create_or_update_admin(username: str, password: str, email: str, full_
             if existing_user:
                 # Update existing user
                 existing_user.email = email
-                existing_user.full_name = full_name
                 existing_user.hashed_password = pwd_context.hash(password)
                 existing_user.is_active = True
                 existing_user.is_superuser = True
@@ -53,7 +52,6 @@ async def create_or_update_admin(username: str, password: str, email: str, full_
                 admin_user = User(
                     username=username,
                     email=email,
-                    full_name=full_name,
                     hashed_password=pwd_context.hash(password),
                     is_active=True,
                     is_superuser=True
