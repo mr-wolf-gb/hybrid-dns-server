@@ -13,7 +13,7 @@ from ...schemas.auth import UserInfo
 from ...services.monitoring_service import MonitoringService
 from ...core.logging_config import get_logger
 
-router = APIRouter(prefix="/analytics", tags=["analytics"])
+router = APIRouter(tags=["analytics"])
 logger = get_logger(__name__)
 
 # Global monitoring service instance
@@ -30,7 +30,7 @@ def get_monitoring_service() -> MonitoringService:
 @router.get("/performance")
 async def get_performance_metrics(
     hours: int = Query(1, ge=1, le=168, description="Hours to analyze (1-168)"),
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Get comprehensive performance metrics"""
     try:
@@ -59,7 +59,7 @@ async def get_performance_metrics(
 async def get_query_analytics(
     hours: int = Query(24, ge=1, le=720, description="Hours to analyze (1-720)"),
     use_cache: bool = Query(True, description="Use cached results if available"),
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Get comprehensive query analytics"""
     try:
@@ -78,7 +78,7 @@ async def get_query_analytics(
 
 @router.get("/real-time")
 async def get_real_time_analytics(
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Get real-time analytics and metrics"""
     try:
@@ -98,7 +98,7 @@ async def get_real_time_analytics(
 @router.get("/trends")
 async def get_trend_analysis(
     days: int = Query(30, ge=1, le=365, description="Days to analyze (1-365)"),
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Get comprehensive trend analysis"""
     try:
@@ -117,7 +117,7 @@ async def get_trend_analysis(
 
 @router.get("/anomalies")
 async def get_anomaly_detection(
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Get current anomaly detection results"""
     try:
@@ -139,7 +139,7 @@ async def get_top_domains_analytics(
     hours: int = Query(24, ge=1, le=168, description="Hours to analyze"),
     limit: int = Query(50, ge=1, le=500, description="Number of domains to return"),
     include_blocked: bool = Query(True, description="Include blocked domains"),
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Get top domains with detailed analytics"""
     try:
@@ -195,7 +195,7 @@ async def get_top_domains_analytics(
 async def get_client_analytics(
     hours: int = Query(24, ge=1, le=168, description="Hours to analyze"),
     limit: int = Query(50, ge=1, le=200, description="Number of clients to return"),
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Get detailed client analytics"""
     try:
@@ -254,7 +254,7 @@ async def get_client_analytics(
 @router.get("/response-time-analytics")
 async def get_response_time_analytics(
     hours: int = Query(24, ge=1, le=168, description="Hours to analyze"),
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Get detailed response time analytics"""
     try:
@@ -327,7 +327,7 @@ async def get_response_time_analytics(
 async def get_threat_analytics(
     days: int = Query(7, ge=1, le=90, description="Days to analyze"),
     category: Optional[str] = Query(None, description="Filter by threat category"),
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Get comprehensive threat analytics"""
     try:
@@ -420,7 +420,7 @@ async def get_threat_analytics(
 
 @router.post("/cache/clear")
 async def clear_analytics_cache(
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Clear analytics cache to force refresh"""
     try:
@@ -447,7 +447,7 @@ async def export_analytics_data(
     hours: int = Query(24, ge=1, le=168, description="Hours of data to export"),
     format: str = Query("json", regex="^(json|csv)$", description="Export format"),
     include_raw_logs: bool = Query(False, description="Include raw DNS logs"),
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Export analytics data in various formats"""
     try:

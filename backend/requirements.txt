@@ -62,8 +62,7 @@ slowapi==0.1.9
 # Template engine for zone file generation
 jinja2==3.1.2
 
-# Data analysis and reporting
-pandas==2.1.4
+# Data analysis and reporting (pandas removed - not currently used)
 
 # Database migrations
 alembic==1.13.1
