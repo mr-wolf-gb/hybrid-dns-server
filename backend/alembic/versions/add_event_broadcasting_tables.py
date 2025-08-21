@@ -17,19 +17,19 @@ depends_on = None
 
 
 def upgrade():
-    # Create events table
+    # Create events table (SQLite compatible)
     op.create_table('events',
         sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('event_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('event_id', sa.String(length=36), nullable=False),  # Use String for UUID in SQLite
         sa.Column('event_type', sa.String(length=100), nullable=False),
         sa.Column('event_category', sa.String(length=50), nullable=False),
         sa.Column('event_source', sa.String(length=100), nullable=False),
-        sa.Column('event_data', postgresql.JSON(astext_type=sa.Text()), nullable=False),
+        sa.Column('event_data', sa.Text(), nullable=False),  # Use Text instead of JSON for SQLite
         sa.Column('user_id', sa.String(length=100), nullable=True),
         sa.Column('session_id', sa.String(length=100), nullable=True),
         sa.Column('severity', sa.String(length=20), nullable=False),
-        sa.Column('tags', postgresql.JSON(astext_type=sa.Text()), nullable=True),
-        sa.Column('metadata', postgresql.JSON(astext_type=sa.Text()), nullable=True),
+        sa.Column('tags', sa.Text(), nullable=True),  # Use Text instead of JSON for SQLite
+        sa.Column('metadata', sa.Text(), nullable=True),  # Use Text instead of JSON for SQLite
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.Column('processed_at', sa.DateTime(), nullable=True),
         sa.Column('is_processed', sa.Boolean(), nullable=False),
@@ -51,18 +51,18 @@ def upgrade():
     op.create_index(op.f('ix_events_is_processed'), 'events', ['is_processed'])
     op.create_index(op.f('ix_events_created_at'), 'events', ['created_at'])
     
-    # Create event_subscriptions table
+    # Create event_subscriptions table (SQLite compatible)
     op.create_table('event_subscriptions',
         sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('subscription_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('subscription_id', sa.String(length=36), nullable=False),  # Use String for UUID in SQLite
         sa.Column('user_id', sa.String(length=100), nullable=False),
         sa.Column('connection_id', sa.String(length=100), nullable=True),
         sa.Column('event_type', sa.String(length=100), nullable=True),
         sa.Column('event_category', sa.String(length=50), nullable=True),
         sa.Column('event_source', sa.String(length=100), nullable=True),
-        sa.Column('severity_filter', postgresql.JSON(astext_type=sa.Text()), nullable=True),
-        sa.Column('tag_filters', postgresql.JSON(astext_type=sa.Text()), nullable=True),
-        sa.Column('user_filters', postgresql.JSON(astext_type=sa.Text()), nullable=True),
+        sa.Column('severity_filter', sa.Text(), nullable=True),  # Use Text instead of JSON for SQLite
+        sa.Column('tag_filters', sa.Text(), nullable=True),  # Use Text instead of JSON for SQLite
+        sa.Column('user_filters', sa.Text(), nullable=True),  # Use Text instead of JSON for SQLite
         sa.Column('is_active', sa.Boolean(), nullable=False),
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.Column('updated_at', sa.DateTime(), nullable=False),
@@ -86,10 +86,10 @@ def upgrade():
     op.create_index(op.f('ix_event_subscriptions_is_active'), 'event_subscriptions', ['is_active'])
     op.create_index(op.f('ix_event_subscriptions_expires_at'), 'event_subscriptions', ['expires_at'])
     
-    # Create event_deliveries table
+    # Create event_deliveries table (SQLite compatible)
     op.create_table('event_deliveries',
         sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('delivery_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('delivery_id', sa.String(length=36), nullable=False),  # Use String for UUID in SQLite
         sa.Column('event_id', sa.Integer(), nullable=False),
         sa.Column('subscription_id', sa.Integer(), nullable=False),
         sa.Column('user_id', sa.String(length=100), nullable=False),
@@ -123,13 +123,13 @@ def upgrade():
     op.create_index(op.f('ix_event_deliveries_retry_after'), 'event_deliveries', ['retry_after'])
     op.create_index(op.f('ix_event_deliveries_created_at'), 'event_deliveries', ['created_at'])
     
-    # Create event_filters table
+    # Create event_filters table (SQLite compatible)
     op.create_table('event_filters',
         sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('filter_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('filter_id', sa.String(length=36), nullable=False),  # Use String for UUID in SQLite
         sa.Column('name', sa.String(length=100), nullable=False),
         sa.Column('description', sa.Text(), nullable=True),
-        sa.Column('filter_config', postgresql.JSON(astext_type=sa.Text()), nullable=False),
+        sa.Column('filter_config', sa.Text(), nullable=False),  # Use Text instead of JSON for SQLite
         sa.Column('is_active', sa.Boolean(), nullable=False),
         sa.Column('created_by', sa.String(length=100), nullable=False),
         sa.Column('created_at', sa.DateTime(), nullable=False),
@@ -141,14 +141,14 @@ def upgrade():
     op.create_index(op.f('ix_event_filters_filter_id'), 'event_filters', ['filter_id'], unique=True)
     op.create_index(op.f('ix_event_filters_is_active'), 'event_filters', ['is_active'])
     
-    # Create event_replays table
+    # Create event_replays table (SQLite compatible)
     op.create_table('event_replays',
         sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('replay_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('replay_id', sa.String(length=36), nullable=False),  # Use String for UUID in SQLite
         sa.Column('name', sa.String(length=100), nullable=False),
         sa.Column('description', sa.Text(), nullable=True),
         sa.Column('user_id', sa.String(length=100), nullable=False),
-        sa.Column('filter_config', postgresql.JSON(astext_type=sa.Text()), nullable=False),
+        sa.Column('filter_config', sa.Text(), nullable=False),  # Use Text instead of JSON for SQLite
         sa.Column('replay_speed', sa.Integer(), nullable=False),
         sa.Column('start_time', sa.DateTime(), nullable=False),
         sa.Column('end_time', sa.DateTime(), nullable=False),

@@ -59,6 +59,12 @@ def get_database_url():
     return database_url
 
 
+def is_async_database():
+    """Check if we're using an async database that requires async migrations"""
+    database_url = get_database_url()
+    return database_url.startswith("postgresql://")
+
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -90,13 +96,38 @@ def do_run_migrations(connection: Connection) -> None:
         context.run_migrations()
 
 
-async def run_async_migrations() -> None:
-    """In this scenario we need to create an Engine
-    and associate a connection with the context.
-
-    """
+def run_migrations_online_sync() -> None:
+    """Run migrations in 'online' mode with synchronous engine (for SQLite)."""
+    from sqlalchemy import engine_from_config
+    
     # Get database URL
     database_url = get_database_url()
+    
+    # Create sync engine configuration
+    configuration = config.get_section(config.config_ini_section)
+    configuration["sqlalchemy.url"] = database_url
+    
+    connectable = engine_from_config(
+        configuration,
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+    )
+
+    with connectable.connect() as connection:
+        do_run_migrations(connection)
+
+    connectable.dispose()
+
+
+async def run_async_migrations() -> None:
+    """Run migrations with async engine (for PostgreSQL)."""
+    # Get database URL but convert to async version for PostgreSQL
+    settings = get_settings()
+    database_url = settings.DATABASE_URL
+    
+    # Convert to async URL for PostgreSQL
+    if database_url.startswith("postgresql://"):
+        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://")
     
     # Create async engine configuration
     configuration = config.get_section(config.config_ini_section)
@@ -116,7 +147,12 @@ async def run_async_migrations() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
-    asyncio.run(run_async_migrations())
+    if is_async_database():
+        # Use async migrations for PostgreSQL
+        asyncio.run(run_async_migrations())
+    else:
+        # Use sync migrations for SQLite
+        run_migrations_online_sync()
 
 
 if context.is_offline_mode():

@@ -290,6 +290,7 @@ async def internal_error_handler(request: Request, exc):
 
 if __name__ == "__main__":
     # Development server
+    settings = get_settings()
     uvicorn.run(
         "main:app",
         host="0.0.0.0",

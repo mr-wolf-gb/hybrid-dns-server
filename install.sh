@@ -396,6 +396,16 @@ install_dependencies() {
     info "Node.js version: $(node --version)"
     info "npm version: $(npm --version)"
     
+    # Redis Server
+    apt-get install -y -qq redis-server
+    
+    # Verify Redis installation
+    if ! command -v redis-server &> /dev/null; then
+        error "Redis installation failed"
+    fi
+    
+    info "Redis version: $(redis-server --version)"
+    
     # Nginx
     apt-get install -y -qq nginx
     
@@ -425,6 +435,17 @@ setup_database() {
     # Start PostgreSQL
     systemctl start postgresql
     systemctl enable postgresql
+    
+    # Start and enable Redis
+    systemctl start redis-server
+    systemctl enable redis-server
+    
+    # Verify Redis is running
+    if ! systemctl is-active --quiet redis-server; then
+        error "Redis service failed to start"
+    fi
+    
+    info "Redis service started and enabled"
     
     # Generate random password for database user
     local db_password=$(openssl rand -base64 32)
@@ -483,10 +504,18 @@ RATE_LIMIT_PER_MINUTE=100
 TOTP_ISSUER_NAME="Hybrid DNS Server"
 TOTP_VALID_WINDOW=1
 
+# Redis Configuration
+REDIS_URL=redis://localhost:6379/0
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+
 # Backup Configuration
 BACKUP_ENABLED=true
 BACKUP_RETENTION_DAYS=30
 BACKUP_SCHEDULE="0 2 * * *"
+
+# Threat Intelligence
+THREAT_FEED_UPDATE_INTERVAL=3600
 EOF
     
     chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/.env"
@@ -1256,6 +1285,39 @@ EOF
     success "Fail2ban configured"
 }
 
+configure_redis_security() {
+    info "Configuring Redis security..."
+    
+    # Backup original Redis configuration
+    cp /etc/redis/redis.conf /etc/redis/redis.conf.backup
+    
+    # Configure Redis for security
+    cat >> /etc/redis/redis.conf << EOF
+
+# Hybrid DNS Server Redis Security Configuration
+bind 127.0.0.1 ::1
+protected-mode yes
+port 6379
+timeout 300
+tcp-keepalive 300
+maxmemory 256mb
+maxmemory-policy allkeys-lru
+save 900 1
+save 300 10
+save 60 10000
+EOF
+    
+    # Restart Redis with new configuration
+    systemctl restart redis-server
+    
+    # Verify Redis is still running
+    if ! systemctl is-active --quiet redis-server; then
+        error "Redis service failed to restart with new configuration"
+    fi
+    
+    success "Redis security configured"
+}
+
 initialize_database() {
     info "Initializing database..."
     
@@ -1443,6 +1505,7 @@ print_summary() {
     echo "• Monitoring: $(systemctl is-active hybrid-dns-monitor)"
     echo "• Nginx Web Server: $(systemctl is-active nginx)"
     echo "• PostgreSQL Database: $(systemctl is-active postgresql)"
+    echo "• Redis Server: $(systemctl is-active redis-server)"
     echo
     echo "Access Information:"
     if [[ -n "$DOMAIN_NAME" ]]; then

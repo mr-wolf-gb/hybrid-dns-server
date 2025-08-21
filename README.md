@@ -435,28 +435,64 @@ hybrid-dns-server/
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
 ### Development Setup
+
+#### Quick Development Setup
+
+**Linux/macOS:**
 ```bash
 # Clone repository
 git clone https://github.com/mr-wolf-gb/hybrid-dns-server.git
 cd hybrid-dns-server
 
-# Backend development
+# Run automated development setup
+./setup-dev.sh
+```
+
+**Windows:**
+```cmd
+# Clone repository
+git clone https://github.com/mr-wolf-gb/hybrid-dns-server.git
+cd hybrid-dns-server
+
+# Run automated development setup
+setup-dev.bat
+```
+
+#### Manual Development Setup
+
+```bash
+# 1. Create environment configuration
+cp .env.example .env
+# Edit .env file and update SECRET_KEY, JWT_SECRET_KEY, and other settings
+
+# 2. Backend development
 cd backend
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Initialize database
+# 3. Initialize database
 python init_db.py
 
-# Start development server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+# 4. Start development server
+python main.py
 
-# Frontend development (in another terminal)
+# 5. Frontend development (in another terminal)
 cd frontend
 npm install
 npm run dev
 ```
+
+#### Environment Configuration
+
+The application requires a `.env` file for configuration. **Never commit this file to git** as it contains sensitive information.
+
+**Key settings to configure:**
+- `SECRET_KEY` - Generate a secure random string (32+ characters)
+- `JWT_SECRET_KEY` - Generate a secure random string (32+ characters)  
+- `DATABASE_URL` - Database connection string
+- `ALLOWED_HOSTS` - Comma-separated list of allowed hosts
+- `DEBUG` - Set to `true` for development, `false` for production
 
 ## 📝 License
 
