@@ -13,7 +13,7 @@ import statistics
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_, desc
 
-from app.core.database import get_db
+from app.core.database import get_database_session
 from app.models.dns import Zone, DNSRecord
 from app.models.security import RPZRule
 from app.services.monitoring_service import MonitoringService

@@ -2,7 +2,7 @@
 Forwarders management endpoints with health checking
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, Path, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 
@@ -424,8 +424,8 @@ async def get_all_forwarders_statistics(
 @router.put("/{forwarder_id}/priority")
 async def update_forwarder_priority(
     forwarder_id: int,
-    priority: int = Query(..., ge=1, le=10),
     background_tasks: BackgroundTasks,
+    priority: int = Query(..., ge=1, le=10),
     db: Session = Depends(get_database_session),
     current_user: dict = Depends(get_current_user)
 ):
@@ -466,7 +466,7 @@ async def reorder_forwarder_priorities(
 
 @router.get("/priority/{priority}")
 async def get_forwarders_by_priority(
-    priority: int = Query(..., ge=1, le=10),
+    priority: int = Path(..., ge=1, le=10),
     db: Session = Depends(get_database_session),
     current_user: dict = Depends(get_current_user)
 ):
@@ -514,9 +514,9 @@ async def get_ungrouped_forwarders(
 @router.put("/{forwarder_id}/group")
 async def update_forwarder_group(
     forwarder_id: int,
+    background_tasks: BackgroundTasks,
     group_name: Optional[str] = Query(None),
     group_priority: Optional[int] = Query(None, ge=1, le=10),
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_database_session),
     current_user: dict = Depends(get_current_user)
 ):
@@ -539,8 +539,8 @@ async def update_forwarder_group(
 async def move_forwarders_to_group(
     group_name: str,
     forwarder_ids: List[int],
-    group_priority: Optional[int] = Query(None, ge=1, le=10),
     background_tasks: BackgroundTasks,
+    group_priority: Optional[int] = Query(None, ge=1, le=10),
     db: Session = Depends(get_database_session),
     current_user: dict = Depends(get_current_user)
 ):
@@ -580,8 +580,8 @@ async def remove_forwarders_from_group(
 @router.put("/groups/{old_group_name}/rename")
 async def rename_forwarder_group(
     old_group_name: str,
-    new_group_name: str = Query(...),
     background_tasks: BackgroundTasks,
+    new_group_name: str = Query(...),
     db: Session = Depends(get_database_session),
     current_user: dict = Depends(get_current_user)
 ):
@@ -601,9 +601,9 @@ async def rename_forwarder_group(
 # Template Management Endpoints
 @router.post("/from-template")
 async def create_forwarder_from_template(
+    background_tasks: BackgroundTasks,
     template_name: str = Query(...),
     forwarder_data: Dict[str, Any] = {},
-    background_tasks: BackgroundTasks = Depends(),
     db: Session = Depends(get_database_session),
     current_user: dict = Depends(get_current_user)
 ):

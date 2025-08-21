@@ -14,7 +14,7 @@ import io
 
 from app.services.reporting_service import reporting_service
 from app.services.analytics_service import analytics_service
-from app.core.auth import get_current_user
+from app.core.dependencies import get_current_user
 from app.schemas.reports import (
     ReportTemplateCreate, ReportTemplateUpdate, ReportTemplate,
     ReportScheduleCreate, ReportScheduleUpdate, ReportSchedule,

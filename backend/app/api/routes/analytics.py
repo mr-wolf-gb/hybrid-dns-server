@@ -8,8 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_database_session
-from ...core.auth import get_current_user
-from ...models.auth import User
+from ...core.dependencies import get_current_user
+from ...schemas.auth import UserInfo
 from ...services.monitoring_service import MonitoringService
 from ...core.logging_config import get_logger
 

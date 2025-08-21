@@ -14,14 +14,15 @@ from pathlib import Path
 import csv
 import io
 from jinja2 import Template, Environment, FileSystemLoader
-import pandas as pd
+# import pandas as pd  # Not currently used
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 
-from app.core.database import get_db
+from app.core.database import get_database_session
 from app.models.dns import Zone, DNSRecord
 from app.models.security import RPZRule, ThreatFeed
-from app.models.system import SystemConfig, ForwarderHealth
+from app.models.system import SystemConfig
+from app.models.dns import ForwarderHealth
 from app.services.monitoring_service import MonitoringService
 from app.services.analytics_service import AnalyticsService
 

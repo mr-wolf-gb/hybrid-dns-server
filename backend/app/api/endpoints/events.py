@@ -12,7 +12,7 @@ from ...core.database import get_database_session
 from ...core.dependencies import get_current_user
 from ...services.event_service import get_event_service
 from ...models.events import Event, EventSubscription, EventReplay
-from ...schemas.auth import User
+from ...schemas.auth import UserInfo
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -135,7 +135,7 @@ class EventStatistics(BaseModel):
 @router.post("/emit", response_model=EventResponse)
 async def emit_event(
     event_data: EventCreate,
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Emit a new event"""
     event_service = get_event_service()
@@ -171,7 +171,7 @@ async def get_events(
     end_time: Optional[datetime] = Query(None, description="End time filter"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of events to return"),
     offset: int = Query(0, ge=0, description="Number of events to skip"),
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Get events with filtering"""
     event_service = get_event_service()
@@ -181,7 +181,7 @@ async def get_events(
             event_types=event_types,
             event_categories=event_categories,
             event_sources=event_sources,
-            user_id=current_user.username if not current_user.is_admin else None,
+            user_id=current_user.username if not current_user.is_superuser else None,
             severity_levels=severity_levels,
             tags=tags,
             start_time=start_time,
@@ -199,7 +199,7 @@ async def get_events(
 @router.post("/subscriptions", response_model=SubscriptionResponse)
 async def create_subscription(
     subscription_data: SubscriptionCreate,
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Create a new event subscription"""
     event_service = get_event_service()
@@ -240,7 +240,7 @@ async def create_subscription(
 
 @router.get("/subscriptions", response_model=List[SubscriptionResponse])
 async def get_user_subscriptions(
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Get all subscriptions for the current user"""
     event_service = get_event_service()
@@ -276,14 +276,14 @@ async def get_user_subscriptions(
 async def update_subscription(
     subscription_id: str,
     subscription_data: SubscriptionUpdate,
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Update an event subscription"""
     event_service = get_event_service()
     
     try:
         # Only allow users to update their own subscriptions (unless admin)
-        if not current_user.is_admin:
+        if not current_user.is_superuser:
             subscriptions = await event_service.get_user_subscriptions(current_user.username)
             if not any(str(sub.subscription_id) == subscription_id for sub in subscriptions):
                 raise HTTPException(status_code=403, detail="Not authorized to update this subscription")
@@ -322,14 +322,14 @@ async def update_subscription(
 @router.delete("/subscriptions/{subscription_id}")
 async def delete_subscription(
     subscription_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Delete an event subscription"""
     event_service = get_event_service()
     
     try:
         # Only allow users to delete their own subscriptions (unless admin)
-        if not current_user.is_admin:
+        if not current_user.is_superuser:
             subscriptions = await event_service.get_user_subscriptions(current_user.username)
             if not any(str(sub.subscription_id) == subscription_id for sub in subscriptions):
                 raise HTTPException(status_code=403, detail="Not authorized to delete this subscription")
@@ -350,7 +350,7 @@ async def delete_subscription(
 @router.post("/filters")
 async def create_event_filter(
     filter_data: EventFilterCreate,
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Create a reusable event filter"""
     event_service = get_event_service()
@@ -382,7 +382,7 @@ async def create_event_filter(
 @router.post("/replay", response_model=EventReplayResponse)
 async def start_event_replay(
     replay_data: EventReplayCreate,
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Start an event replay session"""
     event_service = get_event_service()
@@ -436,7 +436,7 @@ async def start_event_replay(
 @router.get("/replay/{replay_id}", response_model=EventReplayResponse)
 async def get_replay_status(
     replay_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Get the status of an event replay"""
     event_service = get_event_service()
@@ -448,7 +448,7 @@ async def get_replay_status(
             raise HTTPException(status_code=404, detail="Replay not found")
         
         # Only allow users to view their own replays (unless admin)
-        if not current_user.is_admin and replay.user_id != current_user.username:
+        if not current_user.is_superuser and replay.user_id != current_user.username:
             raise HTTPException(status_code=403, detail="Not authorized to view this replay")
         
         return EventReplayResponse(
@@ -480,14 +480,14 @@ async def get_replay_status(
 @router.post("/replay/{replay_id}/stop")
 async def stop_event_replay(
     replay_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Stop an active event replay"""
     event_service = get_event_service()
     
     try:
         # Check if user owns the replay (unless admin)
-        if not current_user.is_admin:
+        if not current_user.is_superuser:
             replay = await event_service.get_replay_status(replay_id)
             if not replay or replay.user_id != current_user.username:
                 raise HTTPException(status_code=403, detail="Not authorized to stop this replay")
@@ -507,10 +507,10 @@ async def stop_event_replay(
 
 @router.get("/statistics", response_model=EventStatistics)
 async def get_event_statistics(
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Get event broadcasting statistics"""
-    if not current_user.is_admin:
+    if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Admin access required")
     
     event_service = get_event_service()
@@ -525,10 +525,10 @@ async def get_event_statistics(
 
 @router.post("/service/start")
 async def start_event_service(
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Start the event broadcasting service"""
-    if not current_user.is_admin:
+    if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Admin access required")
     
     event_service = get_event_service()
@@ -543,10 +543,10 @@ async def start_event_service(
 
 @router.post("/service/stop")
 async def stop_event_service(
-    current_user: User = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user)
 ):
     """Stop the event broadcasting service"""
-    if not current_user.is_admin:
+    if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Admin access required")
     
     event_service = get_event_service()
