@@ -13,6 +13,8 @@ from datetime import datetime
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from ..core.config import get_settings
 from ..core.logging_config import get_bind_logger
@@ -725,7 +727,11 @@ class BindService:
             # Get zones from database if available
             if self.db:
                 from ..models.dns import Zone
-                zones = self.db.query(Zone).filter(Zone.is_active == True).all()
+                if isinstance(self.db, AsyncSession):
+                    result = await self.db.execute(select(Zone).where(Zone.is_active == True))
+                    zones = result.scalars().all()
+                else:
+                    zones = self.db.query(Zone).filter(Zone.is_active == True).all()
                 
                 for zone in zones:
                     try:
@@ -786,7 +792,11 @@ class BindService:
         try:
             if self.db:
                 from ..models.dns import Forwarder
-                forwarders = self.db.query(Forwarder).filter(Forwarder.is_active == True).all()
+                if isinstance(self.db, AsyncSession):
+                    result = await self.db.execute(select(Forwarder).where(Forwarder.is_active == True))
+                    forwarders = result.scalars().all()
+                else:
+                    forwarders = self.db.query(Forwarder).filter(Forwarder.is_active == True).all()
                 
                 for forwarder in forwarders:
                     try:
@@ -997,7 +1007,11 @@ class BindService:
             
             # Check zone consistency
             from ..models.dns import Zone
-            db_zones = self.db.query(Zone).filter(Zone.is_active == True).all()
+            if isinstance(self.db, AsyncSession):
+                result = await self.db.execute(select(Zone).where(Zone.is_active == True))
+                db_zones = result.scalars().all()
+            else:
+                db_zones = self.db.query(Zone).filter(Zone.is_active == True).all()
             
             # Check if all active zones have corresponding zone files
             for zone in db_zones:
@@ -1024,7 +1038,11 @@ class BindService:
             
             # Check forwarder consistency
             from ..models.dns import Forwarder
-            db_forwarders = self.db.query(Forwarder).filter(Forwarder.is_active == True).all()
+            if isinstance(self.db, AsyncSession):
+                result = await self.db.execute(select(Forwarder).where(Forwarder.is_active == True))
+                db_forwarders = result.scalars().all()
+            else:
+                db_forwarders = self.db.query(Forwarder).filter(Forwarder.is_active == True).all()
             
             # Validate forwarder server configurations
             for forwarder in db_forwarders:
@@ -1035,7 +1053,11 @@ class BindService:
             
             # Check RPZ consistency
             from ..models.security import RPZRule
-            rpz_rules = self.db.query(RPZRule).filter(RPZRule.is_active == True).all()
+            if isinstance(self.db, AsyncSession):
+                result = await self.db.execute(select(RPZRule).where(RPZRule.is_active == True))
+                rpz_rules = result.scalars().all()
+            else:
+                rpz_rules = self.db.query(RPZRule).filter(RPZRule.is_active == True).all()
             
             # Group rules by RPZ zone
             rpz_zones_in_db = set(rule.rpz_zone for rule in rpz_rules)
@@ -1506,7 +1528,7 @@ class BindService:
             return False
     
     async def _run_command(self, command: List[str], timeout: int = 30) -> Dict:
-        """Run system command asynchronously"""
+        """Run system command asynchronously, handling missing binaries gracefully"""
         try:
             process = await asyncio.create_subprocess_exec(
                 *command,
@@ -1532,6 +1554,15 @@ class BindService:
                 "returncode": -1,
                 "stdout": "",
                 "stderr": "Command timed out"
+            }
+        except FileNotFoundError as e:
+            # Binary missing (e.g., named-checkconf, named-checkzone, rndc, systemctl) → don't spam stack traces
+            logger = get_bind_logger()
+            logger.error(f"Command not found: {' '.join(command)}")
+            return {
+                "returncode": 127,
+                "stdout": "",
+                "stderr": str(e)
             }
         except Exception as e:
             logger = get_bind_logger()
@@ -1575,7 +1606,11 @@ class BindService:
             # Fallback: count zones from database if available
             if self.db:
                 from ..models.dns import Zone
-                return self.db.query(Zone).filter(Zone.is_active == True).count()
+                if isinstance(self.db, AsyncSession):
+                    result = await self.db.execute(select(func.count(Zone.id)).where(Zone.is_active == True))
+                    return int(result.scalar() or 0)
+                else:
+                    return self.db.query(Zone).filter(Zone.is_active == True).count()
             
             return 0
         except Exception as e:

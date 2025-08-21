@@ -39,7 +39,7 @@ async def login(request: Request, login_data: LoginRequest):
     
     # Get user from database
     user_query = """
-    SELECT id, username, email, hashed_password, is_active, two_factor_enabled,
+    SELECT id, username, email, hashed_password, is_active, is_superuser, two_factor_enabled,
            two_factor_secret, failed_login_attempts, locked_until
     FROM users WHERE username = :username
     """

@@ -17,6 +17,78 @@ from ...services.health_service import get_health_service
 router = APIRouter()
 
 
+@router.get("/query-logs")
+async def get_query_logs(
+    page: int = 1,
+    per_page: int = 50,
+    search: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_database_session)
+):
+    """Paginated DNS query logs for the dashboard query logs page"""
+    # Clamp values
+    page = max(1, page)
+    per_page = max(1, min(200, per_page))
+
+    try:
+        # Build base query with optional search filter
+        conditions = []
+        params = {"limit": per_page, "offset": (page - 1) * per_page}
+
+        if search:
+            # Search in domain or client_ip
+            conditions.append("(query_domain ILIKE :search OR client_ip ILIKE :search)")
+            params["search"] = f"%{search}%"
+
+        where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+        # Total count
+        total_query = f"""
+            SELECT COUNT(*) AS total
+            FROM dns_logs
+            {where_sql}
+        """
+
+        # Items page
+        items_query = f"""
+            SELECT 
+                timestamp,
+                client_ip,
+                query_domain,
+                query_type,
+                response_code,
+                response_time,
+                blocked AS is_blocked,
+                rpz_zone AS blocked_category
+            FROM dns_logs
+            {where_sql}
+            ORDER BY timestamp DESC
+            LIMIT :limit OFFSET :offset
+        """
+
+        # Use shared database helper for simplicity
+        total_row = await database.fetch_one(total_query, params)
+        items = await database.fetch_all(items_query, params)
+
+        total = (total_row or {}).get("total", 0)
+        pages = max(1, (total + per_page - 1) // per_page)
+
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "pages": pages,
+        }
+    except Exception:
+        # Return empty page on failure rather than 500 so UI stays functional
+        return {
+            "items": [],
+            "total": 0,
+            "page": page,
+            "pages": 1,
+        }
+
+
 @router.get("/stats")
 async def get_dashboard_stats(
     current_user: dict = Depends(get_current_user),

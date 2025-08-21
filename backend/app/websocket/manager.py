@@ -4,6 +4,7 @@ Supports health monitoring, DNS events, security alerts, and system notification
 """
 
 import json
+from datetime import datetime, date
 import asyncio
 from datetime import datetime
 from typing import Dict, List, Set, Any, Optional, Callable
@@ -141,7 +142,7 @@ class WebSocketManager:
     async def send_personal_message(self, message: Dict[str, Any], websocket: WebSocket):
         """Send a message to a specific WebSocket connection"""
         try:
-            await websocket.send_text(json.dumps(message))
+            await websocket.send_text(json.dumps(message, default=self._json_default))
         except Exception as e:
             logger.error(f"Error sending personal message: {e}")
             self.disconnect(websocket)
@@ -166,7 +167,7 @@ class WebSocketManager:
                         if message_type and message_type not in subscribed_events:
                             continue
                         
-                        await websocket.send_text(json.dumps(message))
+                        await websocket.send_text(json.dumps(message, default=self._json_default))
                         # Update message count
                         metadata["message_count"] = metadata.get("message_count", 0) + 1
                     except Exception as e:
@@ -232,7 +233,7 @@ class WebSocketManager:
                         if message_type and message_type not in subscribed_events:
                             continue
                         
-                        await websocket.send_text(json.dumps(message))
+                        await websocket.send_text(json.dumps(message, default=self._json_default))
                         # Update message count
                         metadata["message_count"] = metadata.get("message_count", 0) + 1
                         
@@ -640,6 +641,13 @@ class WebSocketManager:
             "supported_events": [event.value for event in EventType],
             "supported_connection_types": [conn_type.value for conn_type in ConnectionType]
         }
+
+    @staticmethod
+    def _json_default(obj):
+        """JSON serializer for objects not serializable by default json code"""
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        return str(obj)
 
 
 # Global WebSocket manager instance
