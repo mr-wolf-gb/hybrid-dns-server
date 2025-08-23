@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react'
-import { useHealthWebSocket } from '@/hooks/useWebSocket'
+import { useWebSocketContext } from './WebSocketContext'
 
 interface HealthAlert {
   id: string
@@ -98,26 +98,26 @@ function healthMonitoringReducer(state: HealthMonitoringState, action: HealthMon
         healthSummary: action.payload,
         lastUpdate: new Date().toISOString()
       }
-    
+
     case 'SET_PERFORMANCE_METRICS':
       return {
         ...state,
         performanceMetrics: action.payload,
         lastUpdate: new Date().toISOString()
       }
-    
+
     case 'SET_ALERTS':
       return {
         ...state,
         alerts: action.payload
       }
-    
+
     case 'ADD_ALERT':
       return {
         ...state,
         alerts: [action.payload, ...state.alerts]
       }
-    
+
     case 'ACKNOWLEDGE_ALERT':
       return {
         ...state,
@@ -127,17 +127,17 @@ function healthMonitoringReducer(state: HealthMonitoringState, action: HealthMon
             : alert
         )
       }
-    
+
     case 'SET_CONNECTION_STATUS':
       return {
         ...state,
         isConnected: action.payload.isConnected,
         connectionStatus: action.payload.status
       }
-    
+
     case 'UPDATE_FORWARDER_STATUS':
       if (!state.healthSummary) return state
-      
+
       return {
         ...state,
         healthSummary: {
@@ -149,7 +149,7 @@ function healthMonitoringReducer(state: HealthMonitoringState, action: HealthMon
           )
         }
       }
-    
+
     default:
       return state
   }
@@ -170,21 +170,27 @@ interface HealthMonitoringProviderProps {
 export const HealthMonitoringProvider: React.FC<HealthMonitoringProviderProps> = ({ children, userId }) => {
   const [state, dispatch] = useReducer(healthMonitoringReducer, initialState)
 
-  // WebSocket connection for real-time health updates
-  const { isConnected, connectionStatus, subscribe } = useHealthWebSocket(userId, {
-    onConnect: () => {
-      console.log('Health monitoring WebSocket connected')
-    },
-    onDisconnect: () => {
-      console.log('Health monitoring WebSocket disconnected')
-    },
-    onError: (error) => {
-      console.error('Health monitoring WebSocket error:', error)
-    }
-  })
+  // Use existing WebSocket connection from WebSocketContext
+  const { healthConnection, registerEventHandler, unregisterEventHandler } = useWebSocketContext()
+  const [healthState] = healthConnection
+  const isConnected = healthState.isConnected
+  const connectionStatus = healthState.isConnected ? 'connected' : healthState.isConnecting ? 'connecting' : 'disconnected'
+
+  // Subscribe to health events using the global event system
+  const subscribe = (eventType: string, handler: (data: any) => void) => {
+    registerEventHandler(`health-monitoring-${eventType}`, [eventType], (message) => {
+      handler(message.data)
+    })
+  }
 
   // Set up event handlers
   useEffect(() => {
+    const handlerIds = [
+      'health-monitoring-health_update',
+      'health-monitoring-health_alert',
+      'health-monitoring-forwarder_status_change'
+    ]
+
     subscribe('health_update', (data) => {
       dispatch({ type: 'SET_HEALTH_SUMMARY', payload: data })
     })
@@ -196,7 +202,12 @@ export const HealthMonitoringProvider: React.FC<HealthMonitoringProviderProps> =
     subscribe('forwarder_status_change', (data) => {
       dispatch({ type: 'UPDATE_FORWARDER_STATUS', payload: data })
     })
-  }, [subscribe])
+
+    // Cleanup on unmount
+    return () => {
+      handlerIds.forEach(id => unregisterEventHandler(id))
+    }
+  }, [registerEventHandler, unregisterEventHandler])
 
   // Update connection status in state
   useEffect(() => {

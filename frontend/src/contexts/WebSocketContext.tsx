@@ -7,6 +7,21 @@ import { useWebSocket, WebSocketMessage, WebSocketState, WebSocketActions } from
 import { useAuth } from './AuthContext';
 import { toast } from 'react-toastify';
 
+// Notification throttling to prevent spam
+const notificationThrottle = new Map<string, number>();
+const THROTTLE_DURATION = 5000; // 5 seconds
+
+const shouldShowNotification = (type: string): boolean => {
+  const now = Date.now();
+  const lastShown = notificationThrottle.get(type) || 0;
+
+  if (now - lastShown > THROTTLE_DURATION) {
+    notificationThrottle.set(type, now);
+    return true;
+  }
+  return false;
+};
+
 interface EventHandler {
   id: string;
   eventTypes: string[];
@@ -51,17 +66,25 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   const [eventHandlers, setEventHandlers] = useState<EventHandler[]>([]);
   const [connectionStats, setConnectionStats] = useState<any>(null);
 
-  // Global message handler
+  // Global message handler with throttling
   const handleMessage = useCallback((message: WebSocketMessage) => {
-    // Handle global events
+    // Handle global events with notification throttling
     if (message.type === 'health_alert' && message.severity === 'critical') {
-      toast.error(`Health Alert: ${message.data?.message || 'Critical system issue detected'}`);
+      if (shouldShowNotification('health_alert_critical')) {
+        toast.error(`Health Alert: ${message.data?.message || 'Critical system issue detected'}`);
+      }
     } else if (message.type === 'security_alert') {
-      toast.error(`Security Alert: ${message.data?.message || 'Security threat detected'}`);
+      if (shouldShowNotification('security_alert')) {
+        toast.error(`Security Alert: ${message.data?.message || 'Security threat detected'}`);
+      }
     } else if (message.type === 'bind_reload') {
-      toast.success('DNS configuration reloaded successfully');
+      if (shouldShowNotification('bind_reload')) {
+        toast.success('DNS configuration reloaded successfully');
+      }
     } else if (message.type === 'system_status' && message.data?.bind9_running === false) {
-      toast.error('BIND9 service is not running');
+      if (shouldShowNotification('bind9_down')) {
+        toast.error('BIND9 service is not running');
+      }
     }
 
     // Call registered event handlers
@@ -82,22 +105,49 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     toast.error('WebSocket connection error');
   }, []);
 
-  // Connection handlers
-  const handleConnect = useCallback(() => {
-    toast.success('Real-time connection established');
+  // Track which connections have already shown notifications
+  const [connectedTypes, setConnectedTypes] = useState<Set<string>>(new Set());
+
+  // Connection handlers with deduplication
+  const createConnectHandler = useCallback((connectionType: string) => {
+    return () => {
+      setConnectedTypes(prev => {
+        const newSet = new Set(prev);
+        if (!newSet.has(connectionType)) {
+          newSet.add(connectionType);
+          // Only show notification for the first connection or if all were disconnected
+          if (newSet.size === 1 && shouldShowNotification('connection_established')) {
+            toast.success('Real-time connection established');
+          }
+        }
+        return newSet;
+      });
+    };
   }, []);
 
-  const handleDisconnect = useCallback(() => {
-    toast.error('Real-time connection lost');
+  const createDisconnectHandler = useCallback((connectionType: string) => {
+    return () => {
+      setConnectedTypes(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(connectionType);
+        // Only show disconnect notification if all connections are lost
+        if (newSet.size === 0 && shouldShowNotification('connection_lost')) {
+          toast.error('Real-time connection lost');
+        }
+        return newSet;
+      });
+    };
   }, []);
+
+
 
   // Health monitoring connection
   const healthConnection = useWebSocket({
     connectionType: 'health',
     autoReconnect: true,
     onMessage: handleMessage,
-    onConnect: handleConnect,
-    onDisconnect: handleDisconnect,
+    onConnect: createConnectHandler('health'),
+    onDisconnect: createDisconnectHandler('health'),
     onError: handleError
   });
 
@@ -106,8 +156,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     connectionType: 'dns_management',
     autoReconnect: true,
     onMessage: handleMessage,
-    onConnect: handleConnect,
-    onDisconnect: handleDisconnect,
+    onConnect: createConnectHandler('dns'),
+    onDisconnect: createDisconnectHandler('dns'),
     onError: handleError
   });
 
@@ -116,8 +166,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     connectionType: 'security',
     autoReconnect: true,
     onMessage: handleMessage,
-    onConnect: handleConnect,
-    onDisconnect: handleDisconnect,
+    onConnect: createConnectHandler('security'),
+    onDisconnect: createDisconnectHandler('security'),
     onError: handleError
   });
 
@@ -126,8 +176,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     connectionType: 'system',
     autoReconnect: true,
     onMessage: handleMessage,
-    onConnect: handleConnect,
-    onDisconnect: handleDisconnect,
+    onConnect: createConnectHandler('system'),
+    onDisconnect: createDisconnectHandler('system'),
     onError: handleError
   });
 
@@ -136,8 +186,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     connectionType: 'admin',
     autoReconnect: true,
     onMessage: handleMessage,
-    onConnect: handleConnect,
-    onDisconnect: handleDisconnect,
+    onConnect: createConnectHandler('admin'),
+    onDisconnect: createDisconnectHandler('admin'),
     onError: handleError
   }) : undefined;
 

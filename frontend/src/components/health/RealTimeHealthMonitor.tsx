@@ -9,7 +9,7 @@ import {
   ServerIcon
 } from '@heroicons/react/24/outline'
 import { Card, Badge, Loading } from '@/components/ui'
-import { useHealthWebSocket } from '@/hooks/useWebSocket'
+import { useWebSocketContext } from '@/contexts/WebSocketContext'
 import { formatRelativeTime, formatNumber } from '@/utils'
 
 interface HealthAlert {
@@ -60,12 +60,17 @@ const RealTimeHealthMonitor: React.FC<RealTimeHealthMonitorProps> = ({
   const [recentAlerts, setRecentAlerts] = useState<HealthAlert[]>([])
   const [lastUpdate, setLastUpdate] = useState<string>('')
 
-  // WebSocket connection for real-time health updates
-  const { subscribe, isConnected } = useHealthWebSocket(userId, {
-    onConnect: () => {
-      console.log('Real-time health monitor connected')
-    }
-  })
+  // Use existing WebSocket connection from WebSocketContext
+  const { healthConnection, registerEventHandler, unregisterEventHandler } = useWebSocketContext()
+  const [healthState] = healthConnection
+  const isConnected = healthState.isConnected
+
+  // Subscribe to health events using the global event system
+  const subscribe = (eventType: string, handler: (data: any) => void) => {
+    registerEventHandler(`real-time-health-${eventType}`, [eventType], (message) => {
+      handler(message.data)
+    })
+  }
 
   // Fetch live health status
   const { data: healthData, refetch } = useQuery({

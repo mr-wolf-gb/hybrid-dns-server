@@ -195,17 +195,18 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
     return true
   }
 
-  // Email validation
+  // Email validation - standard email format only
   const validateEmail = (value: string) => {
     if (!value) return 'Email is required'
 
-    // More comprehensive email regex that handles various valid formats
+    // Standard email format validation
     const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/
+
     if (!emailRegex.test(value)) {
       return 'Please enter a valid email address (e.g., admin@example.com)'
     }
 
-    // Check for common DNS admin email formats
+    // Check domain length
     if (value.includes('@') && value.split('@')[1]) {
       const domain = value.split('@')[1]
       if (domain.length < 3) {
@@ -215,6 +216,8 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
 
     return true
   }
+
+  // Note: Email conversion to DNS format is handled by the backend template system
 
   // IP address validation
   const validateIPAddress = (value: string) => {
@@ -254,7 +257,7 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
   })
 
   const onSubmit = (data: ZoneFormData) => {
-    // Clean up empty arrays
+    // Clean up empty arrays (email conversion is handled by backend)
     const cleanedData = {
       ...data,
       master_servers: data.master_servers?.filter(server => server.trim() !== '') || [],
@@ -274,6 +277,8 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
     setShowAdvanced(false)
     onClose()
   }
+
+  // Note: Email is stored and displayed in standard format
 
   // Reset form when zone changes
   useEffect(() => {
@@ -365,7 +370,7 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
             placeholder="admin@example.com"
             {...register('email', { validate: validateEmail })}
             error={errors.email?.message}
-            helperText="Email address of the zone administrator"
+            helperText="Email address of the zone administrator (standard format: admin@example.com)"
           />
 
           <div className="sm:col-span-2">
