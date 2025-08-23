@@ -703,7 +703,7 @@ configure_bind9() {
     chown -R bind:bind /etc/bind/zones
     chown -R bind:bind /etc/bind/rpz
     chown -R bind:bind /var/log/bind
-    chown -R bind:bind /etc/bind/backups
+    chown -R "$SERVICE_USER:$SERVICE_USER" /etc/bind/backups
     chmod 755 /etc/bind/zones
     chmod 755 /etc/bind/rpz
     chmod 755 /var/log/bind
