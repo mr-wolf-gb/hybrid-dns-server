@@ -26,7 +26,7 @@ from ...core.logging_config import get_logger
 logger = get_logger(__name__)
 router = APIRouter()
 
-@router.get("/zones/{zone_id}/records", response_model=Dict[str, Any])
+@router.get("/zones/{zone_id}/records", response_model=PaginatedResponse[DNSRecordSchema])
 async def list_zone_records(
     zone_id: int,
     record_type: Optional[str] = Query(None, description="Filter by record type (A, AAAA, CNAME, etc.)"),
@@ -83,14 +83,19 @@ async def create_zone_record(
     current_user: dict = Depends(get_current_user)
 ):
     """Create a new DNS record in the specified zone"""
-    logger.info(f"User {current_user.get('username')} creating {record_data.record_type} record '{record_data.name}' in zone {zone_id}")
+    logger.info(f"User {current_user.get('username')} creating {record_data.type} record '{record_data.name}' in zone {zone_id}")
     
     record_service = RecordService(db)
     bind_service = BindService(db)
     
     try:
+        # Convert schema data to service format (map 'type' to 'record_type')
+        record_dict = record_data.dict()
+        if 'type' in record_dict:
+            record_dict['record_type'] = record_dict.pop('type')
+        
         # Create record in database
-        record = await record_service.create_record(zone_id, record_data.dict())
+        record = await record_service.create_record(zone_id, record_dict)
         
         # Schedule BIND9 configuration update in background
         background_tasks.add_task(
@@ -155,8 +160,13 @@ async def update_record(
         if not original_record:
             raise HTTPException(status_code=404, detail=f"DNS record with ID {record_id} not found")
         
+        # Convert schema data to service format (map 'type' to 'record_type')
+        update_dict = record_data.dict(exclude_unset=True)
+        if 'type' in update_dict:
+            update_dict['record_type'] = update_dict.pop('type')
+        
         # Update record in database
-        updated_record = await record_service.update_record(record_id, record_data.dict(exclude_unset=True))
+        updated_record = await record_service.update_record(record_id, update_dict)
         if not updated_record:
             raise HTTPException(status_code=404, detail=f"DNS record with ID {record_id} not found")
         
@@ -352,8 +362,13 @@ async def bulk_create_records(
     bind_service = BindService(db)
     
     try:
-        # Convert Pydantic models to dictionaries
-        records_dict_data = [record.dict() for record in records_data]
+        # Convert Pydantic models to dictionaries and map field names
+        records_dict_data = []
+        for record in records_data:
+            record_dict = record.dict()
+            if 'type' in record_dict:
+                record_dict['record_type'] = record_dict.pop('type')
+            records_dict_data.append(record_dict)
         
         # Create records in bulk
         created_records = await record_service.bulk_create_records(zone_id, records_dict_data)
@@ -391,11 +406,13 @@ async def bulk_update_records(
     bind_service = BindService(db)
     
     try:
+        # Convert schema data to service format (map 'type' to 'record_type')
+        update_dict = update_data.dict(exclude_unset=True)
+        if 'type' in update_dict:
+            update_dict['record_type'] = update_dict.pop('type')
+        
         # Update records in bulk
-        updated_records = await record_service.bulk_update_records(
-            record_ids, 
-            update_data.dict(exclude_unset=True)
-        )
+        updated_records = await record_service.bulk_update_records(record_ids, update_dict)
         
         # Get unique zone IDs for BIND updates
         zone_ids = set(record.zone_id for record in updated_records)

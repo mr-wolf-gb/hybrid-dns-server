@@ -83,7 +83,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
     }
 
     return filtered
-  }, [records?.data, searchQuery, selectedTypes, zone.name])
+  }, [records, searchQuery, selectedTypes, zone.name])
 
   // Available types moved to RecordTypeFilter component
 
@@ -305,7 +305,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
             </div>
 
             <RecordTypeFilter
-              records={records?.data || []}
+              records={records || []}
               selectedTypes={selectedTypes}
               onTypeToggle={handleTypeFilter}
               onClearFilters={clearFilters}
@@ -336,7 +336,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
           <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-            {hasActiveFilters ? filteredRecords.length : (records?.data?.length || 0)}
+            {hasActiveFilters ? filteredRecords.length : (records?.length || 0)}
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400">
             {hasActiveFilters ? 'Filtered' : 'Total'} Records
@@ -347,7 +347,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
           <div className="text-2xl font-bold text-green-600 dark:text-green-400">
             {hasActiveFilters
               ? filteredRecords.filter(r => r.is_active).length
-              : (records?.data?.filter(r => r.is_active).length || 0)
+              : (records?.filter(r => r.is_active).length || 0)
             }
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400">
@@ -359,7 +359,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
           <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
             {hasActiveFilters
               ? new Set(filteredRecords.map(r => r.type)).size
-              : new Set(records?.data?.map(r => r.type) || []).size
+              : new Set(records?.map(r => r.type) || []).size
             }
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400">
@@ -371,7 +371,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
           <div className="text-2xl font-bold text-red-600 dark:text-red-400">
             {hasActiveFilters
               ? filteredRecords.filter(r => validateRecord(r).status === 'error').length
-              : (records?.data?.filter(r => validateRecord(r).status === 'error').length || 0)
+              : (records?.filter(r => validateRecord(r).status === 'error').length || 0)
             }
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400">
@@ -386,7 +386,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
           <div className="px-6 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
             <div className="flex items-center justify-between">
               <div className="text-sm text-gray-600 dark:text-gray-400">
-                Showing {filteredRecords.length} of {records?.data?.length || 0} records
+                Showing {filteredRecords.length} of {records?.length || 0} records
                 {searchQuery && (
                   <span className="ml-2">
                     matching "<span className="font-medium">{searchQuery}</span>"

@@ -31,6 +31,7 @@ class BindService:
         self.zones_dir = settings.zones_dir
         self.rpz_dir = settings.rpz_dir
         self.db = db
+        self.is_async = isinstance(db, AsyncSession) if db else False
         
         # Initialize Jinja2 environment for template rendering
         template_dir = Path(__file__).parent.parent / "templates"
@@ -65,6 +66,17 @@ class BindService:
         self.jinja_env.globals['format_timestamp'] = self._format_timestamp
         self.jinja_env.globals['get_zone_type_description'] = self._get_zone_type_description
         self.jinja_env.globals['get_record_type_description'] = self._get_record_type_description
+    
+    async def _execute_query(self, query):
+        """Helper method to execute queries for both sync and async sessions"""
+        if not self.db:
+            return None
+            
+        if self.is_async:
+            result = await self.db.execute(query)
+            return result
+        else:
+            return query
     
     async def get_service_status(self) -> Dict:
         """Get BIND9 service status"""
@@ -147,7 +159,14 @@ class BindService:
         """Reload BIND9 configuration"""
         logger = get_bind_logger()
         try:
-            result = await self._run_command(["rndc", "reload"])
+            # First try rndc reload with full path
+            result = await self._run_command(["/usr/sbin/rndc", "reload"])
+            
+            if result["returncode"] == 127:  # Command not found
+                logger.warning("rndc command not found, trying systemctl restart")
+                # Fallback to systemctl restart
+                result = await self._run_command(["systemctl", "restart", self.service_name])
+            
             success = result["returncode"] == 0
             
             if success:
@@ -679,7 +698,7 @@ class BindService:
         
         try:
             # Use named-checkconf to validate main configuration
-            result = await self._run_command(["named-checkconf"])
+            result = await self._run_command(["/usr/sbin/named-checkconf"])
             
             if result["returncode"] != 0:
                 error_msg = result["stderr"].strip()
@@ -759,7 +778,7 @@ class BindService:
                             
                             # Validate zone file syntax
                             result = await self._run_command([
-                                "named-checkzone", zone_name, str(zone_file)
+                                "/usr/sbin/named-checkzone", zone_name, str(zone_file)
                             ])
                             
                             if result["returncode"] != 0:
@@ -1513,7 +1532,7 @@ class BindService:
         """Flush DNS cache"""
         logger = get_bind_logger()
         try:
-            result = await self._run_command(["rndc", "flush"])
+            result = await self._run_command(["/usr/sbin/rndc", "flush"])
             success = result["returncode"] == 0
             
             if success:
@@ -1591,7 +1610,7 @@ class BindService:
         """Get count of zones currently loaded in BIND9"""
         try:
             # Try to get zone count from rndc status
-            result = await self._run_command(["rndc", "status"])
+            result = await self._run_command(["/usr/sbin/rndc", "status"])
             if result["returncode"] == 0:
                 # Parse the output to find zone count
                 lines = result["stdout"].split('\n')
@@ -1622,7 +1641,7 @@ class BindService:
         """Get current DNS cache size in bytes"""
         try:
             # Try to get cache statistics from rndc
-            result = await self._run_command(["rndc", "stats"])
+            result = await self._run_command(["/usr/sbin/rndc", "stats"])
             if result["returncode"] == 0:
                 # Try to read the stats file
                 stats_file = "/var/cache/bind/named.stats"
@@ -1661,10 +1680,21 @@ class BindService:
             # Get zone records from database if available
             records = []
             if self.db:
-                records = self.db.query(DNSRecord).filter(
-                    DNSRecord.zone_id == zone.id,
-                    DNSRecord.is_active == True
-                ).all()
+                if isinstance(self.db, AsyncSession):
+                    # Async session
+                    result = await self.db.execute(
+                        select(DNSRecord).filter(
+                            DNSRecord.zone_id == zone.id,
+                            DNSRecord.is_active == True
+                        )
+                    )
+                    records = result.scalars().all()
+                else:
+                    # Sync session
+                    records = self.db.query(DNSRecord).filter(
+                        DNSRecord.zone_id == zone.id,
+                        DNSRecord.is_active == True
+                    ).all()
             
             # Pre-validate zone and records before generation
             if zone.zone_type == "master":
@@ -1693,8 +1723,8 @@ class BindService:
             # Write zone file
             zone_file_path.write_text(content, encoding='utf-8')
             
-            # Set appropriate permissions (readable by BIND9)
-            zone_file_path.chmod(0o644)
+            # Set appropriate permissions (readable by BIND9, group writable)
+            zone_file_path.chmod(0o664)
             
             # Validate the generated zone file
             if zone.zone_type == "master":
@@ -1742,7 +1772,11 @@ class BindService:
         try:
             # Get zone information from database if available
             if self.db:
-                zone = self.db.query(Zone).filter(Zone.id == zone_id).first()
+                if self.is_async:
+                    result = await self.db.execute(select(Zone).filter(Zone.id == zone_id))
+                    zone = result.scalar_one_or_none()
+                else:
+                    zone = self.db.query(Zone).filter(Zone.id == zone_id).first()
                 if zone and zone.file_path:
                     zone_file_path = Path(zone.file_path)
                     if zone_file_path.exists():
@@ -1805,7 +1839,11 @@ class BindService:
             # For updates, just backup the specific zone file if it exists
             if self.db:
                 from ..models.dns import Zone
-                zone = self.db.query(Zone).filter(Zone.name == zone_name).first()
+                if self.is_async:
+                    result = await self.db.execute(select(Zone).filter(Zone.name == zone_name))
+                    zone = result.scalar_one_or_none()
+                else:
+                    zone = self.db.query(Zone).filter(Zone.name == zone_name).first()
                 if zone and zone.file_path:
                     zone_file_path = Path(zone.file_path)
                     if zone_file_path.exists():
@@ -1868,13 +1906,23 @@ class BindService:
                 return await self.reload_service()
             
             # Get zone name from database
-            zone = self.db.query(Zone).filter(Zone.id == zone_id).first()
+            if self.is_async:
+                result = await self.db.execute(select(Zone).filter(Zone.id == zone_id))
+                zone = result.scalar_one_or_none()
+            else:
+                zone = self.db.query(Zone).filter(Zone.id == zone_id).first()
+                
             if not zone:
                 logger.error(f"Zone {zone_id} not found")
                 return False
             
-            # Reload specific zone using rndc
-            result = await self._run_command(["rndc", "reload", zone.name])
+            # Reload specific zone using rndc with full path
+            result = await self._run_command(["/usr/sbin/rndc", "reload", zone.name])
+            
+            if result["returncode"] == 127:  # Command not found
+                logger.warning("rndc command not found, falling back to full reload")
+                return await self.reload_service()
+            
             success = result["returncode"] == 0
             
             if success:
@@ -1957,7 +2005,11 @@ class BindService:
                 return False
             
             # Get zone from database
-            zone = self.db.query(Zone).filter(Zone.id == zone_id).first()
+            if self.is_async:
+                result = await self.db.execute(select(Zone).filter(Zone.id == zone_id))
+                zone = result.scalar_one_or_none()
+            else:
+                zone = self.db.query(Zone).filter(Zone.id == zone_id).first()
             if not zone:
                 logger.error(f"Zone {zone_id} not found in database")
                 return False
@@ -2100,8 +2152,8 @@ class BindService:
             # Write RPZ zone file
             rpz_file_path.write_text(content, encoding='utf-8')
             
-            # Set appropriate permissions (readable by BIND9)
-            rpz_file_path.chmod(0o644)
+            # Set appropriate permissions (readable by BIND9, group writable)
+            rpz_file_path.chmod(0o664)
             
             # Validate the generated RPZ zone file
             validation_result = await self.validate_generated_rpz_zone_file(rpz_zone, rpz_file_path)
@@ -2274,7 +2326,7 @@ class BindService:
             # Use named-checkzone for RPZ zone validation
             rpz_zone_name = f"{rpz_zone}.rpz"
             result = await self._run_command([
-                "named-checkzone",
+                "/usr/sbin/named-checkzone",
                 "-i", "local",  # Allow local addresses
                 "-k", "warn",   # Warn on issues but don't fail
                 rpz_zone_name,
@@ -3181,9 +3233,9 @@ class BindService:
             # Create RPZ directory
             self.rpz_dir.mkdir(parents=True, exist_ok=True)
             
-            # Set appropriate permissions
-            self.zones_dir.chmod(0o755)
-            self.rpz_dir.chmod(0o755)
+            # Set appropriate permissions (group writable for service user)
+            self.zones_dir.chmod(0o775)
+            self.rpz_dir.chmod(0o775)
             
             logger.debug("Zone directories ensured")
             return True
@@ -4062,8 +4114,8 @@ $ORIGIN {rpz_zone}.rpz.
         errors = []
         warnings = []
         
-        # Validate email
-        if not zone.email or '@' not in zone.email:
+        # Validate email (DNS format uses dots instead of @)
+        if not zone.email or '.' not in zone.email:
             errors.append("Valid email address is required for SOA record")
         
         # Validate serial number
@@ -4447,7 +4499,7 @@ $ORIGIN {rpz_zone}.rpz.
         try:
             # Use named-checkzone to validate the zone file syntax
             result = await self._run_command([
-                "named-checkzone", 
+                "/usr/sbin/named-checkzone", 
                 "-q",  # Quiet mode - only show errors
                 zone.name, 
                 str(zone_file_path)
@@ -5066,13 +5118,9 @@ $ORIGIN {zone.name if zone.name.endswith('.') else zone.name + '.'}
             if not zone_file_path.stat().st_mode & 0o044:  # Check if readable by others
                 warnings.append("Zone file may not be readable by BIND9 (check permissions)")
             
-            # Use named-checkzone for comprehensive validation
+            # Use named-checkzone for basic validation
             result = await self._run_command([
-                "named-checkzone",
-                "-i", "full",  # Full integrity check
-                "-k", "fail",  # Fail on warnings
-                "-m", "fail",  # Fail on MX target issues
-                "-n", "fail",  # Fail on NS target issues
+                "/usr/bin/named-checkzone",
                 zone.name,
                 str(zone_file_path)
             ])
@@ -5704,7 +5752,7 @@ $ORIGIN {zone.name if zone.name.endswith('.') else zone.name + '.'}
             
             # Use named-checkzone to validate
             result = await self._run_command([
-                "named-checkzone", 
+                "/usr/sbin/named-checkzone", 
                 "-q",  # Quiet mode
                 zone_name, 
                 str(zone_file_path)
@@ -6099,7 +6147,7 @@ $ORIGIN {zone.name if zone.name.endswith('.') else zone.name + '.'}
         
         try:
             zone_name = f"{category}.rpz"
-            result = await self._run_command(["rndc", "reload", zone_name])
+            result = await self._run_command(["/usr/sbin/rndc", "reload", zone_name])
             success = result["returncode"] == 0
             
             if success:

@@ -849,6 +849,26 @@ async def list_zone_records(
             sort_order=sort_order
         )
         
+        # Convert SQLAlchemy objects to dictionaries for proper serialization
+        serialized_items = []
+        for record in result['items']:
+            serialized_items.append({
+                "id": record.id,
+                "name": record.name,
+                "type": record.record_type,
+                "record_type": record.record_type,
+                "value": record.value,
+                "ttl": record.ttl,
+                "priority": record.priority,
+                "weight": record.weight,
+                "port": record.port,
+                "is_active": record.is_active,
+                "zone_id": record.zone_id,
+                "created_at": record.created_at.isoformat() if record.created_at else None,
+                "updated_at": record.updated_at.isoformat() if record.updated_at else None
+            })
+        
+        result['items'] = serialized_items
         logger.info(f"Retrieved {len(result['items'])} records for zone {zone.name}")
         return result
         
@@ -881,7 +901,7 @@ async def create_zone_record(
     try:
         # Normalize record_data - handle both 'type' and 'record_type' fields
         if 'type' in record_data and 'record_type' not in record_data:
-            record_data['record_type'] = record_data['type']
+            record_data['record_type'] = record_data.pop('type')
         
         # Create record in database
         record = await record_service.create_record(zone_id, record_data)
@@ -987,7 +1007,7 @@ async def update_zone_record(
         
         # Normalize record_data - handle both 'type' and 'record_type' fields
         if 'type' in record_data and 'record_type' not in record_data:
-            record_data['record_type'] = record_data['type']
+            record_data['record_type'] = record_data.pop('type')
         
         # Update record
         updated_record = await record_service.update_record(record_id, record_data)

@@ -424,6 +424,10 @@ create_user() {
         info "User $SERVICE_USER already exists"
     fi
     
+    # Add service user to bind group for BIND9 file access
+    usermod -a -G bind "$SERVICE_USER"
+    info "Added $SERVICE_USER to bind group"
+    
     # Add www-data to dns-server group for file access
     usermod -a -G "$SERVICE_USER" www-data
     info "Added www-data to $SERVICE_USER group"
@@ -703,15 +707,19 @@ configure_bind9() {
     chown -R bind:bind /etc/bind/zones
     chown -R bind:bind /etc/bind/rpz
     chown -R bind:bind /var/log/bind
-    chown -R "$SERVICE_USER:$SERVICE_USER" /etc/bind/backups
-    chmod 755 /etc/bind/zones
-    chmod 755 /etc/bind/rpz
+    chown -R "$SERVICE_USER:bind" /etc/bind/backups
+    
+    # Set directory permissions (group writable for service user)
+    chmod 775 /etc/bind/zones
+    chmod 775 /etc/bind/rpz
     chmod 755 /var/log/bind
     chmod 755 /etc/bind/backups
+    
+    # Set file permissions
     chmod 644 /etc/bind/*.conf
     chmod 644 /etc/bind/*.key 2>/dev/null || true
-    chmod 644 /etc/bind/zones/db.* 2>/dev/null || true
-    chmod 644 /etc/bind/rpz/db.* 2>/dev/null || true
+    chmod 664 /etc/bind/zones/db.* 2>/dev/null || true
+    chmod 664 /etc/bind/rpz/db.* 2>/dev/null || true
     
     # Fix AppArmor profile if it exists (Ubuntu 24.04 specific)
     if [[ -f /etc/apparmor.d/usr.sbin.named ]]; then

@@ -997,7 +997,7 @@ class ZoneQueryParams(BaseModel):
 class DNSRecordBase(BaseModel):
     """Base schema for DNS records with common fields"""
     name: str = Field(..., min_length=1, max_length=255, description="DNS record name")
-    record_type: RecordType = Field(..., description="DNS record type")
+    type: RecordType = Field(..., alias="record_type", description="DNS record type")
     value: str = Field(..., min_length=1, max_length=500, description="DNS record value")
     ttl: Optional[int] = Field(None, ge=1, le=2147483647, description="Time to live in seconds")
     priority: Optional[int] = Field(None, ge=0, le=65535, description="Priority for MX and SRV records")
@@ -1020,7 +1020,7 @@ class DNSRecordBase(BaseModel):
     @validator('value')
     def validate_record_value(cls, v, values):
         """Validate DNS record value based on record type"""
-        record_type = values.get('record_type')
+        record_type = values.get('type')
         
         if record_type == RecordType.A:
             # Validate IPv4 address
@@ -1087,7 +1087,7 @@ class DNSRecordCreate(DNSRecordBase):
     @validator('priority', always=True)
     def validate_priority(cls, v, values):
         """Validate priority for MX and SRV records"""
-        record_type = values.get('record_type')
+        record_type = values.get('type')
         if record_type in [RecordType.MX, RecordType.SRV] and v is None:
             if record_type == RecordType.MX:
                 raise ValueError('Priority is required for MX records. Please provide a numeric priority value (lower numbers have higher priority, typically 10-50)')
@@ -1100,7 +1100,7 @@ class DNSRecordCreate(DNSRecordBase):
     @validator('weight', always=True)
     def validate_weight(cls, v, values):
         """Validate weight for SRV records"""
-        record_type = values.get('record_type')
+        record_type = values.get('type')
         if record_type == RecordType.SRV and v is None:
             raise ValueError('Weight is required for SRV records. Please provide a numeric weight value (0-65535, where 0 means no preference among records with the same priority)')
         elif record_type != RecordType.SRV and v is not None:
@@ -1110,7 +1110,7 @@ class DNSRecordCreate(DNSRecordBase):
     @validator('port', always=True)
     def validate_port(cls, v, values):
         """Validate port for SRV records"""
-        record_type = values.get('record_type')
+        record_type = values.get('type')
         if record_type == RecordType.SRV and v is None:
             raise ValueError('Port is required for SRV records. Please provide the target port number (1-65535, e.g., 80 for HTTP, 443 for HTTPS)')
         elif record_type != RecordType.SRV and v is not None:
@@ -1250,6 +1250,7 @@ class DNSRecord(DNSRecordBase):
 
     class Config:
         from_attributes = True
+        allow_population_by_field_name = True
         json_encoders = {
             datetime: lambda v: v.isoformat()
         }
