@@ -119,7 +119,7 @@ export const Analytics: React.FC = () => {
     const hourlyStats = trendsData.data.data.hourly_stats
     return {
       data: {
-        labels: hourlyStats.map((item: any) => 
+        labels: hourlyStats.map((item: any) =>
           format(new Date(item.hour), filters.interval === 'hour' ? 'HH:mm' : 'MMM dd')
         ),
         datasets: [
@@ -182,7 +182,7 @@ export const Analytics: React.FC = () => {
 
     return {
       data: {
-        labels: hours.map((item: any) => 
+        labels: hours.map((item: any) =>
           format(new Date(item.timestamp), 'HH:mm')
         ),
         datasets: [
@@ -340,7 +340,7 @@ export const Analytics: React.FC = () => {
             Comprehensive DNS performance and security analytics
           </p>
         </div>
-        <ExportControls 
+        <ExportControls
           filters={filters}
           onExport={(format) => {
             // Handle export logic
@@ -350,21 +350,21 @@ export const Analytics: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <AnalyticsFilters 
+      <AnalyticsFilters
         filters={filters}
         onFiltersChange={setFilters}
       />
 
       {/* Insights */}
       {insightsData && (
-        <AnalyticsInsights 
+        <AnalyticsInsights
           insights={insightsData.data}
           loading={insightsLoading}
         />
       )}
 
       {/* Performance Benchmarks */}
-      <PerformanceBenchmarks 
+      <PerformanceBenchmarks
         data={performanceData?.data}
         loading={performanceLoading}
       />
@@ -376,11 +376,10 @@ export const Analytics: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === tab.id
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-              }`}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === tab.id
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                }`}
             >
               <span className="mr-2">{tab.icon}</span>
               {tab.name}
@@ -475,19 +474,19 @@ export const Analytics: React.FC = () => {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-blue-600">
-                      {performanceData.data.data.avg_response_time?.toFixed(2)}ms
+                      {(performanceData.data.data.avg_response_time ?? 0).toFixed(2)}ms
                     </div>
                     <div className="text-sm text-gray-500">Avg Response Time</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-green-600">
-                      {performanceData.data.data.cache_hit_rate?.toFixed(1)}%
+                      {(performanceData.data.data.cache_hit_rate ?? 0).toFixed(1)}%
                     </div>
                     <div className="text-sm text-gray-500">Cache Hit Rate</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-purple-600">
-                      {performanceData.data.data.queries_per_second?.toFixed(0)}
+                      {(performanceData.data.data.queries_per_second ?? 0).toFixed(0)}
                     </div>
                     <div className="text-sm text-gray-500">Queries/Second</div>
                   </div>
@@ -547,11 +546,10 @@ export const Analytics: React.FC = () => {
                           <span className="text-sm text-gray-600 dark:text-gray-400">
                             {index + 1}. {domain.domain}
                           </span>
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            domain.category === 'malware' ? 'bg-red-100 text-red-800' :
+                          <span className={`px-2 py-1 text-xs rounded-full ${domain.category === 'malware' ? 'bg-red-100 text-red-800' :
                             domain.category === 'phishing' ? 'bg-orange-100 text-orange-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
+                              'bg-gray-100 text-gray-800'
+                            }`}>
                             {domain.category}
                           </span>
                         </div>
@@ -593,13 +591,12 @@ export const Analytics: React.FC = () => {
                       </div>
                       <div className="text-right">
                         <div className="text-sm font-medium text-gray-900 dark:text-white">
-                          {zone.avg_response_time.toFixed(2)}ms
+                          {(zone.avg_response_time ?? 0).toFixed(2)}ms
                         </div>
-                        <div className={`text-xs ${
-                          zone.health_status === 'healthy' ? 'text-green-600' :
+                        <div className={`text-xs ${zone.health_status === 'healthy' ? 'text-green-600' :
                           zone.health_status === 'warning' ? 'text-yellow-600' :
-                          'text-red-600'
-                        }`}>
+                            'text-red-600'
+                          }`}>
                           {zone.health_status}
                         </div>
                       </div>

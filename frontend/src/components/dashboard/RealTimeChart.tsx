@@ -71,13 +71,13 @@ const RealTimeChart: React.FC<RealTimeChartProps> = ({
         // Add new data point to the chart
         const now = new Date()
         const currentMinute = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes())
-        
+
         setStreamData(prev => {
           const updated = [...prev]
-          const existingIndex = updated.findIndex(item => 
+          const existingIndex = updated.findIndex(item =>
             new Date(item.timestamp).getTime() === currentMinute.getTime()
           )
-          
+
           if (existingIndex >= 0) {
             // Update existing data point
             updated[existingIndex] = {
@@ -97,12 +97,12 @@ const RealTimeChart: React.FC<RealTimeChartProps> = ({
               avg_response_time: 0
             }
             updated.push(newPoint)
-            
+
             // Keep only the last N minutes
             const cutoff = new Date(now.getTime() - minutes * 60 * 1000)
             return updated.filter(item => new Date(item.timestamp) >= cutoff)
           }
-          
+
           return updated
         })
       }
@@ -167,10 +167,11 @@ const RealTimeChart: React.FC<RealTimeChartProps> = ({
           afterLabel: (context: any) => {
             const dataPoint = streamData[context.dataIndex]
             if (dataPoint) {
-              const avg = Number(dataPoint.avg_response_time ?? 0)
+              const avg = dataPoint.avg_response_time ?? 0
+              const avgNum = typeof avg === 'number' ? avg : 0
               return [
                 `Unique Clients: ${Number(dataPoint.unique_clients ?? 0)}`,
-                `Avg Response: ${avg.toFixed(1)}ms`
+                `Avg Response: ${avgNum.toFixed(1)}ms`
               ]
             }
             return []
@@ -227,7 +228,7 @@ const RealTimeChart: React.FC<RealTimeChartProps> = ({
             </span>
           </div>
         </div>
-        
+
         <div className="flex items-center space-x-3">
           <select
             value={minutes}
@@ -243,14 +244,13 @@ const RealTimeChart: React.FC<RealTimeChartProps> = ({
             <option value={30}>30 minutes</option>
             <option value={60}>1 hour</option>
           </select>
-          
+
           <button
             onClick={toggleLive}
-            className={`px-3 py-1 text-sm rounded-md border ${
-              isLive
+            className={`px-3 py-1 text-sm rounded-md border ${isLive
                 ? 'border-red-300 text-red-700 bg-red-50 hover:bg-red-100 dark:border-red-600 dark:text-red-400 dark:bg-red-900/20 dark:hover:bg-red-900/30'
                 : 'border-green-300 text-green-700 bg-green-50 hover:bg-green-100 dark:border-green-600 dark:text-green-400 dark:bg-green-900/20 dark:hover:bg-green-900/30'
-            }`}
+              }`}
           >
             {isLive ? 'Pause' : 'Resume'}
           </button>
@@ -272,7 +272,7 @@ const RealTimeChart: React.FC<RealTimeChartProps> = ({
             <p className="text-sm text-gray-500 dark:text-gray-400">Total Queries</p>
           </div>
         </div>
-        
+
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
           <div className="text-center">
             <p className="text-lg font-semibold text-red-600 dark:text-red-400">
@@ -281,7 +281,7 @@ const RealTimeChart: React.FC<RealTimeChartProps> = ({
             <p className="text-sm text-gray-500 dark:text-gray-400">Blocked</p>
           </div>
         </div>
-        
+
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
           <div className="text-center">
             <p className="text-lg font-semibold text-green-600 dark:text-green-400">
@@ -290,7 +290,7 @@ const RealTimeChart: React.FC<RealTimeChartProps> = ({
             <p className="text-sm text-gray-500 dark:text-gray-400">Allowed</p>
           </div>
         </div>
-        
+
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
           <div className="text-center">
             <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">

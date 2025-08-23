@@ -76,6 +76,24 @@ export const formatPercentage = (value: number, total: number): string => {
   return `${Math.round((value / total) * 100)}%`
 }
 
+// Safe number formatting utilities to prevent null reference errors
+export const safeToFixed = (value: number | null | undefined, decimals: number = 1): string => {
+  const num = typeof value === 'number' ? value : 0
+  return num.toFixed(decimals)
+}
+
+export const safePercentage = (value: number | null | undefined, decimals: number = 1): string => {
+  return `${safeToFixed(value, decimals)}%`
+}
+
+export const safeResponseTime = (value: number | null | undefined, decimals: number = 1): string => {
+  return `${safeToFixed(value, decimals)}ms`
+}
+
+export const safeNumber = (value: number | null | undefined, fallback: number = 0): number => {
+  return typeof value === 'number' ? value : fallback
+}
+
 // Validation utilities
 export const isValidDomain = (domain: string): boolean => {
   const domainRegex = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i

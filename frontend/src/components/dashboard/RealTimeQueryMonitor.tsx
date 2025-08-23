@@ -104,10 +104,10 @@ const RealTimeQueryMonitor: React.FC<RealTimeQueryMonitorProps> = ({
           blocked: data.data.blocked,
           response_time: 0
         }
-        
+
         setRecentQueries(prev => [newQuery, ...prev.slice(0, maxEvents - 1)])
         setLastUpdate(new Date().toISOString())
-        
+
         // Auto-scroll to top when new queries arrive
         if (scrollRef.current) {
           scrollRef.current.scrollTop = 0
@@ -176,7 +176,7 @@ const RealTimeQueryMonitor: React.FC<RealTimeQueryMonitorProps> = ({
             </span>
           </div>
         </div>
-        
+
         <div className="flex items-center space-x-3">
           {lastUpdate && (
             <span className="text-sm text-gray-500 dark:text-gray-400">
@@ -185,11 +185,10 @@ const RealTimeQueryMonitor: React.FC<RealTimeQueryMonitorProps> = ({
           )}
           <button
             onClick={toggleLive}
-            className={`inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md ${
-              isLive
-                ? 'text-red-700 bg-red-100 hover:bg-red-200 dark:bg-red-900 dark:text-red-200 dark:hover:bg-red-800'
-                : 'text-green-700 bg-green-100 hover:bg-green-200 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-800'
-            }`}
+            className={`inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md ${isLive
+              ? 'text-red-700 bg-red-100 hover:bg-red-200 dark:bg-red-900 dark:text-red-200 dark:hover:bg-red-800'
+              : 'text-green-700 bg-green-100 hover:bg-green-200 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-800'
+              }`}
           >
             {isLive ? (
               <>
@@ -233,7 +232,7 @@ const RealTimeQueryMonitor: React.FC<RealTimeQueryMonitorProps> = ({
                 <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
                   {formatNumber(liveStats.queries.blocked_today)}
                   <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">
-                    ({liveStats.queries.block_rate.toFixed(1)}%)
+                    ({(liveStats.queries.block_rate ?? 0).toFixed(1)}%)
                   </span>
                 </p>
               </div>
@@ -248,7 +247,7 @@ const RealTimeQueryMonitor: React.FC<RealTimeQueryMonitorProps> = ({
                   Avg Response
                 </p>
                 <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                  {liveStats.performance.avg_response_time.toFixed(1)}ms
+                  {(liveStats.performance.avg_response_time ?? 0).toFixed(1)}ms
                 </p>
               </div>
             </div>
@@ -262,7 +261,7 @@ const RealTimeQueryMonitor: React.FC<RealTimeQueryMonitorProps> = ({
                   CPU Usage
                 </p>
                 <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                  {liveStats.system.cpu_usage.toFixed(1)}%
+                  {(liveStats.system.cpu_usage ?? 0).toFixed(1)}%
                 </p>
               </div>
             </div>
@@ -278,7 +277,7 @@ const RealTimeQueryMonitor: React.FC<RealTimeQueryMonitorProps> = ({
         title="Recent DNS Queries"
         description={`Live stream of DNS queries (showing last ${maxEvents})`}
       >
-        <div 
+        <div
           ref={scrollRef}
           className="max-h-96 overflow-y-auto space-y-2"
         >
@@ -290,11 +289,10 @@ const RealTimeQueryMonitor: React.FC<RealTimeQueryMonitorProps> = ({
             recentQueries.map((query, index) => (
               <div
                 key={`${query.timestamp}-${index}`}
-                className={`flex items-center justify-between p-3 rounded-lg border ${
-                  query.blocked
-                    ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20'
-                    : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50'
-                }`}
+                className={`flex items-center justify-between p-3 rounded-lg border ${query.blocked
+                  ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20'
+                  : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50'
+                  }`}
               >
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
                   <div className="flex-shrink-0">
@@ -305,7 +303,7 @@ const RealTimeQueryMonitor: React.FC<RealTimeQueryMonitorProps> = ({
                       {query.blocked ? 'BLOCKED' : 'ALLOWED'}
                     </Badge>
                   </div>
-                  
+
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                       {query.domain}
@@ -314,7 +312,7 @@ const RealTimeQueryMonitor: React.FC<RealTimeQueryMonitorProps> = ({
                       from {query.client_ip}
                     </p>
                   </div>
-                  
+
                   <div className="flex items-center space-x-2">
                     <Badge
                       className={getQueryTypeColor(query.type)}

@@ -90,8 +90,8 @@ const RealTimeHealthStatus: React.FC = () => {
     )
   }
 
-  const healthPercentage = healthSummary.health_check_enabled > 0 
-    ? (healthSummary.healthy_forwarders / healthSummary.health_check_enabled) * 100 
+  const healthPercentage = healthSummary.health_check_enabled > 0
+    ? (healthSummary.healthy_forwarders / healthSummary.health_check_enabled) * 100
     : 100
 
   return (
@@ -117,18 +117,17 @@ const RealTimeHealthStatus: React.FC = () => {
           <span className={`text-sm font-semibold ${getHealthStatusColor(
             healthPercentage >= 95 ? 'healthy' : healthPercentage >= 80 ? 'degraded' : 'unhealthy'
           )}`}>
-            {healthPercentage.toFixed(1)}%
+            {(healthPercentage ?? 0).toFixed(1)}%
           </span>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
           <div
-            className={`h-2 rounded-full transition-all duration-300 ${
-              healthPercentage >= 95
+            className={`h-2 rounded-full transition-all duration-300 ${healthPercentage >= 95
                 ? 'bg-green-500'
                 : healthPercentage >= 80
-                ? 'bg-yellow-500'
-                : 'bg-red-500'
-            }`}
+                  ? 'bg-yellow-500'
+                  : 'bg-red-500'
+              }`}
             style={{ width: `${healthPercentage}%` }}
           />
         </div>
@@ -190,10 +189,10 @@ const RealTimeHealthStatus: React.FC = () => {
                     forwarder.status === 'healthy'
                       ? 'success'
                       : forwarder.status === 'unhealthy'
-                      ? 'danger'
-                      : forwarder.status === 'degraded'
-                      ? 'warning'
-                      : 'default'
+                        ? 'danger'
+                        : forwarder.status === 'degraded'
+                          ? 'warning'
+                          : 'default'
                   }
                   size="sm"
                 >

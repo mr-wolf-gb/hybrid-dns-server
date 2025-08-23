@@ -46,13 +46,13 @@ const HealthHistoryChart: React.FC<HealthHistoryChartProps> = ({
       const params = new URLSearchParams({
         hours: timeRange
       })
-      
+
       if (forwarderId) {
         params.append('forwarder_id', forwarderId.toString())
       }
 
       const response = await fetch(`/api/health/history?${params}`)
-      
+
       if (!response.ok) {
         throw new Error('Failed to load health history')
       }
@@ -71,13 +71,14 @@ const HealthHistoryChart: React.FC<HealthHistoryChartProps> = ({
   }, [timeRange, forwarderId])
 
   const formatTooltipValue = (value: any, name: string) => {
+    const numValue = typeof value === 'number' ? value : 0
     switch (name) {
       case 'success_rate':
-        return [`${value.toFixed(1)}%`, 'Success Rate']
+        return [`${numValue.toFixed(1)}%`, 'Success Rate']
       case 'avg_response_time':
       case 'min_response_time':
       case 'max_response_time':
-        return [`${value.toFixed(1)}ms`, name.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())]
+        return [`${numValue.toFixed(1)}ms`, name.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())]
       default:
         return [value, name]
     }

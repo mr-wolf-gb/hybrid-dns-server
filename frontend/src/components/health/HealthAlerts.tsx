@@ -40,7 +40,7 @@ const HealthAlerts: React.FC = () => {
 
   const getAlertBorderColor = (level: string, acknowledged: boolean) => {
     if (acknowledged) return 'border-green-200 dark:border-green-800'
-    
+
     switch (level) {
       case 'critical':
         return 'border-red-200 dark:border-red-800'
@@ -53,7 +53,7 @@ const HealthAlerts: React.FC = () => {
 
   const getAlertBackgroundColor = (level: string, acknowledged: boolean) => {
     if (acknowledged) return 'bg-green-50 dark:bg-green-900/10'
-    
+
     switch (level) {
       case 'critical':
         return 'bg-red-50 dark:bg-red-900/10'
@@ -116,8 +116,8 @@ const HealthAlerts: React.FC = () => {
           <div className="text-center py-8">
             <CheckCircleIcon className="h-12 w-12 text-green-500 mx-auto mb-3" />
             <p className="text-gray-500">
-              {filter === 'all' 
-                ? 'No alerts at this time' 
+              {filter === 'all'
+                ? 'No alerts at this time'
                 : `No ${filter} alerts`}
             </p>
           </div>
@@ -153,7 +153,7 @@ const HealthAlerts: React.FC = () => {
                     <p className="text-xs text-gray-500 mb-2">
                       {formatDateTime(alert.created_at)}
                     </p>
-                    
+
                     {/* Alert Details */}
                     {alert.details && (
                       <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
@@ -177,16 +177,16 @@ const HealthAlerts: React.FC = () => {
                           </div>
                         )}
                         {alert.details.uptime_24h !== undefined && (
-                          <div>24h uptime: {alert.details.uptime_24h.toFixed(1)}%</div>
+                          <div>24h uptime: {(alert.details.uptime_24h ?? 0).toFixed(1)}%</div>
                         )}
                         {alert.details.avg_response_time && (
-                          <div>Avg response time: {alert.details.avg_response_time.toFixed(1)}ms</div>
+                          <div>Avg response time: {(alert.details.avg_response_time ?? 0).toFixed(1)}ms</div>
                         )}
                       </div>
                     )}
                   </div>
                 </div>
-                
+
                 {/* Action Buttons */}
                 <div className="flex items-center space-x-2 ml-4">
                   {!alert.acknowledged && (

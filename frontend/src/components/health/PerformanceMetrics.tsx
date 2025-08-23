@@ -182,7 +182,7 @@ const PerformanceMetrics: React.FC = () => {
               <CheckCircleIcon className="h-8 w-8 text-green-500" />
             </div>
             <div className="text-2xl font-bold text-gray-900 dark:text-white">
-              {overall_metrics.success_rate.toFixed(1)}%
+              {(overall_metrics.success_rate ?? 0).toFixed(1)}%
             </div>
             <div className="text-sm text-gray-500">Success Rate</div>
             <div className="text-xs text-gray-400 mt-1">
@@ -208,7 +208,7 @@ const PerformanceMetrics: React.FC = () => {
               <ExclamationCircleIcon className="h-8 w-8 text-red-500" />
             </div>
             <div className="text-2xl font-bold text-gray-900 dark:text-white">
-              {overall_metrics.failure_rate.toFixed(1)}%
+              {(overall_metrics.failure_rate ?? 0).toFixed(1)}%
             </div>
             <div className="text-sm text-gray-500">Failure Rate</div>
             <div className="text-xs text-gray-400 mt-1">
@@ -225,7 +225,7 @@ const PerformanceMetrics: React.FC = () => {
             </div>
             <div className="text-sm text-gray-500">Total Checks</div>
             <div className="text-xs text-gray-400 mt-1">
-              {(overall_metrics.total_checks / metrics.period_hours).toFixed(1)}/hour
+              {((overall_metrics.total_checks ?? 0) / (metrics.period_hours ?? 1)).toFixed(1)}/hour
             </div>
           </div>
         </div>
