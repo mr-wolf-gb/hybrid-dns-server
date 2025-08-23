@@ -127,7 +127,7 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
 
     // Set zone type
     setValue('zone_type', template.zone_type)
-    
+
     // Apply defaults
     Object.entries(template.defaults).forEach(([key, value]) => {
       if (key === 'master_servers' && Array.isArray(value)) {
@@ -155,17 +155,41 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
   // Domain name validation
   const validateDomainName = (value: string) => {
     if (!value) return 'Zone name is required'
-    
-    // Basic domain name regex
-    const domainRegex = /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/
-    if (!domainRegex.test(value)) {
-      return 'Invalid domain name format'
+
+    // Remove leading/trailing whitespace
+    const trimmedValue = value.trim()
+    if (trimmedValue !== value) {
+      return 'Domain name cannot have leading or trailing spaces'
     }
 
-    // Check for valid TLD (at least 2 characters)
-    const parts = value.split('.')
-    if (parts.length < 2 || parts[parts.length - 1].length < 2) {
-      return 'Domain must have a valid top-level domain'
+    // Check length
+    if (trimmedValue.length > 253) {
+      return 'Domain name cannot exceed 253 characters'
+    }
+
+    // Basic domain name regex - allows internal domains like .local
+    const domainRegex = /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/
+    if (!domainRegex.test(trimmedValue)) {
+      return 'Invalid domain format. Use letters, numbers, dots, and hyphens only (e.g., example.com or internal.local)'
+    }
+
+    // Check for valid structure
+    const parts = trimmedValue.split('.')
+    if (parts.length < 2) {
+      return 'Domain must have at least two parts (e.g., example.com or host.local)'
+    }
+
+    // Check each part
+    for (const part of parts) {
+      if (part.length === 0) {
+        return 'Domain parts cannot be empty'
+      }
+      if (part.length > 63) {
+        return 'Each domain part cannot exceed 63 characters'
+      }
+      if (part.startsWith('-') || part.endsWith('-')) {
+        return 'Domain parts cannot start or end with hyphens'
+      }
     }
 
     return true
@@ -174,24 +198,33 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
   // Email validation
   const validateEmail = (value: string) => {
     if (!value) return 'Email is required'
-    
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+    // More comprehensive email regex that handles various valid formats
+    const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/
     if (!emailRegex.test(value)) {
-      return 'Invalid email format'
+      return 'Please enter a valid email address (e.g., admin@example.com)'
     }
-    
+
+    // Check for common DNS admin email formats
+    if (value.includes('@') && value.split('@')[1]) {
+      const domain = value.split('@')[1]
+      if (domain.length < 3) {
+        return 'Email domain must be at least 3 characters long'
+      }
+    }
+
     return true
   }
 
   // IP address validation
   const validateIPAddress = (value: string) => {
     if (!value) return 'IP address is required'
-    
+
     const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
     if (!ipRegex.test(value)) {
       return 'Invalid IP address format'
     }
-    
+
     return true
   }
 
@@ -352,7 +385,7 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
               Master Servers
             </h3>
-            
+
             <div className="space-y-3">
               {masterServerFields.map((field, index) => (
                 <div key={field.id} className="flex items-end space-x-3">
@@ -382,7 +415,7 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
                   </Button>
                 </div>
               ))}
-              
+
               <Button
                 type="button"
                 variant="outline"
@@ -402,7 +435,7 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
               Forwarder Servers
             </h3>
-            
+
             <div className="space-y-3">
               {forwarderFields.map((field, index) => (
                 <div key={field.id} className="flex items-end space-x-3">
@@ -432,7 +465,7 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
                   </Button>
                 </div>
               ))}
-              
+
               <Button
                 type="button"
                 variant="outline"
@@ -463,7 +496,7 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
                 {showAdvanced ? 'Hide Advanced' : 'Show Advanced'}
               </Button>
             </div>
-            
+
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <Input
                 label="Refresh Interval"
@@ -525,8 +558,8 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
             {showAdvanced && (
               <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
                 <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                  <strong>Note:</strong> These values affect DNS propagation and caching behavior. 
-                  Lower values mean faster updates but higher server load. Higher values mean 
+                  <strong>Note:</strong> These values affect DNS propagation and caching behavior.
+                  Lower values mean faster updates but higher server load. Higher values mean
                   slower updates but better performance.
                 </p>
               </div>

@@ -11,9 +11,8 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 
 const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ className, label, error, helperText, leftIcon, rightIcon, ...props }, ref) => {
-    const baseClasses = 'block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 dark:focus:border-primary-400 dark:focus:ring-primary-400'
-    const errorClasses = 'border-red-300 focus:border-red-500 focus:ring-red-500 dark:border-red-500'
-    //const paddingClasses = leftIcon ? 'pl-10' : rightIcon ? 'pr-10' : ''
+    const baseClasses = 'block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm bg-white text-gray-900 placeholder-gray-500 dark:bg-gray-700 dark:border-gray-500 dark:text-white dark:placeholder-gray-300 dark:focus:border-blue-400 dark:focus:ring-blue-400'
+    const errorClasses = 'border-red-300 focus:border-red-500 focus:ring-red-500 dark:border-red-400 dark:focus:border-red-400 dark:focus:ring-red-400'
     const paddingClasses = `p-2.5 ${leftIcon ? 'pl-10' : ''} ${rightIcon ? 'pr-10' : ''}`.trim();
 
     return (
@@ -23,7 +22,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             {label}
           </label>
         )}
-        
+
         <div className="relative">
           {leftIcon && (
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -32,7 +31,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
               </div>
             </div>
           )}
-          
+
           <input
             className={cn(
               baseClasses,
@@ -43,7 +42,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             {...props}
           />
-          
+
           {rightIcon && (
             <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
               <div className="h-5 w-5 text-gray-400 dark:text-gray-500">
@@ -52,11 +51,11 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             </div>
           )}
         </div>
-        
+
         {error && (
           <p className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>
         )}
-        
+
         {helperText && !error && (
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{helperText}</p>
         )}
