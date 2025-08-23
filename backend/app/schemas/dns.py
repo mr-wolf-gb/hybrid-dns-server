@@ -1892,6 +1892,7 @@ class ZoneStatistics(BaseModel):
     zone_name: str = Field(..., description="Zone name")
     zone_type: str = Field(..., description="Zone type")
     is_active: bool = Field(..., description="Whether the zone is active")
+    record_count: int = Field(..., description="Total number of records (frontend compatibility)")
     total_records: int = Field(..., description="Total number of records")
     record_counts: Dict[str, int] = Field(default_factory=dict, description="Record counts by type")
     serial: Optional[int] = Field(None, description="Current serial number")
@@ -1902,6 +1903,9 @@ class ZoneStatistics(BaseModel):
     minimum: int = Field(..., description="SOA minimum TTL")
     created_at: datetime = Field(..., description="Zone creation timestamp")
     updated_at: datetime = Field(..., description="Zone last update timestamp")
+    last_modified: Optional[str] = Field(None, description="Last modification timestamp (ISO format)")
+    last_check: Optional[str] = Field(None, description="Last health check timestamp (ISO format)")
+    health_status: str = Field(default="unknown", description="Zone health status")
     created_by: Optional[int] = Field(None, description="User ID who created the zone")
     updated_by: Optional[int] = Field(None, description="User ID who last updated the zone")
     

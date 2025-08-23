@@ -65,7 +65,7 @@ export enum EventType {
   HEALTH_UPDATE = 'health_update',
   HEALTH_ALERT = 'health_alert',
   FORWARDER_STATUS_CHANGE = 'forwarder_status_change',
-  
+
   // DNS zone events
   ZONE_CREATED = 'zone_created',
   ZONE_UPDATED = 'zone_updated',
@@ -73,22 +73,22 @@ export enum EventType {
   RECORD_CREATED = 'record_created',
   RECORD_UPDATED = 'record_updated',
   RECORD_DELETED = 'record_deleted',
-  
+
   // Security events
   SECURITY_ALERT = 'security_alert',
   RPZ_UPDATE = 'rpz_update',
   THREAT_DETECTED = 'threat_detected',
-  
+
   // System events
   SYSTEM_STATUS = 'system_status',
   BIND_RELOAD = 'bind_reload',
   CONFIG_CHANGE = 'config_change',
-  
+
   // User events
   USER_LOGIN = 'user_login',
   USER_LOGOUT = 'user_logout',
   SESSION_EXPIRED = 'session_expired',
-  
+
   // Connection events
   CONNECTION_ESTABLISHED = 'connection_established',
   SUBSCRIPTION_UPDATED = 'subscription_updated'
@@ -128,6 +128,12 @@ export const useWebSocket = (config: WebSocketConfig): [WebSocketState, WebSocke
 
   const connect = useCallback(() => {
     if (!accessToken || state.isConnecting || state.isConnected) {
+      return;
+    }
+
+    // Additional check to ensure token is valid (not empty or expired)
+    if (accessToken.trim() === '' || accessToken === 'null' || accessToken === 'undefined') {
+      console.warn('Invalid access token, cannot establish WebSocket connection');
       return;
     }
 
@@ -184,6 +190,17 @@ export const useWebSocket = (config: WebSocketConfig): [WebSocketState, WebSocke
         }));
 
         configRef.current.onDisconnect?.();
+
+        // Check if close was due to authentication issues
+        if (event.code === 1008 || event.code === 4001) {
+          // Authentication failed - don't reconnect
+          console.warn('WebSocket closed due to authentication issues, not reconnecting');
+          setState(prev => ({
+            ...prev,
+            error: 'Authentication failed'
+          }));
+          return;
+        }
 
         // Auto-reconnect if enabled and not a normal closure
         if (configRef.current.autoReconnect !== false && event.code !== 1000) {
@@ -291,12 +308,15 @@ export const useWebSocket = (config: WebSocketConfig): [WebSocketState, WebSocke
     sendMessage({ type: 'ping', data: {} });
   }, [sendMessage]);
 
-  // Auto-connect when token is available
+  // Auto-connect when token is available, disconnect when token is removed
   useEffect(() => {
     if (accessToken && !state.isConnected && !state.isConnecting) {
       connect();
+    } else if (!accessToken && (state.isConnected || state.isConnecting)) {
+      // Token was removed (logout) - disconnect immediately
+      disconnect();
     }
-  }, [accessToken, connect, state.isConnected, state.isConnecting]);
+  }, [accessToken, connect, disconnect, state.isConnected, state.isConnecting]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -335,7 +355,7 @@ export const useWebSocketService = (
   } = {}
 ) => {
   const eventHandlersRef = useRef<Map<string, (data: any) => void>>(new Map());
-  
+
   const [state, actions] = useWebSocket({
     connectionType,
     autoReconnect: true,
@@ -379,19 +399,19 @@ export const useWebSocketService = (
 };
 
 // Specialized hooks for different connection types
-export const useHealthWebSocket = (userId: string, options?: any) => 
+export const useHealthWebSocket = (userId: string, options?: any) =>
   useWebSocketService('health', userId, options);
 
-export const useDNSWebSocket = (userId: string, options?: any) => 
+export const useDNSWebSocket = (userId: string, options?: any) =>
   useWebSocketService('dns_management', userId, options);
 
-export const useSecurityWebSocket = (userId: string, options?: any) => 
+export const useSecurityWebSocket = (userId: string, options?: any) =>
   useWebSocketService('security', userId, options);
 
-export const useSystemWebSocket = (userId: string, options?: any) => 
+export const useSystemWebSocket = (userId: string, options?: any) =>
   useWebSocketService('system', userId, options);
 
-export const useAdminWebSocket = (userId: string, options?: any) => 
+export const useAdminWebSocket = (userId: string, options?: any) =>
   useWebSocketService('admin', userId, options);
 
 export default useWebSocket;

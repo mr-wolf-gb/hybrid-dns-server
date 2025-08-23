@@ -19,7 +19,7 @@ import WebSocketTest from '@/components/debug/WebSocketTest'
 const RealTimeDashboard: React.FC = () => {
   const [activeView, setActiveView] = useState<'overview' | 'queries' | 'health' | 'config' | 'test'>('overview')
   const [isGlobalLive, setIsGlobalLive] = useState(true)
-  
+
   const {
     isConnected,
     connectionStatus,
@@ -86,7 +86,7 @@ const RealTimeDashboard: React.FC = () => {
               Live monitoring of DNS queries, health status, and configuration changes
             </p>
           </div>
-          
+
           <div className="flex items-center space-x-4">
             {/* Connection Status */}
             <div className="flex items-center space-x-2">
@@ -95,15 +95,14 @@ const RealTimeDashboard: React.FC = () => {
                 {connectionStatus.charAt(0).toUpperCase() + connectionStatus.slice(1)}
               </span>
             </div>
-            
+
             {/* Global Live Toggle */}
             <button
               onClick={() => setIsGlobalLive(!isGlobalLive)}
-              className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md ${
-                isGlobalLive
+              className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md ${isGlobalLive
                   ? 'text-red-700 bg-red-100 hover:bg-red-200 dark:bg-red-900 dark:text-red-200 dark:hover:bg-red-800'
                   : 'text-green-700 bg-green-100 hover:bg-green-200 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-800'
-              }`}
+                }`}
             >
               {isGlobalLive ? (
                 <>
@@ -127,11 +126,10 @@ const RealTimeDashboard: React.FC = () => {
               <button
                 key={view.id}
                 onClick={() => setActiveView(view.id as any)}
-                className={`${
-                  activeView === view.id
+                className={`${activeView === view.id
                     ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2`}
+                  } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2`}
               >
                 <view.icon className="h-4 w-4" />
                 <span>{view.name}</span>
@@ -214,34 +212,39 @@ const RealTimeDashboard: React.FC = () => {
             {events.slice(0, 5).map((event) => (
               <div
                 key={event.id}
-                className={`flex items-center justify-between p-2 rounded border ${
-                  event.acknowledged ? 'opacity-60' : ''
-                } ${
-                  event.severity === 'error' ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20' :
-                  event.severity === 'warning' ? 'border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-900/20' :
-                  event.severity === 'success' ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20' :
-                  'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50'
-                }`}
+                className={`flex items-center justify-between p-2 rounded border ${event.acknowledged ? 'opacity-60' : ''
+                  } ${event.severity === 'error' ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20' :
+                    event.severity === 'warning' ? 'border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-900/20' :
+                      event.severity === 'success' ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20' :
+                        'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50'
+                  }`}
               >
                 <div className="flex items-center space-x-3">
                   <Badge
                     variant={
                       event.severity === 'error' ? 'danger' :
-                      event.severity === 'warning' ? 'warning' :
-                      event.severity === 'success' ? 'success' : 'default'
+                        event.severity === 'warning' ? 'warning' :
+                          event.severity === 'success' ? 'success' : 'default'
                     }
                     size="sm"
                   >
                     {event.type.replace('_', ' ').toUpperCase()}
                   </Badge>
                   <span className="text-sm text-gray-900 dark:text-gray-100">
-                    {typeof event.data === 'object' && event.data.message 
-                      ? event.data.message 
+                    {typeof event.data === 'object' && event.data.message
+                      ? event.data.message
                       : `${event.type} event occurred`}
                   </span>
                 </div>
                 <span className="text-xs text-gray-500 dark:text-gray-400">
-                  {new Date(event.timestamp).toLocaleTimeString()}
+                  {(() => {
+                    try {
+                      const date = new Date(event.timestamp);
+                      return isNaN(date.getTime()) ? 'Invalid time' : date.toLocaleTimeString();
+                    } catch {
+                      return 'Invalid time';
+                    }
+                  })()}
                 </span>
               </div>
             ))}
@@ -254,7 +257,7 @@ const RealTimeDashboard: React.FC = () => {
         {activeView === 'overview' && (
           <div className="space-y-6">
             <RealTimeChart userId={userId} minutes={15} autoRefresh={isGlobalLive} />
-            
+
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <Card
                 title="Quick Health Status"

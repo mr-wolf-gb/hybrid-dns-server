@@ -37,11 +37,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       try {
         const token = localStorage.getItem('access_token')
         const refreshTokenValue = localStorage.getItem('refresh_token')
-        
+
         if (token && refreshTokenValue) {
           // Set token in axios headers
           authApi.defaults.headers.common['Authorization'] = `Bearer ${token}`
-          
+
           // Try to get current user
           const response = await authApi.get('/auth/me')
           setAuthState({
@@ -58,7 +58,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         try {
           await refreshToken()
         } catch (refreshError) {
-          // Refresh failed, clear everything
+          // Refresh failed, disconnect WebSockets and clear everything
+          const { handleSessionExpiration } = await import('@/utils/websocketCleanup')
+          handleSessionExpiration()
+
           localStorage.removeItem('access_token')
           localStorage.removeItem('refresh_token')
           delete authApi.defaults.headers.common['Authorization']
@@ -83,7 +86,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Store tokens
       localStorage.setItem('access_token', access_token)
       localStorage.setItem('refresh_token', refresh_token)
-      
+
       // Set authorization header
       authApi.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
 
@@ -103,17 +106,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }
 
   const logout = async (): Promise<void> => {
+    const currentUser = authState.user
+
     try {
       await authApi.post('/auth/logout')
     } catch (error) {
       // Even if logout fails on server, clear local state
       console.error('Logout error:', error)
     } finally {
+      // Disconnect all WebSocket connections immediately
+      const { cleanupWebSocketsOnLogout } = await import('@/utils/websocketCleanup')
+      cleanupWebSocketsOnLogout()
+
       // Clear local storage and state
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')
       delete authApi.defaults.headers.common['Authorization']
-      
+
       setAuthState({
         user: null,
         isAuthenticated: false,
@@ -141,7 +150,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Store new tokens
       localStorage.setItem('access_token', access_token)
       localStorage.setItem('refresh_token', newRefreshToken)
-      
+
       // Set authorization header
       authApi.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
 
@@ -152,18 +161,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         accessToken: access_token,
       })
     } catch (error) {
-      // Refresh failed, logout user
+      // Refresh failed, disconnect WebSockets and logout user
+      const { handleSessionExpiration } = await import('@/utils/websocketCleanup')
+      handleSessionExpiration()
+
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')
       delete authApi.defaults.headers.common['Authorization']
-      
+
       setAuthState({
         user: null,
         isAuthenticated: false,
         isLoading: false,
         accessToken: null,
       })
-      
+
       throw error
     }
   }

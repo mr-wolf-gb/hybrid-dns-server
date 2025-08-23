@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ClockIcon as Clock, 
-  ExclamationTriangleIcon as AlertTriangle, 
-  CheckCircleIcon as CheckCircle, 
-  ArrowPathIcon as RotateCcw, 
+import {
+  ClockIcon as Clock,
+  ExclamationTriangleIcon as AlertTriangle,
+  CheckCircleIcon as CheckCircle,
+  ArrowPathIcon as RotateCcw,
   InformationCircleIcon as Info,
-  TrashIcon as Trash2 
+  TrashIcon as Trash2
 } from '@heroicons/react/24/outline';
 
 interface RollbackCandidate {
@@ -74,7 +74,7 @@ const RollbackManager: React.FC = () => {
     try {
       setIsRollingBack(true);
       let endpoint = '';
-      
+
       switch (candidate.type) {
         case 'full_configuration':
           endpoint = `/api/rollback/configuration/${candidate.backup_id}`;
@@ -119,17 +119,22 @@ const RollbackManager: React.FC = () => {
     const units = ['B', 'KB', 'MB', 'GB'];
     let size = bytes;
     let unitIndex = 0;
-    
+
     while (size >= 1024 && unitIndex < units.length - 1) {
       size /= 1024;
       unitIndex++;
     }
-    
+
     return `${size.toFixed(1)} ${units[unitIndex]}`;
   };
 
   const formatTimestamp = (timestamp: string): string => {
-    return new Date(timestamp).toLocaleString();
+    try {
+      const date = new Date(timestamp);
+      return isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleString();
+    } catch (error) {
+      return 'Invalid date';
+    }
   };
 
   const getTypeIcon = (type: string) => {
@@ -169,7 +174,7 @@ const RollbackManager: React.FC = () => {
           <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
             Configuration Rollback Manager
           </h3>
-          
+
           {/* Filter Controls */}
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -264,7 +269,7 @@ const RollbackManager: React.FC = () => {
             <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
               Rollback Safety Test Results
             </h3>
-            
+
             <div className="space-y-4">
               <div className={`flex items-center space-x-2 ${safetyResult.safe ? 'text-green-600' : 'text-red-600'}`}>
                 {safetyResult.safe ? (

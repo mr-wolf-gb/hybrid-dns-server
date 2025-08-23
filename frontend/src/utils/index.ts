@@ -6,8 +6,16 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// Format date utilities
-export const formatDateTime = (date: string | Date): string => {
+// Safe date validation utility
+export const isValidDate = (date: any): boolean => {
+  if (!date) return false
+  const d = new Date(date)
+  return d instanceof Date && !isNaN(d.getTime())
+}
+
+// Format date utilities with safe handling
+export const formatDateTime = (date: string | Date | null | undefined): string => {
+  if (!isValidDate(date)) return 'Invalid date'
   return new Intl.DateTimeFormat('en-US', {
     year: 'numeric',
     month: 'short',
@@ -15,28 +23,32 @@ export const formatDateTime = (date: string | Date): string => {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-  }).format(new Date(date))
+  }).format(new Date(date!))
 }
 
-export const formatDate = (date: string | Date): string => {
+export const formatDate = (date: string | Date | null | undefined): string => {
+  if (!isValidDate(date)) return 'Invalid date'
   return new Intl.DateTimeFormat('en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
-  }).format(new Date(date))
+  }).format(new Date(date!))
 }
 
-export const formatTime = (date: string | Date): string => {
+export const formatTime = (date: string | Date | null | undefined): string => {
+  if (!isValidDate(date)) return 'Invalid time'
   return new Intl.DateTimeFormat('en-US', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-  }).format(new Date(date))
+  }).format(new Date(date!))
 }
 
-export const formatRelativeTime = (date: string | Date): string => {
+export const formatRelativeTime = (date: string | Date | null | undefined): string => {
+  if (!isValidDate(date)) return 'Unknown'
+
   const now = new Date()
-  const past = new Date(date)
+  const past = new Date(date!)
   const diffInSeconds = Math.floor((now.getTime() - past.getTime()) / 1000)
 
   if (diffInSeconds < 60) {
@@ -50,6 +62,18 @@ export const formatRelativeTime = (date: string | Date): string => {
   } else {
     const days = Math.floor(diffInSeconds / 86400)
     return `${days} day${days > 1 ? 's' : ''} ago`
+  }
+}
+
+// Safe date formatting for date-fns formatDistanceToNow
+export const formatDistanceToNowSafe = (date: string | Date | null | undefined): string => {
+  if (!isValidDate(date)) return 'Unknown'
+
+  try {
+    // Use our own relative time formatting to avoid date-fns issues
+    return formatRelativeTime(date)
+  } catch (error) {
+    return 'Unknown'
   }
 }
 

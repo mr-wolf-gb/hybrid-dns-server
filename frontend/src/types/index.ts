@@ -185,15 +185,15 @@ export interface ValidationResult {
 
 export interface ZoneStatistics {
   record_count: number
-  last_modified: string
+  last_modified: string | null
   serial: number
   health_status: string
-  last_check: string
+  last_check: string | null
 }
 
 export interface ZoneHealth {
   status: 'healthy' | 'warning' | 'error' | 'unknown'
-  last_check: string
+  last_check: string | null
   issues: string[]
   response_time?: number
 }

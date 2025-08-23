@@ -226,7 +226,7 @@ class ZoneService(BaseService[Zone]):
             return self.db.query(DNSRecord).filter(DNSRecord.zone_id == zone_id).all()
     
     async def get_zone_statistics(self, zone_id: int) -> Optional[Dict[str, Any]]:
-        """Get statistics for a zone including serial number information"""
+        """Get statistics for a zone including serial number information and health status"""
         zone = await self.get_by_id(zone_id)
         if not zone:
             return None
@@ -264,12 +264,21 @@ class ZoneService(BaseService[Zone]):
         if zone.serial:
             serial_info = await self.validate_serial_number(zone.serial)
         
+        # Get health information
+        health_data = await self.get_zone_health(zone_id)
+        health_status = health_data.get("status", "unknown") if health_data else "unknown"
+        last_check = health_data.get("last_check") if health_data else None
+        
+        # Use updated_at as last_modified
+        last_modified = zone.updated_at.isoformat() if zone.updated_at else None
+        
         return {
             "zone_id": zone_id,
             "zone_name": zone.name,
             "zone_type": zone.zone_type,
             "is_active": zone.is_active,
-            "total_records": total_records,
+            "record_count": total_records,  # Match frontend interface
+            "total_records": total_records,  # Keep for backward compatibility
             "record_counts": record_counts,
             "serial": zone.serial,
             "serial_info": serial_info,
@@ -279,6 +288,9 @@ class ZoneService(BaseService[Zone]):
             "minimum": zone.minimum,
             "created_at": zone.created_at,
             "updated_at": zone.updated_at,
+            "last_modified": last_modified,  # Add for frontend compatibility
+            "last_check": last_check,  # Add for frontend compatibility
+            "health_status": health_status,  # Add for frontend compatibility
             "created_by": zone.created_by,
             "updated_by": zone.updated_by
         }

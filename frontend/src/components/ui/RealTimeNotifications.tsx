@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useRealTimeEvents } from '@/contexts/RealTimeEventContext'
-import { 
-  BellIcon, 
-  CheckIcon, 
+import {
+  BellIcon,
+  CheckIcon,
   XMarkIcon,
   ExclamationTriangleIcon,
   InformationCircleIcon,
@@ -97,7 +97,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, onClose }
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
       <div className="absolute inset-0 bg-black bg-opacity-25" onClick={onClose} />
-      
+
       <div className="absolute right-0 top-0 h-full w-96 bg-white shadow-xl">
         <div className="flex h-full flex-col">
           {/* Header */}
@@ -182,7 +182,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, onClose }
                       <div className="flex-shrink-0">
                         {getSeverityIcon(event.severity)}
                       </div>
-                      
+
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between">
                           <p className="text-sm font-medium text-gray-900">
@@ -190,7 +190,14 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, onClose }
                           </p>
                           <div className="flex items-center space-x-1">
                             <time className="text-xs text-gray-500">
-                              {format(new Date(event.timestamp), 'HH:mm')}
+                              {(() => {
+                                try {
+                                  const date = new Date(event.timestamp);
+                                  return isNaN(date.getTime()) ? 'Invalid' : format(date, 'HH:mm');
+                                } catch {
+                                  return 'Invalid';
+                                }
+                              })()}
                             </time>
                             {!event.acknowledged && (
                               <button
@@ -203,13 +210,20 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, onClose }
                             )}
                           </div>
                         </div>
-                        
+
                         <p className="mt-1 text-sm text-gray-600">
                           {getEventDescription(event)}
                         </p>
-                        
+
                         <div className="mt-2 text-xs text-gray-500">
-                          {format(new Date(event.timestamp), 'MMM d, yyyy HH:mm:ss')}
+                          {(() => {
+                            try {
+                              const date = new Date(event.timestamp);
+                              return isNaN(date.getTime()) ? 'Invalid date' : format(date, 'MMM d, yyyy HH:mm:ss');
+                            } catch {
+                              return 'Invalid date';
+                            }
+                          })()}
                         </div>
                       </div>
                     </div>
@@ -236,13 +250,13 @@ export const RealTimeNotifications: React.FC = () => {
         title="Notifications"
       >
         <BellIcon className="h-6 w-6" />
-        
+
         {/* Connection indicator */}
         <div className={clsx(
           'absolute -top-1 -right-1 h-3 w-3 rounded-full',
           isConnected ? 'bg-green-400' : 'bg-red-400'
         )} />
-        
+
         {/* Unread count badge */}
         {unreadCount > 0 && (
           <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-xs font-bold leading-none text-white">

@@ -197,6 +197,18 @@ async def logout(
             {"user_id": user_id}
         )
         
+        # Disconnect all WebSocket connections for this user
+        from ...websocket.manager import get_websocket_manager
+        websocket_manager = get_websocket_manager()
+        await websocket_manager.disconnect_user(username, "User logged out")
+        
+        # Broadcast logout event to admin connections
+        await websocket_manager.broadcast_user_logout({
+            "user_id": user_id,
+            "username": username,
+            "logout_time": datetime.utcnow().isoformat()
+        })
+        
         log_security_event("logout", {
             "user_id": user_id,
             "username": username

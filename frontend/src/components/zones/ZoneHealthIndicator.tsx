@@ -1,6 +1,6 @@
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { 
+import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   XCircleIcon,
@@ -10,7 +10,7 @@ import {
 import { zonesService } from '@/services/api'
 import { Zone, ZoneHealth } from '@/types'
 import { Badge } from '@/components/ui'
-import { formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNowSafe } from '@/utils'
 
 interface ZoneHealthIndicatorProps {
   zone: Zone
@@ -19,11 +19,11 @@ interface ZoneHealthIndicatorProps {
   className?: string
 }
 
-const ZoneHealthIndicator: React.FC<ZoneHealthIndicatorProps> = ({ 
-  zone, 
+const ZoneHealthIndicator: React.FC<ZoneHealthIndicatorProps> = ({
+  zone,
   size = 'md',
   showDetails = false,
-  className = '' 
+  className = ''
 }) => {
   const { data: health, isLoading, error, refetch } = useQuery({
     queryKey: ['zone-health', zone.id],
@@ -146,7 +146,7 @@ const ZoneHealthIndicator: React.FC<ZoneHealthIndicatorProps> = ({
         <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
           <ClockIcon className="h-4 w-4" />
           <span>
-            Last checked {formatDistanceToNow(new Date(healthData.last_check), { addSuffix: true })}
+            Last checked {formatDistanceToNowSafe(healthData.last_check)}
           </span>
         </div>
 

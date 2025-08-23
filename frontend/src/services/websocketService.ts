@@ -32,7 +32,7 @@ export enum EventType {
   HEALTH_UPDATE = 'health_update',
   HEALTH_ALERT = 'health_alert',
   FORWARDER_STATUS_CHANGE = 'forwarder_status_change',
-  
+
   // DNS zone events
   ZONE_CREATED = 'zone_created',
   ZONE_UPDATED = 'zone_updated',
@@ -40,22 +40,22 @@ export enum EventType {
   RECORD_CREATED = 'record_created',
   RECORD_UPDATED = 'record_updated',
   RECORD_DELETED = 'record_deleted',
-  
+
   // Security events
   SECURITY_ALERT = 'security_alert',
   RPZ_UPDATE = 'rpz_update',
   THREAT_DETECTED = 'threat_detected',
-  
+
   // System events
   SYSTEM_STATUS = 'system_status',
   BIND_RELOAD = 'bind_reload',
   CONFIG_CHANGE = 'config_change',
-  
+
   // User events
   USER_LOGIN = 'user_login',
   USER_LOGOUT = 'user_logout',
   SESSION_EXPIRED = 'session_expired',
-  
+
   // Connection events
   CONNECTION_ESTABLISHED = 'connection_established',
   SUBSCRIPTION_UPDATED = 'subscription_updated'
@@ -81,7 +81,7 @@ export class WebSocketService {
   ) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     this.url = `${protocol}//${window.location.host}/ws/${connectionType}/${userId}`
-    
+
     this.options = {
       reconnectInterval: 5000,
       maxReconnectAttempts: 5,
@@ -98,7 +98,7 @@ export class WebSocketService {
       }
 
       this.connectionStatus = 'connecting'
-      
+
       try {
         this.ws = new WebSocket(this.url)
 
@@ -110,10 +110,10 @@ export class WebSocketService {
 
           // Start ping/pong to keep connection alive
           this.startPingInterval()
-          
+
           // Process queued messages
           this.processMessageQueue()
-          
+
           resolve()
         }
 
@@ -126,11 +126,19 @@ export class WebSocketService {
           }
         }
 
-        this.ws.onclose = () => {
+        this.ws.onclose = (event) => {
           this.isConnected = false
           this.connectionStatus = 'disconnected'
           this.options.onDisconnect?.()
           this.stopPingInterval()
+
+          // Check if close was due to authentication issues
+          if (event.code === 1008 || event.code === 4001) {
+            // Authentication failed or unauthorized - don't reconnect
+            console.warn('WebSocket closed due to authentication issues, not reconnecting')
+            this.options.autoReconnect = false
+            return
+          }
 
           // Attempt to reconnect if enabled
           if (this.options.autoReconnect && this.reconnectAttempts < (this.options.maxReconnectAttempts || 5)) {
@@ -154,7 +162,7 @@ export class WebSocketService {
 
   disconnect(): void {
     this.options.autoReconnect = false
-    
+
     if (this.reconnectTimeoutId) {
       clearTimeout(this.reconnectTimeoutId)
       this.reconnectTimeoutId = null
@@ -185,17 +193,17 @@ export class WebSocketService {
   // Event subscription methods
   subscribe(eventType: EventType | string, handler: (data: any) => void): void {
     const eventName = typeof eventType === 'string' ? eventType : eventType
-    
+
     if (!this.eventHandlers.has(eventName)) {
       this.eventHandlers.set(eventName, new Set())
     }
-    
+
     this.eventHandlers.get(eventName)!.add(handler)
   }
 
   unsubscribe(eventType: EventType | string, handler: (data: any) => void): void {
     const eventName = typeof eventType === 'string' ? eventType : eventType
-    
+
     if (this.eventHandlers.has(eventName)) {
       this.eventHandlers.get(eventName)!.delete(handler)
     }
@@ -204,7 +212,7 @@ export class WebSocketService {
   subscribeToEvents(eventTypes: (EventType | string)[]): void {
     const events = eventTypes.map(e => typeof e === 'string' ? e : e)
     this.subscribedEvents = events
-    
+
     this.sendMessage({
       type: 'subscribe',
       events: events
@@ -236,7 +244,7 @@ export class WebSocketService {
   private handleMessage(message: WebSocketMessage): void {
     // Call global message handler
     this.options.onMessage?.(message)
-    
+
     // Call specific event handlers
     if (this.eventHandlers.has(message.type)) {
       this.eventHandlers.get(message.type)!.forEach(handler => {
@@ -247,7 +255,7 @@ export class WebSocketService {
         }
       })
     }
-    
+
     // Handle system messages
     this.handleSystemMessage(message)
   }
@@ -257,25 +265,26 @@ export class WebSocketService {
       case 'pong':
         // Handle pong response
         break
-      
+
       case EventType.CONNECTION_ESTABLISHED:
         console.log('WebSocket connection established:', message.data)
         break
-      
+
       case EventType.SUBSCRIPTION_UPDATED:
         console.log('Event subscription updated:', message.data)
         break
-      
+
       case EventType.SESSION_EXPIRED:
-        // Handle session expiration
-        console.warn('Session expired, redirecting to login')
+        // Handle session expiration - disconnect and redirect
+        console.warn('Session expired, disconnecting WebSocket and redirecting to login')
+        this.disconnect()
         window.location.href = '/login'
         break
-      
+
       case 'stats':
         console.log('WebSocket stats:', message.data)
         break
-      
+
       case 'error':
         console.error('WebSocket error:', message.data)
         break
@@ -326,15 +335,37 @@ export function getWebSocketService(
   options?: WebSocketOptions
 ): WebSocketService {
   const key = `${connectionType}-${userId}`
-  
+
   if (!connections.has(key)) {
     connections.set(key, new WebSocketService(connectionType, userId, options))
   }
-  
+
   return connections.get(key)!
 }
 
 export function disconnectAll(): void {
   connections.forEach(service => service.disconnect())
+  connections.clear()
+}
+
+export function disconnectAllForUser(userId: string): void {
+  const keysToRemove: string[] = []
+
+  connections.forEach((service, key) => {
+    if (key.includes(`-${userId}`)) {
+      service.disconnect()
+      keysToRemove.push(key)
+    }
+  })
+
+  keysToRemove.forEach(key => connections.delete(key))
+}
+
+export function forceDisconnectAll(): void {
+  connections.forEach(service => {
+    // Force immediate disconnection without reconnection
+    service.options.autoReconnect = false
+    service.disconnect()
+  })
   connections.clear()
 }

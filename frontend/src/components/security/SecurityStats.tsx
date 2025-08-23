@@ -117,8 +117,8 @@ const SecurityStats: React.FC<SecurityStatsProps> = ({
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
       {/* Category Distribution */}
-      <Card 
-        title="Rule Categories" 
+      <Card
+        title="Rule Categories"
         description="Distribution of rules by category"
         className="col-span-1"
       >
@@ -134,8 +134,8 @@ const SecurityStats: React.FC<SecurityStatsProps> = ({
       </Card>
 
       {/* Blocks Over Time */}
-      <Card 
-        title="Blocked Queries (24h)" 
+      <Card
+        title="Blocked Queries (24h)"
         description="Blocked queries over the last 24 hours"
         className="col-span-1 lg:col-span-2"
       >
@@ -151,8 +151,8 @@ const SecurityStats: React.FC<SecurityStatsProps> = ({
       </Card>
 
       {/* Top Blocked Domains */}
-      <Card 
-        title="Top Blocked Domains" 
+      <Card
+        title="Top Blocked Domains"
         description="Most frequently blocked domains"
         className="col-span-1 lg:col-span-2"
       >
@@ -168,8 +168,8 @@ const SecurityStats: React.FC<SecurityStatsProps> = ({
       </Card>
 
       {/* Threat Feed Status */}
-      <Card 
-        title="Threat Feed Status" 
+      <Card
+        title="Threat Feed Status"
         description="Status of configured threat feeds"
         className="col-span-1"
       >
@@ -190,7 +190,14 @@ const SecurityStats: React.FC<SecurityStatsProps> = ({
                     Updated
                   </div>
                   <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {new Date(feed.last_update).toLocaleDateString()}
+                    {(() => {
+                      try {
+                        const date = new Date(feed.last_update);
+                        return isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleDateString();
+                      } catch {
+                        return 'Invalid date';
+                      }
+                    })()}
                   </div>
                 </div>
               </div>
@@ -204,8 +211,8 @@ const SecurityStats: React.FC<SecurityStatsProps> = ({
       </Card>
 
       {/* Security Summary */}
-      <Card 
-        title="Security Summary" 
+      <Card
+        title="Security Summary"
         description="Key security metrics"
         className="col-span-1 lg:col-span-3"
       >
@@ -218,7 +225,7 @@ const SecurityStats: React.FC<SecurityStatsProps> = ({
               Blocked Today
             </div>
           </div>
-          
+
           <div className="text-center p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
             <div className="text-3xl font-bold text-orange-600 dark:text-orange-400">
               {formatNumber(securityStats?.blocked_this_week || 0)}
@@ -227,7 +234,7 @@ const SecurityStats: React.FC<SecurityStatsProps> = ({
               Blocked This Week
             </div>
           </div>
-          
+
           <div className="text-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
             <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
               {formatNumber(securityStats?.blocked_this_month || 0)}
@@ -258,7 +265,14 @@ const SecurityStats: React.FC<SecurityStatsProps> = ({
                     )}
                   </div>
                   <div className="text-gray-500 dark:text-gray-400">
-                    {new Date(query.timestamp).toLocaleTimeString()}
+                    {(() => {
+                      try {
+                        const date = new Date(query.timestamp);
+                        return isNaN(date.getTime()) ? 'Invalid time' : date.toLocaleTimeString();
+                      } catch {
+                        return 'Invalid time';
+                      }
+                    })()}
                   </div>
                 </div>
               ))}

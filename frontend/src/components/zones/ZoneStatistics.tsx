@@ -1,6 +1,6 @@
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { 
+import {
   ChartBarIcon,
   ClockIcon,
   DocumentTextIcon,
@@ -13,7 +13,7 @@ import {
 import { zonesService } from '@/services/api'
 import { Zone, ZoneStatistics as ZoneStatsType } from '@/types'
 import { Badge } from '@/components/ui'
-import { formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNowSafe } from '@/utils'
 
 interface ZoneStatisticsProps {
   zone: Zone
@@ -136,7 +136,7 @@ const ZoneStatistics: React.FC<ZoneStatisticsProps> = ({ zone, className = '' })
                 </span>
               </div>
               <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                {formatDistanceToNow(new Date(stats.last_modified), { addSuffix: true })}
+                {formatDistanceToNowSafe(stats.last_modified)}
               </div>
             </div>
 
@@ -148,7 +148,7 @@ const ZoneStatistics: React.FC<ZoneStatisticsProps> = ({ zone, className = '' })
                 </span>
               </div>
               <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                {formatDistanceToNow(new Date(stats.last_check), { addSuffix: true })}
+                {formatDistanceToNowSafe(stats.last_check)}
               </div>
             </div>
           </div>
@@ -170,7 +170,7 @@ const ZoneStatistics: React.FC<ZoneStatisticsProps> = ({ zone, className = '' })
                 <div className="flex items-center space-x-2">
                   {getHealthStatusBadge(stats.health_status)}
                   <span className="text-sm text-gray-600 dark:text-gray-400">
-                    Last checked {formatDistanceToNow(new Date(stats.last_check), { addSuffix: true })}
+                    Last checked {formatDistanceToNowSafe(stats.last_check)}
                   </span>
                 </div>
               </div>
@@ -193,7 +193,7 @@ const ZoneStatistics: React.FC<ZoneStatisticsProps> = ({ zone, className = '' })
             <h4 className="text-md font-medium text-gray-900 dark:text-gray-100 mb-4">
               Zone Configuration
             </h4>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-3">
                 <div>
@@ -209,7 +209,7 @@ const ZoneStatistics: React.FC<ZoneStatisticsProps> = ({ zone, className = '' })
                   <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">{zone.expire}s</span>
                 </div>
               </div>
-              
+
               <div className="space-y-3">
                 <div>
                   <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Email:</span>
@@ -218,13 +218,13 @@ const ZoneStatistics: React.FC<ZoneStatisticsProps> = ({ zone, className = '' })
                 <div>
                   <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Created:</span>
                   <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">
-                    {formatDistanceToNow(new Date(zone.created_at), { addSuffix: true })}
+                    {formatDistanceToNowSafe(zone.created_at)}
                   </span>
                 </div>
                 <div>
                   <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Updated:</span>
                   <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">
-                    {formatDistanceToNow(new Date(zone.updated_at), { addSuffix: true })}
+                    {formatDistanceToNowSafe(zone.updated_at)}
                   </span>
                 </div>
               </div>

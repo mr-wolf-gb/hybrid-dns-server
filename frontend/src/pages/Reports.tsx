@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  DocumentTextIcon, 
-  ClockIcon, 
+import {
+  DocumentTextIcon,
+  ClockIcon,
   ChartBarIcon,
   DocumentArrowDownIcon,
   PlusIcon,
@@ -45,7 +45,7 @@ const Reports: React.FC = () => {
   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
   const [schedules, setSchedules] = useState<ReportSchedule[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Modal states
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
@@ -64,7 +64,7 @@ const Reports: React.FC = () => {
         reportsApi.getTemplates(),
         reportsApi.getSchedules()
       ]);
-      
+
       setTemplates(templatesResponse.data);
       setSchedules(schedulesResponse.data);
     } catch (error) {
@@ -87,7 +87,7 @@ const Reports: React.FC = () => {
 
   const handleDeleteTemplate = async (templateId: string) => {
     if (!confirm('Are you sure you want to delete this template?')) return;
-    
+
     try {
       await reportsApi.deleteTemplate(templateId);
       toast.success('Template deleted successfully');
@@ -110,7 +110,7 @@ const Reports: React.FC = () => {
 
   const handleDeleteSchedule = async (scheduleId: string) => {
     if (!confirm('Are you sure you want to delete this schedule?')) return;
-    
+
     try {
       await reportsApi.deleteSchedule(scheduleId);
       toast.success('Schedule deleted successfully');
@@ -150,7 +150,13 @@ const Reports: React.FC = () => {
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'Never';
-    return new Date(dateString).toLocaleString();
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Invalid date';
+      return date.toLocaleString();
+    } catch (error) {
+      return 'Invalid date';
+    }
   };
 
   const getFrequencyBadgeColor = (frequency: string) => {
@@ -208,33 +214,30 @@ const Reports: React.FC = () => {
         <nav className="-mb-px flex space-x-8">
           <button
             onClick={() => setActiveTab('templates')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'templates'
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'templates'
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
+              }`}
           >
             <DocumentTextIcon className="h-5 w-5 inline mr-2" />
             Templates
           </button>
           <button
             onClick={() => setActiveTab('schedules')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'schedules'
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'schedules'
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
+              }`}
           >
             <ClockIcon className="h-5 w-5 inline mr-2" />
             Schedules
           </button>
           <button
             onClick={() => setActiveTab('analytics')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'analytics'
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'analytics'
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
+              }`}
           >
             <ChartBarIcon className="h-5 w-5 inline mr-2" />
             Analytics
@@ -313,9 +316,8 @@ const Reports: React.FC = () => {
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${getFrequencyBadgeColor(schedule.frequency)}`}>
                           {schedule.frequency}
                         </span>
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          schedule.enabled ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${schedule.enabled ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                          }`}>
                           {schedule.enabled ? 'Enabled' : 'Disabled'}
                         </span>
                       </div>

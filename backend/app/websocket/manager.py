@@ -138,6 +138,33 @@ class WebSocketManager:
             # Stop broadcasting if no connections remain
             if not self.active_connections and self._running:
                 asyncio.create_task(self.stop_broadcasting())
+
+    async def disconnect_user(self, user_id: str, reason: str = "User logged out"):
+        """Disconnect all WebSocket connections for a specific user"""
+        if user_id not in self.active_connections:
+            return
+        
+        disconnected_count = 0
+        websockets_to_close = []
+        
+        # Collect all websockets for this user
+        for connection_type, websockets in self.active_connections[user_id].items():
+            for websocket in websockets.copy():
+                websockets_to_close.append(websocket)
+        
+        # Close all connections for this user
+        for websocket in websockets_to_close:
+            try:
+                await websocket.close(code=1008, reason=reason)
+                disconnected_count += 1
+            except Exception as e:
+                logger.error(f"Error closing WebSocket for user {user_id}: {e}")
+            finally:
+                # Ensure cleanup even if close fails
+                self.disconnect(websocket)
+        
+        logger.info(f"Disconnected {disconnected_count} WebSocket connections for user {user_id}: {reason}")
+        return disconnected_count
     
     async def send_personal_message(self, message: Dict[str, Any], websocket: WebSocket):
         """Send a message to a specific WebSocket connection"""

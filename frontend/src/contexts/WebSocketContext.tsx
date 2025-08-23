@@ -328,9 +328,21 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     if (user) {
       connectAll();
     } else {
+      // Disconnect all connections when user logs out
       disconnectAll();
+      // Clear connection tracking
+      setConnectedTypes(new Set());
+      // Clear event handlers
+      setEventHandlers([]);
     }
   }, [user, connectAll, disconnectAll]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      disconnectAll();
+    };
+  }, [disconnectAll]);
 
   const contextValue: WebSocketContextType = {
     healthConnection,

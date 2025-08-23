@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useRealTimeEvents } from '@/contexts/RealTimeEventContext'
-import { 
+import {
   WifiIcon,
   ExclamationTriangleIcon,
   ArrowPathIcon,
@@ -14,18 +14,18 @@ interface ConnectionStatusProps {
   className?: string
 }
 
-export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ 
-  showDetails = false, 
-  className = '' 
+export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
+  showDetails = false,
+  className = ''
 }) => {
   const [showTooltip, setShowTooltip] = useState(false)
-  const { 
-    isConnected, 
-    connectionStatus, 
-    reconnectAttempts, 
+  const {
+    isConnected,
+    connectionStatus,
+    reconnectAttempts,
     connectionStats,
     systemStatus,
-    getConnectionStats 
+    getConnectionStats
   } = useRealTimeEvents()
 
   const getStatusColor = () => {
@@ -71,7 +71,7 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
 
   if (!showDetails) {
     return (
-      <div 
+      <div
         className={clsx('relative flex items-center space-x-2', className)}
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
@@ -80,7 +80,7 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
         <span className={clsx('text-sm font-medium', getStatusColor())}>
           {getStatusText()}
         </span>
-        
+
         {reconnectAttempts > 0 && (
           <span className="text-xs text-gray-500">
             (Attempt {reconnectAttempts})
@@ -127,7 +127,7 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
             </p>
           </div>
         </div>
-        
+
         <button
           onClick={getConnectionStats}
           className="rounded-md p-1 text-gray-400 hover:text-gray-500"
@@ -207,10 +207,17 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
               </dd>
             </div>
           </div>
-          
+
           {systemStatus.uptime && (
             <div className="mt-2 text-xs text-gray-500">
-              Last updated: {format(new Date(systemStatus.uptime), 'MMM d, yyyy HH:mm:ss')}
+              Last updated: {(() => {
+                try {
+                  const date = new Date(systemStatus.uptime);
+                  return isNaN(date.getTime()) ? 'Invalid date' : format(date, 'MMM d, yyyy HH:mm:ss');
+                } catch {
+                  return 'Invalid date';
+                }
+              })()}
             </div>
           )}
         </div>
