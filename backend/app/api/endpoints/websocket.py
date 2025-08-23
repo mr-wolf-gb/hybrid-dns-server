@@ -93,6 +93,13 @@ async def websocket_endpoint(
     try:
         await websocket_manager.connect(websocket, user.username, connection_type)
         logger.info(f"WebSocket connected: user={user.username}, type={connection_type}")
+    except Exception as e:
+        logger.error(f"Failed to connect WebSocket for user {user.username}: {e}")
+        try:
+            await websocket.close(code=1011, reason="Internal server error during connection")
+        except:
+            pass
+        return
         
         # Create automatic subscription for this connection
         connection_id = f"{user.username}_{connection_type}_{datetime.utcnow().timestamp()}"

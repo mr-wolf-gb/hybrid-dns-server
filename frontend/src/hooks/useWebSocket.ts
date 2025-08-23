@@ -222,6 +222,7 @@ export const useWebSocket = (config: WebSocketConfig): [WebSocketState, WebSocke
       };
 
       ws.onerror = (error) => {
+        console.error('WebSocket connection error:', error);
         setState(prev => ({
           ...prev,
           error: 'WebSocket connection error',

@@ -32,5 +32,9 @@ api_router.include_router(reports.router, prefix="/reports", tags=["Reports & An
 # WebSocket routes
 api_router.include_router(websocket.router, prefix="/websocket", tags=["WebSocket"])
 
+# WebSocket health check
+from .endpoints import websocket_health
+api_router.include_router(websocket_health.router, prefix="/websocket", tags=["WebSocket Health"])
+
 # WebSocket routes for production use
 # Note: WebSocket demo routes removed for production deployment

@@ -148,8 +148,9 @@ export class WebSocketService {
 
         this.ws.onerror = (error) => {
           this.connectionStatus = 'error'
+          console.error('WebSocket connection error:', error)
           this.options.onError?.(error)
-          reject(error)
+          reject(new Error('WebSocket connection failed - check server resources and network connectivity'))
         }
 
       } catch (error) {

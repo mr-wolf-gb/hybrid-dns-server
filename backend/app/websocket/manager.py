@@ -74,10 +74,35 @@ class WebSocketManager:
         # Message queue for reliable delivery
         self._message_queue: asyncio.Queue = asyncio.Queue()
         self._queue_processor_task: Optional[asyncio.Task] = None
+        # Connection limits to prevent resource exhaustion
+        self.max_connections_per_user = 10
+        self.max_total_connections = 1000
     
     async def connect(self, websocket: WebSocket, user_id: str, connection_type: str = "health"):
         """Accept a new WebSocket connection"""
-        await websocket.accept()
+        # Check connection limits before accepting
+        total_connections = len(self.connection_metadata)
+        if total_connections >= self.max_total_connections:
+            logger.warning(f"Maximum total connections ({self.max_total_connections}) reached, rejecting connection for user {user_id}")
+            await websocket.close(code=1013, reason="Server overloaded - too many connections")
+            return
+        
+        # Check per-user connection limits
+        user_connections = 0
+        if user_id in self.active_connections:
+            for conn_type_set in self.active_connections[user_id].values():
+                user_connections += len(conn_type_set)
+        
+        if user_connections >= self.max_connections_per_user:
+            logger.warning(f"Maximum connections per user ({self.max_connections_per_user}) reached for user {user_id}")
+            await websocket.close(code=1013, reason="Too many connections for this user")
+            return
+        
+        try:
+            await websocket.accept()
+        except Exception as e:
+            logger.error(f"Failed to accept WebSocket connection for user {user_id}: {e}")
+            return
         
         # Initialize user connections if not exists
         if user_id not in self.active_connections:
@@ -97,7 +122,7 @@ class WebSocketManager:
             "subscribed_events": self._get_default_events_for_connection_type(connection_type)
         }
         
-        logger.info(f"WebSocket connected for user {user_id}, type: {connection_type}")
+        logger.info(f"WebSocket connected for user {user_id}, type: {connection_type} (total: {total_connections + 1})")
         
         # Send initial connection confirmation
         await self.send_personal_message({
