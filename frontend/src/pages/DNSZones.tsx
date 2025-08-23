@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { 
-  PlusIcon, 
-  PencilIcon, 
-  TrashIcon, 
+import {
+  PlusIcon,
+  PencilIcon,
+  TrashIcon,
   EyeIcon,
   ArrowPathIcon,
   PlayIcon,
@@ -42,7 +42,7 @@ const DNSZones: React.FC = () => {
   const [isImportExportModalOpen, setIsImportExportModalOpen] = useState(false)
   const [importExportMode, setImportExportMode] = useState<'import' | 'export'>('export')
   const [isStatisticsModalOpen, setIsStatisticsModalOpen] = useState(false)
-  
+
   // Filtering and pagination state
   const [searchTerm, setSearchTerm] = useState('')
   const [zoneTypeFilter, setZoneTypeFilter] = useState<string>('all')
@@ -51,20 +51,33 @@ const DNSZones: React.FC = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10)
   const [sortField, setSortField] = useState<keyof Zone>('name')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
-  
+
   const queryClient = useQueryClient()
 
   // Fetch zones
-  const { data: zonesResponse, isLoading } = useQuery({
+  const { data: zonesResponse, isLoading, error } = useQuery({
     queryKey: ['zones'],
     queryFn: () => zonesService.getZones(),
+    retry: (failureCount, error: any) => {
+      // Don't retry on authentication errors
+      if (error?.response?.status === 401) {
+        return false
+      }
+      return failureCount < 3
+    },
   })
 
-  // Support both array and paginated response shapes
+  // Extract zones from paginated response
   const zones: Zone[] = useMemo(() => {
-    const payload = zonesResponse?.data as any
-    if (!payload) return []
-    return Array.isArray(payload) ? payload : (payload.items ?? [])
+    if (!zonesResponse?.data) return []
+    // Ensure we have the expected structure
+    const data = zonesResponse.data
+    if (Array.isArray(data)) {
+      // Handle legacy array response
+      return data
+    }
+    // Handle paginated response
+    return data.items || []
   }, [zonesResponse])
 
   // Debounced search function
@@ -78,13 +91,15 @@ const DNSZones: React.FC = () => {
 
   // Filter and sort zones
   const filteredAndSortedZones = useMemo(() => {
-    let filtered = zones.filter((zone) => {
+    // Ensure zones is always an array
+    const safeZones = Array.isArray(zones) ? zones : []
+    let filtered = safeZones.filter((zone) => {
       const matchesSearch = zone.name.toLowerCase().includes(searchTerm.toLowerCase())
       const matchesType = zoneTypeFilter === 'all' || zone.zone_type === zoneTypeFilter
-      const matchesStatus = statusFilter === 'all' || 
+      const matchesStatus = statusFilter === 'all' ||
         (statusFilter === 'active' && zone.is_active) ||
         (statusFilter === 'inactive' && !zone.is_active)
-      
+
       return matchesSearch && matchesType && matchesStatus
     })
 
@@ -92,17 +107,17 @@ const DNSZones: React.FC = () => {
     filtered.sort((a, b) => {
       const aValue = a[sortField]
       const bValue = b[sortField]
-      
+
       if (typeof aValue === 'string' && typeof bValue === 'string') {
-        return sortDirection === 'asc' 
+        return sortDirection === 'asc'
           ? aValue.localeCompare(bValue)
           : bValue.localeCompare(aValue)
       }
-      
+
       if (typeof aValue === 'number' && typeof bValue === 'number') {
         return sortDirection === 'asc' ? aValue - bValue : bValue - aValue
       }
-      
+
       return 0
     })
 
@@ -118,12 +133,14 @@ const DNSZones: React.FC = () => {
 
   // Zone statistics
   const zoneStats = useMemo(() => {
+    // Ensure zones is always an array
+    const safeZones = Array.isArray(zones) ? zones : []
     return {
-      total: zones.length,
-      active: zones.filter(zone => zone.is_active).length,
-      master: zones.filter(zone => zone.zone_type === 'master').length,
-      slave: zones.filter(zone => zone.zone_type === 'slave').length,
-      forward: zones.filter(zone => zone.zone_type === 'forward').length,
+      total: safeZones.length,
+      active: safeZones.filter(zone => zone.is_active).length,
+      master: safeZones.filter(zone => zone.zone_type === 'master').length,
+      slave: safeZones.filter(zone => zone.zone_type === 'slave').length,
+      forward: safeZones.filter(zone => zone.zone_type === 'forward').length,
     }
   }, [zones])
 
@@ -268,11 +285,11 @@ const DNSZones: React.FC = () => {
         >
           <EllipsisVerticalIcon className="h-4 w-4" />
         </Button>
-        
+
         {isOpen && (
           <>
-            <div 
-              className="fixed inset-0 z-10" 
+            <div
+              className="fixed inset-0 z-10"
               onClick={() => setIsOpen(false)}
             />
             <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg z-20 border border-gray-200 dark:border-gray-700">
@@ -397,7 +414,7 @@ const DNSZones: React.FC = () => {
       header: 'Type',
       sortable: true,
       render: (zone: Zone) => (
-        <Badge 
+        <Badge
           variant={zone.zone_type === 'master' ? 'success' : zone.zone_type === 'slave' ? 'info' : 'default'}
         >
           {zone.zone_type}
@@ -460,6 +477,45 @@ const DNSZones: React.FC = () => {
         onBack={() => setViewingZoneRecords(null)}
         onCreateRecord={handleCreateRecord}
       />
+    )
+  }
+
+  // Handle error state
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="border-b border-gray-200 dark:border-gray-700 pb-4">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+            DNS Zones
+          </h1>
+        </div>
+        <Card className="p-6">
+          <div className="text-center">
+            <ExclamationCircleIcon className="mx-auto h-12 w-12 text-red-400" />
+            <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+              Failed to load zones
+            </h3>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {(error as any)?.response?.status === 401
+                ? 'Please log in to access DNS zones.'
+                : 'There was an error loading the DNS zones. Please try again.'}
+            </p>
+            <div className="mt-6">
+              <Button
+                onClick={() => {
+                  if ((error as any)?.response?.status === 401) {
+                    window.location.href = '/login'
+                  } else {
+                    queryClient.invalidateQueries({ queryKey: ['zones'] })
+                  }
+                }}
+              >
+                {(error as any)?.response?.status === 401 ? 'Go to Login' : 'Retry'}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      </div>
     )
   }
 
@@ -629,7 +685,7 @@ const DNSZones: React.FC = () => {
             />
           </div>
         </div>
-        
+
         {/* Results summary */}
         <div className="mt-4 flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
           <div>
@@ -662,7 +718,7 @@ const DNSZones: React.FC = () => {
           sortDirection={sortDirection}
           onSort={handleSort}
         />
-        
+
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
@@ -679,7 +735,7 @@ const DNSZones: React.FC = () => {
                 >
                   Previous
                 </Button>
-                
+
                 {/* Page numbers */}
                 <div className="flex items-center space-x-1">
                   {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
@@ -693,7 +749,7 @@ const DNSZones: React.FC = () => {
                     } else {
                       pageNum = currentPage - 2 + i
                     }
-                    
+
                     return (
                       <Button
                         key={pageNum}
@@ -707,7 +763,7 @@ const DNSZones: React.FC = () => {
                     )
                   })}
                 </div>
-                
+
                 <Button
                   variant="outline"
                   size="sm"
@@ -744,8 +800,8 @@ const DNSZones: React.FC = () => {
           onClose={() => setIsRecordModalOpen(false)}
           onSuccess={() => {
             setIsRecordModalOpen(false)
-            queryClient.invalidateQueries({ 
-              queryKey: ['records', viewingZoneRecords.id] 
+            queryClient.invalidateQueries({
+              queryKey: ['records', viewingZoneRecords.id]
             })
           }}
         />
@@ -778,7 +834,7 @@ const DNSZones: React.FC = () => {
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
             <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setIsStatisticsModalOpen(false)} />
-            
+
             <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
               <div className="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                 <div className="flex items-center justify-between mb-4">
@@ -795,7 +851,7 @@ const DNSZones: React.FC = () => {
                     </svg>
                   </button>
                 </div>
-                
+
                 <ZoneStatistics zone={selectedZone} />
               </div>
             </div>

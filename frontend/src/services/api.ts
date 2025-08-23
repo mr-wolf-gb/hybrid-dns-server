@@ -139,7 +139,7 @@ export const zonesService = {
     limit?: number
     zone_type?: string
     active_only?: boolean
-  }): Promise<AxiosResponse<Zone[]>> => {
+  }): Promise<AxiosResponse<PaginatedResponse<Zone>>> => {
     const searchParams = new URLSearchParams()
     if (params?.skip !== undefined) searchParams.append('skip', params.skip.toString())
     if (params?.limit !== undefined) searchParams.append('limit', params.limit.toString())
@@ -191,8 +191,28 @@ export const zonesService = {
 
 // DNS Records API
 export const recordsService = {
-  getRecords: (zone_id: number): Promise<AxiosResponse<DNSRecord[]>> =>
-    api.get(`/zones/${zone_id}/records`),
+  getRecords: (zone_id: number, params?: {
+    record_type?: string
+    name?: string
+    search?: string
+    active_only?: boolean
+    skip?: number
+    limit?: number
+    sort_by?: string
+    sort_order?: string
+  }): Promise<AxiosResponse<PaginatedResponse<DNSRecord>>> => {
+    const searchParams = new URLSearchParams()
+    if (params?.record_type) searchParams.append('record_type', params.record_type)
+    if (params?.name) searchParams.append('name', params.name)
+    if (params?.search) searchParams.append('search', params.search)
+    if (params?.active_only !== undefined) searchParams.append('active_only', params.active_only.toString())
+    if (params?.skip !== undefined) searchParams.append('skip', params.skip.toString())
+    if (params?.limit !== undefined) searchParams.append('limit', params.limit.toString())
+    if (params?.sort_by) searchParams.append('sort_by', params.sort_by)
+    if (params?.sort_order) searchParams.append('sort_order', params.sort_order)
+    
+    return api.get(`/zones/${zone_id}/records?${searchParams.toString()}`)
+  },
 
   getRecord: (zone_id: number, record_id: number): Promise<AxiosResponse<DNSRecord>> =>
     api.get(`/zones/${zone_id}/records/${record_id}`),

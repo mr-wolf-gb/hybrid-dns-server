@@ -29,27 +29,47 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
   const [showFilters, setShowFilters] = useState(false)
   const [selectedRecords, setSelectedRecords] = useState<Set<number>>(new Set())
   const [selectAll, setSelectAll] = useState(false)
-  
+
   const queryClient = useQueryClient()
 
   // Available record types for filtering (moved to RecordTypeFilter component)
 
   // Fetch records for the zone
-  const { data: records, isLoading } = useQuery({
+  const { data: recordsResponse, isLoading, error } = useQuery({
     queryKey: ['records', zone.id],
     queryFn: () => recordsService.getRecords(zone.id),
+    retry: (failureCount, error: any) => {
+      // Don't retry on authentication errors
+      if (error?.response?.status === 401) {
+        return false
+      }
+      return failureCount < 3
+    },
   })
+
+  // Extract records from paginated response
+  const records = useMemo(() => {
+    if (!recordsResponse?.data) return []
+    // Handle paginated response
+    const data = recordsResponse.data
+    if (Array.isArray(data)) {
+      // Handle legacy array response
+      return data
+    }
+    // Handle paginated response
+    return data.items || []
+  }, [recordsResponse])
 
   // Filter and search records
   const filteredRecords = useMemo(() => {
-    if (!records?.data) return []
+    if (!records) return []
 
-    let filtered = records.data
+    let filtered = records
 
     // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(record => 
+      filtered = filtered.filter(record =>
         record.name.toLowerCase().includes(query) ||
         record.value.toLowerCase().includes(query) ||
         record.type.toLowerCase().includes(query) ||
@@ -170,8 +190,8 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
   }
 
   const handleTypeFilter = (type: string) => {
-    setSelectedTypes(prev => 
-      prev.includes(type) 
+    setSelectedTypes(prev =>
+      prev.includes(type)
         ? prev.filter(t => t !== type)
         : [...prev, type]
     )
@@ -240,7 +260,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
           <ArrowLeftIcon className="h-4 w-4 mr-2" />
           Back to Zones
         </Button>
-        
+
         <div className="border-l border-gray-300 dark:border-gray-600 pl-4">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
             DNS Records: {zone.name}
@@ -283,7 +303,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
-            
+
             <RecordTypeFilter
               records={records?.data || []}
               selectedTypes={selectedTypes}
@@ -322,11 +342,11 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
             {hasActiveFilters ? 'Filtered' : 'Total'} Records
           </div>
         </div>
-        
+
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
           <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-            {hasActiveFilters 
-              ? filteredRecords.filter(r => r.is_active).length 
+            {hasActiveFilters
+              ? filteredRecords.filter(r => r.is_active).length
               : (records?.data?.filter(r => r.is_active).length || 0)
             }
           </div>
@@ -334,10 +354,10 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
             Active Records
           </div>
         </div>
-        
+
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
           <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-            {hasActiveFilters 
+            {hasActiveFilters
               ? new Set(filteredRecords.map(r => r.type)).size
               : new Set(records?.data?.map(r => r.type) || []).size
             }
@@ -349,7 +369,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
 
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
           <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-            {hasActiveFilters 
+            {hasActiveFilters
               ? filteredRecords.filter(r => validateRecord(r).status === 'error').length
               : (records?.data?.filter(r => validateRecord(r).status === 'error').length || 0)
             }
@@ -403,7 +423,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
           onDeleteRecord={handleDeleteRecord}
           onToggleRecord={handleToggleRecord}
           emptyMessage={
-            hasActiveFilters 
+            hasActiveFilters
               ? "No records match your current filters. Try adjusting your search or clearing filters."
               : `No DNS records found for ${zone.name}. Create your first record to get started.`
           }
@@ -419,8 +439,8 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
           onClose={() => setIsRecordModalOpen(false)}
           onSuccess={() => {
             setIsRecordModalOpen(false)
-            queryClient.invalidateQueries({ 
-              queryKey: ['records', zone.id] 
+            queryClient.invalidateQueries({
+              queryKey: ['records', zone.id]
             })
           }}
         />
