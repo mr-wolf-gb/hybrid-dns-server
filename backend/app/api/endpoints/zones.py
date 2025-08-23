@@ -826,7 +826,7 @@ async def list_zone_records(
     from ...core.logging_config import get_logger
     
     logger = get_logger(__name__)
-    logger.info(f"User {current_user.get('username')} listing records for zone {zone_id}")
+    logger.info(f"User {current_user.get('username')} listing records for zone {zone_id} (active_only={active_only})")
     
     record_service = RecordService(db)
     
@@ -869,7 +869,7 @@ async def list_zone_records(
             })
         
         result['items'] = serialized_items
-        logger.info(f"Retrieved {len(result['items'])} records for zone {zone.name}")
+        logger.info(f"Retrieved {len(result['items'])} records for zone {zone.name} (total={result.get('total', 'unknown')}, active_only={active_only})")
         return result
         
     except ValueError as e:
@@ -880,218 +880,109 @@ async def list_zone_records(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/{zone_id}/records", response_model=Dict[str, Any])
-async def create_zone_record(
+@router.get("/{zone_id}/records/all", response_model=Dict[str, Any])
+async def list_all_zone_records(
     zone_id: int,
-    record_data: Dict[str, Any],
     db: Session = Depends(get_database_session),
     current_user: dict = Depends(get_current_user)
 ):
-    """Create a new DNS record in the specified zone"""
+    """List ALL DNS records for a zone (including inactive ones)"""
     from ...services.record_service import RecordService
-    from ...services.bind_service import BindService
     from ...core.logging_config import get_logger
     
     logger = get_logger(__name__)
-    logger.info(f"User {current_user.get('username')} creating {record_data.get('type', 'unknown')} record '{record_data.get('name', 'unknown')}' in zone {zone_id}")
+    logger.info(f"User {current_user.get('username')} listing ALL records for zone {zone_id}")
     
     record_service = RecordService(db)
-    bind_service = BindService(db)
     
     try:
-        # Normalize record_data - handle both 'type' and 'record_type' fields
-        if 'type' in record_data and 'record_type' not in record_data:
-            record_data['record_type'] = record_data.pop('type')
+        # Verify zone exists
+        zone = await record_service._get_zone(zone_id)
+        if not zone:
+            raise HTTPException(status_code=404, detail=f"Zone with ID {zone_id} not found")
         
-        # Create record in database
-        record = await record_service.create_record(zone_id, record_data)
+        # Get ALL records (active and inactive)
+        result = await record_service.get_records(
+            zone_id=zone_id,
+            active_only=False,  # Show both active and inactive
+            skip=0,
+            limit=1000,
+            sort_by="name",
+            sort_order="asc"
+        )
         
-        # Update BIND9 configuration
-        try:
-            zone = await record_service._get_zone(zone_id)
-            if zone:
-                await bind_service.update_zone_file(zone)
-                await bind_service.reload_configuration()
-        except Exception as e:
-            logger.error(f"Failed to update BIND9 configuration: {e}")
+        # Convert SQLAlchemy objects to dictionaries for proper serialization
+        serialized_items = []
+        for record in result['items']:
+            serialized_items.append({
+                "id": record.id,
+                "name": record.name,
+                "type": record.record_type,
+                "record_type": record.record_type,
+                "value": record.value,
+                "ttl": record.ttl,
+                "priority": record.priority,
+                "weight": record.weight,
+                "port": record.port,
+                "is_active": record.is_active,
+                "zone_id": record.zone_id,
+                "created_at": record.created_at.isoformat() if record.created_at else None,
+                "updated_at": record.updated_at.isoformat() if record.updated_at else None
+            })
         
-        logger.info(f"Created DNS record {record.name} {record.record_type} in zone {zone_id}")
-        return {
-            "id": record.id,
-            "name": record.name,
-            "type": record.record_type,
-            "record_type": record.record_type,
-            "value": record.value,
-            "ttl": record.ttl,
-            "priority": record.priority,
-            "weight": record.weight,
-            "port": record.port,
-            "is_active": record.is_active,
-            "zone_id": record.zone_id,
-            "created_at": record.created_at.isoformat() if record.created_at else None,
-            "updated_at": record.updated_at.isoformat() if record.updated_at else None
-        }
+        result['items'] = serialized_items
+        logger.info(f"Retrieved {len(result['items'])} total records for zone {zone.name} (including inactive)")
+        return result
         
     except ValueError as e:
-        logger.error(f"Validation error creating record: {e}")
+        logger.error(f"Validation error listing all zone records: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Error creating DNS record: {e}")
+        logger.error(f"Error listing all zone records: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/{zone_id}/records/{record_id}", response_model=Dict[str, Any])
-async def get_zone_record(
+@router.post("/{zone_id}/records/{record_id}/toggle")
+async def toggle_zone_record_status(
     zone_id: int,
     record_id: int,
     db: Session = Depends(get_database_session),
     current_user: dict = Depends(get_current_user)
 ):
-    """Get a specific DNS record from a zone"""
+    """Toggle the active status of a DNS record within a specific zone"""
     from ...services.record_service import RecordService
     from ...core.logging_config import get_logger
     
     logger = get_logger(__name__)
+    logger.info(f"User {current_user.get('username')} toggling record {record_id} status in zone {zone_id}")
+    
     record_service = RecordService(db)
     
     try:
+        # Verify the record belongs to the specified zone first
         record = await record_service.get_record(record_id)
-        if not record or record.zone_id != zone_id:
-            raise HTTPException(status_code=404, detail=f"DNS record with ID {record_id} not found in zone {zone_id}")
+        if not record:
+            raise HTTPException(status_code=404, detail=f"DNS record with ID {record_id} not found")
         
-        return {
-            "id": record.id,
-            "name": record.name,
-            "type": record.record_type,
-            "record_type": record.record_type,
-            "value": record.value,
-            "ttl": record.ttl,
-            "priority": record.priority,
-            "weight": record.weight,
-            "port": record.port,
-            "is_active": record.is_active,
-            "zone_id": record.zone_id,
-            "created_at": record.created_at.isoformat() if record.created_at else None,
-            "updated_at": record.updated_at.isoformat() if record.updated_at else None
-        }
+        if record.zone_id != zone_id:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Record {record_id} does not belong to zone {zone_id}"
+            )
         
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error retrieving DNS record {record_id}: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@router.put("/{zone_id}/records/{record_id}", response_model=Dict[str, Any])
-async def update_zone_record(
-    zone_id: int,
-    record_id: int,
-    record_data: Dict[str, Any],
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Update a DNS record in a zone"""
-    from ...services.record_service import RecordService
-    from ...services.bind_service import BindService
-    from ...core.logging_config import get_logger
-    
-    logger = get_logger(__name__)
-    record_service = RecordService(db)
-    bind_service = BindService(db)
-    
-    try:
-        # Verify record exists and belongs to zone
-        existing_record = await record_service.get_record(record_id)
-        if not existing_record or existing_record.zone_id != zone_id:
-            raise HTTPException(status_code=404, detail=f"DNS record with ID {record_id} not found in zone {zone_id}")
-        
-        # Normalize record_data - handle both 'type' and 'record_type' fields
-        if 'type' in record_data and 'record_type' not in record_data:
-            record_data['record_type'] = record_data.pop('type')
-        
-        # Update record
-        updated_record = await record_service.update_record(record_id, record_data)
+        # Toggle the record status
+        updated_record = await record_service.toggle_record(record_id)
         if not updated_record:
             raise HTTPException(status_code=404, detail=f"DNS record with ID {record_id} not found")
         
-        # Update BIND9 configuration
-        try:
-            zone = await record_service._get_zone(zone_id)
-            if zone:
-                await bind_service.update_zone_file(zone)
-                await bind_service.reload_configuration()
-        except Exception as e:
-            logger.error(f"Failed to update BIND9 configuration: {e}")
+        # Log success and return simple response
+        logger.info(f"DNS record {record_id} toggled successfully in zone {zone_id}")
         
-        return {
-            "id": updated_record.id,
-            "name": updated_record.name,
-            "type": updated_record.record_type,
-            "record_type": updated_record.record_type,
-            "value": updated_record.value,
-            "ttl": updated_record.ttl,
-            "priority": updated_record.priority,
-            "weight": updated_record.weight,
-            "port": updated_record.port,
-            "is_active": updated_record.is_active,
-            "zone_id": updated_record.zone_id,
-            "created_at": updated_record.created_at.isoformat() if updated_record.created_at else None,
-            "updated_at": updated_record.updated_at.isoformat() if updated_record.updated_at else None
-        }
-        
-    except ValueError as e:
-        logger.error(f"Validation error updating record: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error updating DNS record {record_id}: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@router.delete("/{zone_id}/records/{record_id}")
-async def delete_zone_record(
-    zone_id: int,
-    record_id: int,
-    db: Session = Depends(get_database_session),
-    current_user: dict = Depends(get_current_user)
-):
-    """Delete a DNS record from a zone"""
-    from ...services.record_service import RecordService
-    from ...services.bind_service import BindService
-    from ...core.logging_config import get_logger
-    
-    logger = get_logger(__name__)
-    record_service = RecordService(db)
-    bind_service = BindService(db)
-    
-    try:
-        # Verify record exists and belongs to zone
-        record = await record_service.get_record(record_id)
-        if not record or record.zone_id != zone_id:
-            raise HTTPException(status_code=404, detail=f"DNS record with ID {record_id} not found in zone {zone_id}")
-        
-        record_info = f"{record.name} {record.record_type}"
-        
-        # Delete record
-        success = await record_service.delete_record(record_id)
-        if not success:
-            raise HTTPException(status_code=404, detail=f"DNS record with ID {record_id} not found")
-        
-        # Update BIND9 configuration
-        try:
-            zone = await record_service._get_zone(zone_id)
-            if zone:
-                await bind_service.update_zone_file(zone)
-                await bind_service.reload_configuration()
-        except Exception as e:
-            logger.error(f"Failed to update BIND9 configuration: {e}")
-        
-        logger.info(f"Deleted DNS record {record_info}")
-        return {"message": f"DNS record {record_info} deleted successfully"}
+        # Return a simple success response - let frontend refetch data
+        return {"success": True, "message": "Record status updated successfully"}
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error deleting DNS record {record_id}: {e}")
+        logger.error(f"Error toggling DNS record {record_id} in zone {zone_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")

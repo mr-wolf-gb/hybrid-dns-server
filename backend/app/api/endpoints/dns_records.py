@@ -272,6 +272,53 @@ async def toggle_record_status(
         logger.error(f"Error toggling DNS record {record_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@router.post("/zones/{zone_id}/records/{record_id}/toggle", response_model=DNSRecordSchema)
+async def toggle_zone_record_status(
+    zone_id: int,
+    record_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Toggle the active status of a DNS record within a specific zone"""
+    logger.info(f"User {current_user.get('username')} toggling record {record_id} status in zone {zone_id}")
+    
+    record_service = RecordService(db)
+    bind_service = BindService(db)
+    
+    try:
+        # Verify the record belongs to the specified zone
+        record = await record_service.get_record(record_id)
+        if not record:
+            raise HTTPException(status_code=404, detail=f"DNS record with ID {record_id} not found")
+        
+        if record.zone_id != zone_id:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Record {record_id} does not belong to zone {zone_id}"
+            )
+        
+        # Toggle the record status
+        updated_record = await record_service.toggle_record(record_id)
+        
+        # Schedule BIND9 configuration update in background
+        status_text = "activated" if updated_record.is_active else "deactivated"
+        background_tasks.add_task(
+            update_bind_configuration_for_zone,
+            bind_service,
+            zone_id,
+            f"{status_text.capitalize()} {updated_record.record_type} record '{updated_record.name}'"
+        )
+        
+        logger.info(f"DNS record {updated_record.name} {updated_record.record_type} {status_text} in zone {zone_id}")
+        return updated_record
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error toggling DNS record {record_id} in zone {zone_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 @router.post("/records/{record_id}/validate", response_model=ZoneValidationResult)
 async def validate_record(
     record_id: int,

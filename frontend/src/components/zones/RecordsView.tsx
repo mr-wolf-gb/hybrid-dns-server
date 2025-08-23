@@ -5,6 +5,8 @@ import {
   PlusIcon,
   MagnifyingGlassIcon,
   XMarkIcon,
+  EyeIcon,
+  EyeSlashIcon,
 } from '@heroicons/react/24/outline'
 import { recordsService } from '@/services/api'
 import { Zone, DNSRecord } from '@/types'
@@ -29,6 +31,7 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
   const [showFilters, setShowFilters] = useState(false)
   const [selectedRecords, setSelectedRecords] = useState<Set<number>>(new Set())
   const [selectAll, setSelectAll] = useState(false)
+  const [showInactiveRecords, setShowInactiveRecords] = useState(false)
 
   const queryClient = useQueryClient()
 
@@ -36,8 +39,10 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
 
   // Fetch records for the zone
   const { data: recordsResponse, isLoading, error } = useQuery({
-    queryKey: ['records', zone.id],
-    queryFn: () => recordsService.getRecords(zone.id),
+    queryKey: ['records', zone.id, showInactiveRecords],
+    queryFn: () => recordsService.getRecords(zone.id, {
+      active_only: !showInactiveRecords
+    }),
     retry: (failureCount, error: any) => {
       // Don't retry on authentication errors
       if (error?.response?.status === 401) {
@@ -325,10 +330,29 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
             )}
           </div>
 
-          <Button onClick={handleCreateRecord}>
-            <PlusIcon className="h-4 w-4 mr-2" />
-            Add Record
-          </Button>
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowInactiveRecords(!showInactiveRecords)}
+              className={`flex items-center ${showInactiveRecords ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : ''}`}
+            >
+              {showInactiveRecords ? (
+                <>
+                  <EyeSlashIcon className="h-4 w-4 mr-2" />
+                  Hide Inactive
+                </>
+              ) : (
+                <>
+                  <EyeIcon className="h-4 w-4 mr-2" />
+                  Show Inactive
+                </>
+              )}
+            </Button>
+            <Button onClick={handleCreateRecord}>
+              <PlusIcon className="h-4 w-4 mr-2" />
+              Add Record
+            </Button>
+          </div>
         </div>
       </div>
 
