@@ -217,7 +217,7 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
     return true
   }
 
-  // Note: Email conversion to DNS format is handled by the backend template system
+  // Note: Email is validated in standard format but converted to DNS format before submission
 
   // IP address validation
   const validateIPAddress = (value: string) => {
@@ -257,9 +257,18 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
   })
 
   const onSubmit = (data: ZoneFormData) => {
-    // Clean up empty arrays (email conversion is handled by backend)
+    // Convert email from standard format to DNS format
+    const convertEmailToDNSFormat = (email: string) => {
+      if (email.includes('@')) {
+        return email.replace('@', '.')
+      }
+      return email
+    }
+
+    // Clean up empty arrays and convert email format
     const cleanedData = {
       ...data,
+      email: convertEmailToDNSFormat(data.email),
       master_servers: data.master_servers?.filter(server => server.trim() !== '') || [],
       forwarders: data.forwarders?.filter(forwarder => forwarder.trim() !== '') || [],
     }

@@ -688,6 +688,7 @@ configure_bind9() {
     mkdir -p /etc/bind/zones
     mkdir -p /etc/bind/rpz
     mkdir -p /var/log/bind
+    mkdir -p /etc/bind/backups
     
     # Copy zone files
     cp -r "$INSTALL_DIR/bind9/zones/"* /etc/bind/zones/
@@ -702,9 +703,11 @@ configure_bind9() {
     chown -R bind:bind /etc/bind/zones
     chown -R bind:bind /etc/bind/rpz
     chown -R bind:bind /var/log/bind
+    chown -R bind:bind /etc/bind/backups
     chmod 755 /etc/bind/zones
     chmod 755 /etc/bind/rpz
     chmod 755 /var/log/bind
+    chmod 755 /etc/bind/backups
     chmod 644 /etc/bind/*.conf
     chmod 644 /etc/bind/*.key 2>/dev/null || true
     chmod 644 /etc/bind/zones/db.* 2>/dev/null || true
@@ -728,6 +731,8 @@ configure_bind9() {
   /etc/bind/zones/** rw,
   /etc/bind/rpz/ rw,
   /etc/bind/rpz/** rw,
+  /etc/bind/backups/ rw,
+  /etc/bind/backups/** rw,
 EOF
             
             # Find the last closing brace and insert before it

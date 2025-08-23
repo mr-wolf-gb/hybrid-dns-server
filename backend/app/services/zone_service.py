@@ -512,8 +512,8 @@ class ZoneService(BaseService[Zone]):
         
         if not zone_data.get('email'):
             errors.append("Zone email is required")
-        elif '@' not in zone_data['email']:
-            errors.append("Zone email must be a valid email address")
+        elif '@' in zone_data['email']:
+            errors.append("Zone email must be in DNS format (use dots instead of @, e.g., admin.example.com)")
         
         # Zone type validation
         valid_types = ['master', 'slave', 'forward']
