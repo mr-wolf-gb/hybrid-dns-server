@@ -93,10 +93,10 @@ const RealTimeHealthMonitor: React.FC<RealTimeHealthMonitorProps> = ({
     subscribe('forwarder_status_change', (data) => {
       setHealthSummary(prev => {
         if (!prev) return prev
-        
+
         return {
           ...prev,
-          forwarder_details: prev.forwarder_details.map(forwarder =>
+          forwarder_details: (prev.forwarder_details || []).map(forwarder =>
             forwarder.id === data.forwarder_id
               ? { ...forwarder, status: data.new_status }
               : forwarder
@@ -164,7 +164,7 @@ const RealTimeHealthMonitor: React.FC<RealTimeHealthMonitorProps> = ({
             </span>
           </div>
         </div>
-        
+
         {lastUpdate && (
           <span className="text-sm text-gray-500 dark:text-gray-400">
             Last update: {formatRelativeTime(lastUpdate)}
@@ -237,7 +237,7 @@ const RealTimeHealthMonitor: React.FC<RealTimeHealthMonitorProps> = ({
         description="Real-time status of all DNS forwarders"
       >
         <div className="space-y-3">
-          {healthSummary.forwarder_details.map((forwarder) => (
+          {(healthSummary.forwarder_details || []).map((forwarder) => (
             <div
               key={forwarder.id}
               className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700"
@@ -253,18 +253,18 @@ const RealTimeHealthMonitor: React.FC<RealTimeHealthMonitorProps> = ({
                   </p>
                 </div>
               </div>
-              
+
               <div className="flex items-center space-x-3">
                 <Badge
                   variant={
                     forwarder.status === 'healthy' ? 'success' :
-                    forwarder.status === 'degraded' ? 'warning' : 'danger'
+                      forwarder.status === 'degraded' ? 'warning' : 'danger'
                   }
                   size="sm"
                 >
                   {forwarder.status.toUpperCase()}
                 </Badge>
-                
+
                 {forwarder.last_checked && (
                   <span className="text-xs text-gray-500 dark:text-gray-400">
                     {formatRelativeTime(forwarder.last_checked)}
@@ -286,9 +286,8 @@ const RealTimeHealthMonitor: React.FC<RealTimeHealthMonitorProps> = ({
             {recentAlerts.map((alert) => (
               <div
                 key={alert.id}
-                className={`p-3 rounded-lg border ${getAlertLevelColor(alert.level)} ${
-                  alert.acknowledged ? 'opacity-60' : ''
-                }`}
+                className={`p-3 rounded-lg border ${getAlertLevelColor(alert.level)} ${alert.acknowledged ? 'opacity-60' : ''
+                  }`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -305,18 +304,18 @@ const RealTimeHealthMonitor: React.FC<RealTimeHealthMonitorProps> = ({
                         </Badge>
                       )}
                     </div>
-                    
+
                     <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mt-1">
                       {alert.message}
                     </p>
-                    
+
                     {alert.forwarder_id && (
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         Forwarder ID: {alert.forwarder_id}
                       </p>
                     )}
                   </div>
-                  
+
                   <span className="text-xs text-gray-500 dark:text-gray-400">
                     {formatRelativeTime(alert.created_at)}
                   </span>

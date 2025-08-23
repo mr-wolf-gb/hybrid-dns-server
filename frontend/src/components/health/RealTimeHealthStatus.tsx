@@ -123,10 +123,10 @@ const RealTimeHealthStatus: React.FC = () => {
         <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
           <div
             className={`h-2 rounded-full transition-all duration-300 ${healthPercentage >= 95
-                ? 'bg-green-500'
-                : healthPercentage >= 80
-                  ? 'bg-yellow-500'
-                  : 'bg-red-500'
+              ? 'bg-green-500'
+              : healthPercentage >= 80
+                ? 'bg-yellow-500'
+                : 'bg-red-500'
               }`}
             style={{ width: `${healthPercentage}%` }}
           />
@@ -167,7 +167,7 @@ const RealTimeHealthStatus: React.FC = () => {
           Forwarder Status
         </h4>
         <div className="max-h-48 overflow-y-auto space-y-2">
-          {healthSummary.forwarder_details.slice(0, 10).map((forwarder) => (
+          {(healthSummary.forwarder_details || []).slice(0, 10).map((forwarder) => (
             <div
               key={forwarder.id}
               className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded-lg"

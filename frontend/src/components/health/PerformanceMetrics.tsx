@@ -273,7 +273,7 @@ const PerformanceMetrics: React.FC = () => {
             Forwarder Performance
           </h4>
           <div className="space-y-3 max-h-64 overflow-y-auto">
-            {metrics.forwarder_metrics
+            {(metrics.forwarder_metrics || [])
               .sort((a, b) => b.success_rate - a.success_rate)
               .map((forwarder) => (
                 <div
