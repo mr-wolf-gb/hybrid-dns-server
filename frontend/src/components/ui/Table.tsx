@@ -42,8 +42,8 @@ function Table<T extends Record<string, any>>({
   }
 
   return (
-    <div className={cn('bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden', className)}>
-      <div className="overflow-x-auto">
+    <div className={cn('bg-white dark:bg-gray-800 rounded-lg shadow', className)}>
+      <div className="overflow-x-auto overflow-y-visible">
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-900">
             <tr>
@@ -104,8 +104,8 @@ function Table<T extends Record<string, any>>({
               </tr>
             ) : (
               data.map((item, index) => (
-                <tr 
-                  key={index} 
+                <tr
+                  key={index}
                   className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
                   {columns.map((column) => (

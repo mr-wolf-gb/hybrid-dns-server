@@ -274,32 +274,101 @@ const DNSZones: React.FC = () => {
 
   const ZoneActionsMenu: React.FC<{ zone: Zone }> = ({ zone }) => {
     const [isOpen, setIsOpen] = useState(false)
+    const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0, placement: 'bottom-right' })
+    const buttonRef = React.useRef<HTMLButtonElement>(null)
+
+    const handleToggleMenu = () => {
+      if (!isOpen && buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect()
+        const viewportHeight = window.innerHeight
+        const viewportWidth = window.innerWidth
+        const menuWidth = 192 // 48 * 4 = 192px (w-48)
+        const menuHeight = 320 // Approximate menu height
+
+        let top = rect.bottom + 4 // 4px gap
+        let left = rect.right - menuWidth
+        let placement = 'bottom-right'
+
+        // Check if menu would go below viewport
+        if (top + menuHeight > viewportHeight && rect.top > menuHeight) {
+          top = rect.top - menuHeight - 4
+          placement = 'top-right'
+        }
+
+        // Check if menu would go outside left edge
+        if (left < 8) {
+          left = rect.left
+          placement = placement.replace('right', 'left') as any
+        }
+
+        // Check if menu would go outside right edge
+        if (left + menuWidth > viewportWidth - 8) {
+          left = viewportWidth - menuWidth - 8
+        }
+
+        setMenuPosition({ top, left, placement })
+      }
+      setIsOpen(!isOpen)
+    }
+
+    React.useEffect(() => {
+      const handleScroll = () => {
+        if (isOpen) {
+          setIsOpen(false)
+        }
+      }
+
+      const handleResize = () => {
+        if (isOpen) {
+          setIsOpen(false)
+        }
+      }
+
+      if (isOpen) {
+        window.addEventListener('scroll', handleScroll, true)
+        window.addEventListener('resize', handleResize)
+        return () => {
+          window.removeEventListener('scroll', handleScroll, true)
+          window.removeEventListener('resize', handleResize)
+        }
+      }
+    }, [isOpen])
 
     return (
-      <div className="relative">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setIsOpen(!isOpen)}
-          className="p-1"
-        >
-          <EllipsisVerticalIcon className="h-4 w-4" />
-        </Button>
+      <>
+        <div className="relative">
+          <Button
+            ref={buttonRef}
+            variant="ghost"
+            size="sm"
+            onClick={handleToggleMenu}
+            className="p-1"
+          >
+            <EllipsisVerticalIcon className="h-4 w-4" />
+          </Button>
+        </div>
 
         {isOpen && (
           <>
             <div
-              className="fixed inset-0 z-10"
+              className="fixed inset-0 z-40"
               onClick={() => setIsOpen(false)}
             />
-            <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg z-20 border border-gray-200 dark:border-gray-700">
+            <div
+              className="fixed w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg z-50 border border-gray-200 dark:border-gray-700"
+              style={{
+                top: menuPosition.top,
+                left: menuPosition.left,
+                boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+              }}
+            >
               <div className="py-1">
                 <button
                   onClick={() => {
                     handleViewRecords(zone)
                     setIsOpen(false)
                   }}
-                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 >
                   <EyeIcon className="h-4 w-4 mr-2" />
                   View Records
@@ -309,7 +378,7 @@ const DNSZones: React.FC = () => {
                     handleEditZone(zone)
                     setIsOpen(false)
                   }}
-                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 >
                   <PencilIcon className="h-4 w-4 mr-2" />
                   Edit Zone
@@ -319,7 +388,7 @@ const DNSZones: React.FC = () => {
                     handleToggleZone(zone)
                     setIsOpen(false)
                   }}
-                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 >
                   {zone.is_active ? (
                     <>
@@ -338,7 +407,7 @@ const DNSZones: React.FC = () => {
                     handleReloadZone(zone)
                     setIsOpen(false)
                   }}
-                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={reloadZoneMutation.isPending}
                 >
                   <ArrowPathIcon className="h-4 w-4 mr-2" />
@@ -349,7 +418,7 @@ const DNSZones: React.FC = () => {
                     handleValidateZone(zone)
                     setIsOpen(false)
                   }}
-                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 >
                   <ShieldCheckIcon className="h-4 w-4 mr-2" />
                   Validate Zone
@@ -359,7 +428,7 @@ const DNSZones: React.FC = () => {
                     handleExportZone(zone)
                     setIsOpen(false)
                   }}
-                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 >
                   <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
                   Export Zone
@@ -369,7 +438,7 @@ const DNSZones: React.FC = () => {
                     handleViewStatistics(zone)
                     setIsOpen(false)
                   }}
-                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 >
                   <ChartBarIcon className="h-4 w-4 mr-2" />
                   View Statistics
@@ -380,7 +449,7 @@ const DNSZones: React.FC = () => {
                     handleDeleteZone(zone)
                     setIsOpen(false)
                   }}
-                  className="flex items-center w-full px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  className="flex items-center w-full px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                 >
                   <TrashIcon className="h-4 w-4 mr-2" />
                   Delete Zone
@@ -389,7 +458,7 @@ const DNSZones: React.FC = () => {
             </div>
           </>
         )}
-      </div>
+      </>
     )
   }
 
@@ -425,12 +494,7 @@ const DNSZones: React.FC = () => {
       key: 'status',
       header: 'Status',
       sortable: true,
-      render: (zone: Zone) => (
-        <div className="flex items-center space-x-2">
-          {getZoneStatusIndicator(zone)}
-          <ZoneHealthIndicator zone={zone} size="sm" />
-        </div>
-      ),
+      render: (zone: Zone) => getZoneStatusIndicator(zone),
     },
     {
       key: 'serial',
@@ -466,6 +530,7 @@ const DNSZones: React.FC = () => {
     {
       key: 'actions',
       header: 'Actions',
+      className: 'relative',
       render: (zone: Zone) => <ZoneActionsMenu zone={zone} />,
     },
   ]
