@@ -6,7 +6,8 @@ Integrates with existing services to emit real-time events
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-from ..websocket.manager import get_websocket_manager, EventType
+from ..websocket.unified_manager import get_unified_websocket_manager
+from ..websocket.models import EventType
 from ..core.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -16,7 +17,7 @@ class WebSocketEventService:
     """Service for emitting WebSocket events from various operations"""
     
     def __init__(self):
-        self.websocket_manager = get_websocket_manager()
+        self.websocket_manager = get_unified_websocket_manager()
     
     # DNS Zone Events
     async def emit_zone_created(self, zone_data: Dict[str, Any], user_id: Optional[str] = None):

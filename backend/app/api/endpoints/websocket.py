@@ -1,33 +1,34 @@
 """
-WebSocket endpoints for real-time event broadcasting
+WebSocket endpoints with feature flag support for legacy/unified system routing
 """
 
 import json
 import asyncio
 from typing import Optional, Dict, Any
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, Query
-from fastapi.security import HTTPBearer
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from datetime import datetime
 
 from ...core.websocket_auth import get_current_user_websocket
 from ...websocket.manager import get_websocket_manager, ConnectionType
-from ...services.event_service import get_event_service
+from ...websocket.router import get_websocket_router
 from ...core.logging_config import get_logger
 from jose import jwt as jose_jwt
 
 logger = get_logger(__name__)
 router = APIRouter()
-security = HTTPBearer()
 
 
 @router.websocket("/ws/{connection_type}")
-async def websocket_endpoint(
+async def websocket_endpoint_legacy(
     websocket: WebSocket,
     connection_type: str,
     token: Optional[str] = Query(None, description="Authentication token")
 ):
     """
-    WebSocket endpoint for real-time event broadcasting
+    Legacy WebSocket endpoint for backward compatibility
+    
+    This endpoint maintains the old multi-connection behavior for users
+    who haven't been migrated to the unified system yet.
     
     Connection types:
     - health: Health monitoring events
@@ -36,306 +37,309 @@ async def websocket_endpoint(
     - system: System status events
     - admin: All event types (admin only)
     """
-    websocket_manager = get_websocket_manager()
-    event_service = get_event_service()
+    # Use the router to determine which system to use
+    websocket_router = get_websocket_router()
     
     # Validate connection type
     valid_types = [conn_type.value for conn_type in ConnectionType]
     if connection_type not in valid_types:
-        await websocket.close(code=1008, reason=f"Invalid connection type. Valid types: {valid_types}")
+        await websocket.close(code=1008, reason=f"Invalid connection type")
         return
     
-    # Authenticate user
-    try:
-        if not token:
-            await websocket.close(code=1008, reason="Authentication token required")
-            return
-        
-        user = await get_current_user_websocket(token)
-        # Claims-based fallback user (works for all channels, including admin)
-        if not user:
-            try:
-                claims = jose_jwt.get_unverified_claims(token)
-                class _U: pass
-                _tmp = _U()
-                _tmp.username = claims.get("sub") or f"user_{token[:8]}"
-                _tmp.is_admin = bool(claims.get("is_admin", False))
-                user = _tmp
-            except Exception:
-                user = None
-        # If still no user and not admin channel, allow minimal identity
-        if not user and connection_type != ConnectionType.ADMIN.value:
-            class _U: pass
-            _tmp = _U(); _tmp.username = f"user_{token[:8]}"; _tmp.is_admin = False
-            user = _tmp
-        if not user:
-            await websocket.close(code=1008, reason="Invalid authentication token")
-            return
-        
-        # Check admin access for admin connection type
-        if connection_type == ConnectionType.ADMIN.value and not getattr(user, "is_admin", False):
-            # Last-chance: honor is_admin claim in token even if user object lacks it
-            try:
-                claims = jose_jwt.get_unverified_claims(token)
-                if claims.get("is_admin") is True:
-                    pass  # proceed
-                else:
-                    logger.warning("Admin WS: is_admin not set; allowing connection in permissive mode")
-            except Exception:
-                logger.warning("Admin WS: could not parse claims; allowing connection in permissive mode")
-        
-    except Exception as e:
-        logger.error(f"WebSocket authentication error: {e}")
-        await websocket.close(code=1008, reason="Authentication failed")
+    if not token:
+        await websocket.close(code=1008, reason="Authentication token required")
         return
     
-    # Connect to WebSocket manager
+    # Route to appropriate WebSocket system
+    connection_success = await websocket_router.route_websocket_connection(
+        websocket, token, connection_type
+    )
+    
+    if not connection_success:
+        return
+    
     try:
-        await websocket_manager.connect(websocket, user.username, connection_type)
-        logger.info(f"WebSocket connected: user={user.username}, type={connection_type}")
-        
-        # Create connection identifier for this session
-        connection_id = f"{user.username}_{connection_type}_{datetime.utcnow().timestamp()}"
-        
-        # Connection established, manager already sent confirmation
-        logger.info(f"Starting message loop for user={user.username}, type={connection_type}")
-        
         # Handle incoming messages
         while True:
             try:
-                # Check if WebSocket is still connected before trying to receive
-                if websocket.client_state.name != "CONNECTED":
-                    logger.warning(f"WebSocket not in CONNECTED state: {websocket.client_state.name}")
-                    break
-                
-                # Receive message from client
-                data = await websocket.receive_text()
+                # Receive message from client with timeout
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=300.0)
                 message = json.loads(data)
                 
-                await handle_websocket_message(websocket, user.username, connection_type, message, event_service, websocket_manager)
+                # Handle the message (this will be routed to the appropriate system)
+                await handle_websocket_message_routed(websocket, message, websocket_router)
                 
+            except asyncio.TimeoutError:
+                # Send ping to keep connection alive
+                await websocket.send_text(json.dumps({
+                    "type": "ping",
+                    "timestamp": datetime.utcnow().isoformat()
+                }))
             except WebSocketDisconnect:
-                logger.info(f"WebSocket disconnected: user={user.username}, type={connection_type}")
+                logger.info(f"WebSocket disconnected")
                 break
             except json.JSONDecodeError:
-                try:
-                    await websocket_manager.send_personal_message({
-                        "type": "error",
-                        "data": {"message": "Invalid JSON format"},
-                        "timestamp": datetime.utcnow().isoformat()
-                    }, websocket)
-                except Exception as send_error:
-                    logger.error(f"Failed to send JSON error message: {send_error}")
-                    break
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "data": {"message": "Invalid JSON format"},
+                    "timestamp": datetime.utcnow().isoformat()
+                }))
             except Exception as e:
                 logger.error(f"Error handling WebSocket message: {e}")
-                try:
-                    await websocket_manager.send_personal_message({
-                        "type": "error",
-                        "data": {"message": f"Error processing message: {str(e)}"},
-                        "timestamp": datetime.utcnow().isoformat()
-                    }, websocket)
-                except Exception as send_error:
-                    logger.error(f"Failed to send error message: {send_error}")
-                    break
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "data": {"message": f"Message error: {str(e)}"},
+                    "timestamp": datetime.utcnow().isoformat()
+                }))
                 
-    except Exception as e:
-        logger.error(f"Failed to connect WebSocket for user {user.username}: {e}")
-        try:
-            await websocket.close(code=1011, reason="Internal server error during connection")
-        except:
-            pass
-        return
-    
     except Exception as e:
         logger.error(f"WebSocket connection error: {e}")
     finally:
-        websocket_manager.disconnect(websocket)
+        # Disconnect from router (handles both systems)
+        websocket_router.disconnect_user(websocket, "unknown")
 
 
-async def handle_websocket_message(
+@router.websocket("/ws")
+async def websocket_endpoint_unified(
     websocket: WebSocket,
-    user_id: str,
-    connection_type: str,
-    message: Dict[str, Any],
-    event_service,
-    websocket_manager
+    token: Optional[str] = Query(None, description="Authentication token")
 ):
-    """Handle incoming WebSocket messages"""
+    """
+    Unified WebSocket endpoint - single connection per user
+    
+    This is the new unified endpoint that handles all event types
+    through a single connection with dynamic subscription management.
+    """
+    # Use the router to determine which system to use
+    websocket_router = get_websocket_router()
+    
+    if not token:
+        await websocket.close(code=1008, reason="Authentication token required")
+        return
+    
+    # Route to appropriate WebSocket system (will prefer unified for this endpoint)
+    connection_success = await websocket_router.route_websocket_connection(
+        websocket, token, "unified"
+    )
+    
+    if not connection_success:
+        return
+    
+    try:
+        # Handle incoming messages
+        while True:
+            try:
+                # Receive message from client with timeout
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=300.0)
+                message = json.loads(data)
+                
+                # Handle the message
+                await handle_websocket_message_routed(websocket, message, websocket_router)
+                
+            except asyncio.TimeoutError:
+                # Send ping to keep connection alive
+                await websocket.send_text(json.dumps({
+                    "type": "ping",
+                    "timestamp": datetime.utcnow().isoformat()
+                }))
+            except WebSocketDisconnect:
+                logger.info(f"Unified WebSocket disconnected")
+                break
+            except json.JSONDecodeError:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "data": {"message": "Invalid JSON format"},
+                    "timestamp": datetime.utcnow().isoformat()
+                }))
+            except Exception as e:
+                logger.error(f"Error handling unified WebSocket message: {e}")
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "data": {"message": f"Message error: {str(e)}"},
+                    "timestamp": datetime.utcnow().isoformat()
+                }))
+                
+    except Exception as e:
+        logger.error(f"Unified WebSocket connection error: {e}")
+    finally:
+        # Disconnect from router
+        websocket_router.disconnect_user(websocket, "unknown")
+
+
+async def handle_websocket_message_routed(
+    websocket: WebSocket,
+    message: Dict[str, Any],
+    websocket_router
+):
+    """Handle incoming WebSocket messages through the router"""
     message_type = message.get("type")
     data = message.get("data", {})
     
     try:
         if message_type == "ping":
-            # Handle ping/pong for connection health
-            await websocket_manager.send_personal_message({
+            await websocket.send_text(json.dumps({
                 "type": "pong",
                 "data": {"timestamp": datetime.utcnow().isoformat()},
                 "timestamp": datetime.utcnow().isoformat()
-            }, websocket)
+            }))
+        
+        elif message_type == "get_system_info":
+            # Return information about which WebSocket system is being used
+            stats = websocket_router.get_connection_stats()
+            await websocket.send_text(json.dumps({
+                "type": "system_info",
+                "data": {
+                    "router_stats": stats.get("router_stats", {}),
+                    "feature_flags": stats.get("feature_flags", {}),
+                    "timestamp": datetime.utcnow().isoformat()
+                },
+                "timestamp": datetime.utcnow().isoformat()
+            }))
         
         elif message_type == "subscribe_events":
-            # Update event subscription
+            # For unified system, this will be handled by the unified manager
+            # For legacy system, this will update the legacy manager metadata
             event_types = data.get("event_types", [])
-            await websocket_manager.subscribe_to_events(websocket, event_types)
             
-            await websocket_manager.send_personal_message({
+            # Send confirmation (the actual subscription logic is handled by the respective managers)
+            await websocket.send_text(json.dumps({
                 "type": "subscription_updated",
                 "data": {"subscribed_events": event_types},
                 "timestamp": datetime.utcnow().isoformat()
-            }, websocket)
-        
-        elif message_type == "get_connection_stats":
-            # Send connection statistics
-            stats = websocket_manager.get_connection_stats()
-            await websocket_manager.send_personal_message({
-                "type": "connection_stats",
-                "data": stats,
-                "timestamp": datetime.utcnow().isoformat()
-            }, websocket)
-        
-        elif message_type == "emit_event":
-            # Allow clients to emit events (with proper validation)
-            if not data.get("event_type") or not data.get("event_category") or not data.get("event_source"):
-                raise ValueError("event_type, event_category, and event_source are required")
-            
-            # Emit the event
-            await event_service.emit_event(
-                event_type=data["event_type"],
-                event_category=data["event_category"],
-                event_source=data["event_source"],
-                event_data=data.get("event_data", {}),
-                user_id=user_id,
-                severity=data.get("severity", "info"),
-                tags=data.get("tags"),
-                metadata=data.get("metadata"),
-                persist=data.get("persist", True),
-                broadcast_immediately=data.get("broadcast_immediately", True)
-            )
-            
-            await websocket_manager.send_personal_message({
-                "type": "event_emitted",
-                "data": {"message": "Event emitted successfully"},
-                "timestamp": datetime.utcnow().isoformat()
-            }, websocket)
-        
-        elif message_type == "get_recent_events":
-            # Get recent events for this user
-            limit = min(data.get("limit", 50), 100)  # Cap at 100
-            events = await event_service.get_events(
-                user_id=user_id,
-                limit=limit,
-                offset=0
-            )
-            
-            await websocket_manager.send_personal_message({
-                "type": "recent_events",
-                "data": {
-                    "events": [event.to_dict() for event in events],
-                    "count": len(events)
-                },
-                "timestamp": datetime.utcnow().isoformat()
-            }, websocket)
-        
-        elif message_type == "start_replay":
-            # Start event replay
-            if not data.get("name") or not data.get("start_time") or not data.get("end_time"):
-                raise ValueError("name, start_time, and end_time are required")
-            
-            start_time = datetime.fromisoformat(data["start_time"])
-            end_time = datetime.fromisoformat(data["end_time"])
-            
-            replay = await event_service.start_event_replay(
-                name=data["name"],
-                user_id=user_id,
-                start_time=start_time,
-                end_time=end_time,
-                filter_config=data.get("filter_config", {}),
-                replay_speed=data.get("replay_speed", 1),
-                description=data.get("description")
-            )
-            
-            await websocket_manager.send_personal_message({
-                "type": "replay_started",
-                "data": {
-                    "replay_id": str(replay.replay_id),
-                    "name": replay.name,
-                    "status": replay.status
-                },
-                "timestamp": datetime.utcnow().isoformat()
-            }, websocket)
-        
-        elif message_type == "stop_replay":
-            # Stop event replay
-            replay_id = data.get("replay_id")
-            if not replay_id:
-                raise ValueError("replay_id is required")
-            
-            success = await event_service.stop_event_replay(replay_id)
-            
-            await websocket_manager.send_personal_message({
-                "type": "replay_stopped",
-                "data": {
-                    "replay_id": replay_id,
-                    "success": success
-                },
-                "timestamp": datetime.utcnow().isoformat()
-            }, websocket)
-        
-        elif message_type == "get_replay_status":
-            # Get replay status
-            replay_id = data.get("replay_id")
-            if not replay_id:
-                raise ValueError("replay_id is required")
-            
-            replay = await event_service.get_replay_status(replay_id)
-            
-            if replay and replay.user_id == user_id:
-                await websocket_manager.send_personal_message({
-                    "type": "replay_status",
-                    "data": {
-                        "replay_id": str(replay.replay_id),
-                        "name": replay.name,
-                        "status": replay.status,
-                        "progress": replay.progress,
-                        "total_events": replay.total_events,
-                        "processed_events": replay.processed_events
-                    },
-                    "timestamp": datetime.utcnow().isoformat()
-                }, websocket)
-            else:
-                await websocket_manager.send_personal_message({
-                    "type": "error",
-                    "data": {"message": "Replay not found or access denied"},
-                    "timestamp": datetime.utcnow().isoformat()
-                }, websocket)
+            }))
         
         else:
-            # Unknown message type
-            await websocket_manager.send_personal_message({
+            await websocket.send_text(json.dumps({
                 "type": "error",
                 "data": {"message": f"Unknown message type: {message_type}"},
                 "timestamp": datetime.utcnow().isoformat()
-            }, websocket)
+            }))
     
-    except ValueError as e:
-        await websocket_manager.send_personal_message({
-            "type": "error",
-            "data": {"message": f"Invalid request: {str(e)}"},
-            "timestamp": datetime.utcnow().isoformat()
-        }, websocket)
     except Exception as e:
-        logger.error(f"Error handling WebSocket message {message_type}: {e}")
-        await websocket_manager.send_personal_message({
+        logger.error(f"Error handling routed WebSocket message {message_type}: {e}")
+        await websocket.send_text(json.dumps({
             "type": "error",
             "data": {"message": f"Internal error: {str(e)}"},
             "timestamp": datetime.utcnow().isoformat()
-        }, websocket)
+        }))
+
+
+async def handle_websocket_message(
+    websocket: WebSocket,
+    user_id: str,
+    message: Dict[str, Any],
+    websocket_manager
+):
+    """Handle incoming WebSocket messages (legacy function for backward compatibility)"""
+    message_type = message.get("type")
+    data = message.get("data", {})
+    
+    try:
+        if message_type == "ping":
+            await send_message_safe(websocket, {
+                "type": "pong",
+                "data": {"timestamp": datetime.utcnow().isoformat()},
+                "timestamp": datetime.utcnow().isoformat()
+            }, websocket_manager)
+        
+        elif message_type == "subscribe_events":
+            event_types = data.get("event_types", [])
+            
+            # Update subscriptions in metadata
+            if websocket in websocket_manager.metadata:
+                websocket_manager.metadata[websocket]["subscribed_events"] = event_types
+                
+                await send_message_safe(websocket, {
+                    "type": "subscription_updated",
+                    "data": {"subscribed_events": event_types},
+                    "timestamp": datetime.utcnow().isoformat()
+                }, websocket_manager)
+        
+        elif message_type == "get_connection_stats":
+            stats = websocket_manager.get_connection_stats()
+            await send_message_safe(websocket, {
+                "type": "connection_stats",
+                "data": stats,
+                "timestamp": datetime.utcnow().isoformat()
+            }, websocket_manager)
+        
+        elif message_type == "get_user_connections":
+            user_connections = {}
+            if user_id in websocket_manager.connections:
+                for ws in websocket_manager.connections[user_id]:
+                    if ws in websocket_manager.metadata:
+                        metadata = websocket_manager.metadata[ws]
+                        conn_type = metadata.get("connection_type", "unknown")
+                        user_connections[f"{conn_type}_{id(ws)}"] = {
+                            "connection_type": conn_type,
+                            "connected_at": metadata.get("connected_at", datetime.utcnow()).isoformat(),
+                            "message_count": metadata.get("message_count", 0),
+                            "subscribed_events": metadata.get("subscribed_events", [])
+                        }
+            
+            await send_message_safe(websocket, {
+                "type": "user_connections",
+                "data": {"connections": user_connections},
+                "timestamp": datetime.utcnow().isoformat()
+            }, websocket_manager)
+        
+        else:
+            await send_error_safe(websocket, f"Unknown message type: {message_type}", websocket_manager)
+    
+    except Exception as e:
+        logger.error(f"Error handling WebSocket message {message_type}: {e}")
+        await send_error_safe(websocket, f"Internal error: {str(e)}", websocket_manager)
+
+
+async def send_message_safe(websocket: WebSocket, message: Dict[str, Any], websocket_manager):
+    """Send a message safely to a WebSocket connection"""
+    try:
+        await websocket.send_text(json.dumps(message, default=lambda obj: obj.isoformat() if isinstance(obj, datetime) else str(obj)))
+        if websocket in websocket_manager.metadata:
+            websocket_manager.metadata[websocket]["message_count"] += 1
+    except Exception as e:
+        logger.debug(f"Failed to send message: {e}")
+        websocket_manager.disconnect(websocket)
+
+
+async def send_error_safe(websocket: WebSocket, error_message: str, websocket_manager):
+    """Send an error message safely to a WebSocket connection"""
+    await send_message_safe(websocket, {
+        "type": "error",
+        "data": {"message": error_message},
+        "timestamp": datetime.utcnow().isoformat()
+    }, websocket_manager)
+
+
+@router.get("/ws/stats")
+async def get_websocket_stats():
+    """Get current WebSocket connection statistics from both systems"""
+    websocket_router = get_websocket_router()
+    return websocket_router.get_connection_stats()
+
+
+@router.post("/ws/cleanup/{user_id}")
+async def force_cleanup_user_connections(user_id: str):
+    """Force cleanup all connections for a user"""
+    websocket_manager = get_websocket_manager()
+    cleaned_count = await websocket_manager.disconnect_user(user_id, "Admin cleanup")
+    return {
+        "message": f"Cleaned up {cleaned_count} connections for user {user_id}",
+        "cleaned_count": cleaned_count
+    }
+
+
+@router.post("/ws/broadcast")
+async def broadcast_message(message: Dict[str, Any], connection_type: Optional[str] = None):
+    """Broadcast a message to all connected clients"""
+    websocket_manager = get_websocket_manager()
+    await websocket_manager.broadcast(message, connection_type)
+    return {"message": "Message broadcasted successfully"}
 
 
 @router.get("/ws/info")
 async def get_websocket_info():
-    """Get information about WebSocket endpoints and supported message types"""
+    """Get information about WebSocket endpoints"""
     return {
         "endpoints": {
             "/ws/{connection_type}": "Main WebSocket endpoint for real-time events"
@@ -343,144 +347,50 @@ async def get_websocket_info():
         "connection_types": [
             {
                 "type": "health",
-                "description": "Health monitoring events",
-                "events": ["health_update", "health_alert", "forwarder_status_change", "system_status"]
+                "description": "Health monitoring events"
             },
             {
-                "type": "dns_management",
-                "description": "DNS zone and record events",
-                "events": ["zone_created", "zone_updated", "zone_deleted", "record_created", "record_updated", "record_deleted", "bind_reload", "config_change"]
+                "type": "dns_management", 
+                "description": "DNS zone and record events"
             },
             {
                 "type": "security",
-                "description": "Security and RPZ events",
-                "events": ["security_alert", "rpz_update", "threat_detected", "system_status"]
+                "description": "Security and RPZ events"
             },
             {
                 "type": "system",
-                "description": "System status events",
-                "events": ["system_status", "bind_reload", "config_change", "user_login", "user_logout"]
+                "description": "System status events"
             },
             {
                 "type": "admin",
-                "description": "All event types (admin only)",
-                "events": ["all"]
+                "description": "All event types (admin only)"
             }
         ],
         "supported_messages": {
             "client_to_server": [
-                {
-                    "type": "ping",
-                    "description": "Health check ping",
-                    "data": {}
-                },
-                {
-                    "type": "subscribe_events",
-                    "description": "Subscribe to specific event types",
-                    "data": {"event_types": ["list", "of", "event", "types"]}
-                },
-                {
-                    "type": "get_connection_stats",
-                    "description": "Get connection statistics",
-                    "data": {}
-                },
-                {
-                    "type": "emit_event",
-                    "description": "Emit a new event",
-                    "data": {
-                        "event_type": "string",
-                        "event_category": "string",
-                        "event_source": "string",
-                        "event_data": {},
-                        "severity": "info|warning|error|critical",
-                        "tags": ["optional", "tags"],
-                        "metadata": {},
-                        "persist": True,
-                        "broadcast_immediately": True
-                    }
-                },
-                {
-                    "type": "get_recent_events",
-                    "description": "Get recent events",
-                    "data": {"limit": 50}
-                },
-                {
-                    "type": "start_replay",
-                    "description": "Start event replay",
-                    "data": {
-                        "name": "string",
-                        "start_time": "ISO datetime",
-                        "end_time": "ISO datetime",
-                        "filter_config": {},
-                        "replay_speed": 1,
-                        "description": "optional"
-                    }
-                },
-                {
-                    "type": "stop_replay",
-                    "description": "Stop event replay",
-                    "data": {"replay_id": "string"}
-                },
-                {
-                    "type": "get_replay_status",
-                    "description": "Get replay status",
-                    "data": {"replay_id": "string"}
-                }
+                {"type": "ping", "description": "Health check ping"},
+                {"type": "subscribe_events", "description": "Subscribe to specific event types"},
+                {"type": "get_connection_stats", "description": "Get connection statistics"},
+                {"type": "get_user_connections", "description": "Get current user's connections"}
             ],
             "server_to_client": [
-                {
-                    "type": "welcome",
-                    "description": "Connection established"
-                },
-                {
-                    "type": "pong",
-                    "description": "Response to ping"
-                },
-                {
-                    "type": "subscription_updated",
-                    "description": "Event subscription updated"
-                },
-                {
-                    "type": "connection_stats",
-                    "description": "Connection statistics"
-                },
-                {
-                    "type": "event_emitted",
-                    "description": "Event emission confirmation"
-                },
-                {
-                    "type": "recent_events",
-                    "description": "Recent events data"
-                },
-                {
-                    "type": "replay_started",
-                    "description": "Event replay started"
-                },
-                {
-                    "type": "replay_stopped",
-                    "description": "Event replay stopped"
-                },
-                {
-                    "type": "replay_status",
-                    "description": "Event replay status"
-                },
-                {
-                    "type": "event_replay",
-                    "description": "Replayed event"
-                },
-                {
-                    "type": "error",
-                    "description": "Error message"
-                },
-                {
-                    "type": "[event_type]",
-                    "description": "Real-time events based on subscription"
-                }
+                {"type": "connection_established", "description": "Connection established"},
+                {"type": "pong", "description": "Response to ping"},
+                {"type": "subscription_updated", "description": "Event subscription updated"},
+                {"type": "connection_stats", "description": "Connection statistics"},
+                {"type": "user_connections", "description": "User's connection information"},
+                {"type": "error", "description": "Error message"},
+                {"type": "[event_type]", "description": "Real-time events"}
             ]
         },
         "authentication": {
             "method": "Bearer token in query parameter",
             "parameter": "token",
             "example": "/ws/health?token=your_jwt_token"
+        },
+        "limits": {
+            "max_connections_per_user": 10,
+            "max_total_connections": 500,
+            "message_timeout": 300
         }
     }

@@ -5,7 +5,7 @@ Main API routes configuration
 from fastapi import APIRouter
 
 from .endpoints import (
-    analytics, auth, backup, dashboard, dns_records, events, forwarders, forwarder_templates, health, realtime, reports, rollback, rpz, system, users, websocket, zones
+    analytics, auth, backup, dashboard, dns_records, events, forwarders, forwarder_templates, health, realtime, reports, rollback, rpz, system, users, websocket, websocket_admin, unified_websocket, websocket_metrics, zones
 )
 
 # Create main API router
@@ -30,11 +30,16 @@ api_router.include_router(analytics.router, prefix="/analytics", tags=["Analytic
 api_router.include_router(reports.router, prefix="/reports", tags=["Reports & Analytics"])
 
 # WebSocket routes
-api_router.include_router(websocket.router, prefix="/websocket", tags=["WebSocket"])
+api_router.include_router(websocket.router, prefix="/websocket", tags=["WebSocket (Legacy)"])
 
-# WebSocket health check
-from .endpoints import websocket_health
-api_router.include_router(websocket_health.router, prefix="/websocket", tags=["WebSocket Health"])
+# WebSocket administration (feature flags and migration)
+api_router.include_router(websocket_admin.router, prefix="/admin", tags=["WebSocket Administration"])
+
+# Unified WebSocket routes
+api_router.include_router(unified_websocket.router, prefix="/unified", tags=["Unified WebSocket"])
+
+# WebSocket metrics and monitoring
+api_router.include_router(websocket_metrics.router, prefix="/websocket", tags=["WebSocket Metrics & Monitoring"])
 
 # WebSocket routes for production use
 # Note: WebSocket demo routes removed for production deployment

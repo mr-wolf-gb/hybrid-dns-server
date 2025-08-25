@@ -1,5 +1,5 @@
 """
-Enhanced monitoring service for DNS queries and system metrics with performance optimizations
+Enhanced monitoring service for DNS queries and system metrics with performance optimizations and event broadcasting
 """
 
 import asyncio
@@ -10,7 +10,7 @@ import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, Optional, List, Tuple, Any
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
 import threading
@@ -18,7 +18,10 @@ import threading
 from ..core.config import get_settings
 from ..core.database import database
 from ..core.logging_config import get_monitoring_logger
-from ..websocket.manager import get_websocket_manager, EventType
+from ..websocket.unified_manager import get_unified_websocket_manager
+from ..websocket.models import EventType
+from .enhanced_event_service import get_enhanced_event_service
+from ..websocket.event_types import EventPriority, EventCategory, EventSeverity, create_event
 
 
 @dataclass
@@ -70,7 +73,7 @@ class MetricsBuffer:
 
 
 class MonitoringService:
-    """Enhanced DNS monitoring and log parsing service with performance optimizations"""
+    """Enhanced DNS monitoring and log parsing service with performance optimizations and event broadcasting"""
     
     def __init__(self):
         self.running = False
@@ -78,7 +81,8 @@ class MonitoringService:
         self.query_log_path = settings.log_dir / "query.log"
         self.rpz_log_path = settings.log_dir / "rpz.log"
         self.last_position = 0
-        self.websocket_manager = get_websocket_manager()
+        self.websocket_manager = get_unified_websocket_manager()
+        self.event_service = get_enhanced_event_service()
         
         # Enhanced metrics tracking
         self.query_stats = {
@@ -602,7 +606,7 @@ class MonitoringService:
                 
                 anomalies = []
                 
-                if historical_stats:
+                if historical_stats and historical_stats['avg_queries'] is not None:
                     # Detect query volume anomalies (>200% or <50% of normal)
                     if recent_stats['total_queries'] > historical_stats['avg_queries'] * 2:
                         anomalies.append({
@@ -622,7 +626,8 @@ class MonitoringService:
                         })
                     
                     # Detect response time anomalies
-                    if recent_stats['avg_response_time'] and historical_stats['avg_response_time']:
+                    if (recent_stats['avg_response_time'] and historical_stats['avg_response_time'] and 
+                        historical_stats['avg_response_time'] is not None):
                         if recent_stats['avg_response_time'] > historical_stats['avg_response_time'] * 2:
                             anomalies.append({
                                 'type': 'high_response_time',
@@ -1038,11 +1043,13 @@ class MonitoringService:
                 WHERE timestamp >= :since
             """, {"since": since})
             
-            if stats and stats['total_queries'] > 0:
+            if stats and stats['total_queries'] and stats['total_queries'] > 0:
                 queries_per_second = stats['total_queries'] / (hours * 3600)
                 avg_response_time = stats['avg_response_time'] or 0.0
-                error_rate = (stats['error_count'] / stats['total_queries']) * 100
-                blocked_rate = (stats['blocked_queries'] / stats['total_queries']) * 100
+                error_count = stats['error_count'] or 0
+                blocked_queries = stats['blocked_queries'] or 0
+                error_rate = (error_count / stats['total_queries']) * 100
+                blocked_rate = (blocked_queries / stats['total_queries']) * 100
                 
                 # Cache hit rate would need to be implemented in DNS server
                 cache_hit_rate = 0.0  # Placeholder
@@ -1767,4 +1774,94 @@ class MonitoringService:
         except Exception as e:
             logger = get_monitoring_logger()
             logger.error(f"Error getting category blocking stats: {e}")
-            return {}
+            return {}    
+
+    async def _emit_monitoring_event(self, event_type: EventType, action: str, details: Dict[str, Any]):
+        """Helper method to emit monitoring-related events"""
+        try:
+            # Create event data
+            event_data = {
+                "action": action,
+                "timestamp": datetime.utcnow().isoformat(),
+                **details
+            }
+            
+            # Determine event priority and severity based on monitoring data
+            if action == "high_query_volume":
+                priority = EventPriority.HIGH
+                severity = EventSeverity.MEDIUM
+            elif action == "high_block_rate":
+                priority = EventPriority.HIGH
+                severity = EventSeverity.HIGH
+            elif action == "performance_degradation":
+                priority = EventPriority.HIGH
+                severity = EventSeverity.HIGH
+            else:
+                priority = EventPriority.NORMAL
+                severity = EventSeverity.LOW
+            
+            # Create and emit the event
+            event = create_event(
+                event_type=event_type,
+                category=EventCategory.SYSTEM,
+                data=event_data,
+                priority=priority,
+                severity=severity,
+                metadata={
+                    "service": "monitoring_service",
+                    "action": action,
+                    "query_volume": details.get("query_volume", 0),
+                    "block_rate": details.get("block_rate", 0)
+                }
+            )
+            
+            await self.event_service.emit_event(event)
+            
+        except Exception as e:
+            logger = get_monitoring_logger()
+            logger.error(f"Failed to emit monitoring event: {e}")
+            # Don't raise the exception to avoid breaking the main operation
+    
+    async def _emit_bind_config_event(self, action: str, details: Dict[str, Any]):
+        """Helper method to emit BIND9 configuration change events"""
+        try:
+            # Create event data
+            event_data = {
+                "action": action,
+                "timestamp": datetime.utcnow().isoformat(),
+                "config_type": details.get("config_type", "unknown"),
+                "changes": details.get("changes", []),
+                **details
+            }
+            
+            # Determine event priority
+            if action == "config_error":
+                priority = EventPriority.CRITICAL
+                severity = EventSeverity.CRITICAL
+            elif action == "config_reload":
+                priority = EventPriority.HIGH
+                severity = EventSeverity.MEDIUM
+            else:
+                priority = EventPriority.NORMAL
+                severity = EventSeverity.LOW
+            
+            # Create and emit the event
+            event = create_event(
+                event_type=EventType.SYSTEM_CONFIG_CHANGED,
+                category=EventCategory.SYSTEM,
+                data=event_data,
+                priority=priority,
+                severity=severity,
+                metadata={
+                    "service": "monitoring_service",
+                    "action": action,
+                    "config_type": details.get("config_type", "unknown")
+                }
+            )
+            
+            await self.event_service.emit_event(event)
+            
+        except Exception as e:
+            logger = get_monitoring_logger()
+            logger.error(f"Failed to emit BIND config event: {e}")
+            # Don't raise the exception to avoid breaking the main operation

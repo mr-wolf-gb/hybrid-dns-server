@@ -132,6 +132,29 @@ class Settings(BaseSettings):
     NOTIFICATION_FROM_EMAIL: Optional[str] = None
     NOTIFICATION_ADMIN_EMAILS: List[str] = []
     
+    # Feature Flags for WebSocket System
+    WEBSOCKET_UNIFIED_ENABLED: bool = Field(default=False, description="Enable unified WebSocket system")
+    WEBSOCKET_GRADUAL_ROLLOUT_ENABLED: bool = Field(default=False, description="Enable gradual rollout of unified WebSocket")
+    WEBSOCKET_ROLLOUT_PERCENTAGE: int = Field(default=0, description="Percentage of users to use unified WebSocket (0-100)")
+    WEBSOCKET_ROLLOUT_USER_LIST: str = Field(default="", description="Comma-separated list of user IDs for unified WebSocket")
+    WEBSOCKET_LEGACY_FALLBACK: bool = Field(default=True, description="Allow fallback to legacy WebSocket on errors")
+    WEBSOCKET_MIGRATION_MODE: str = Field(default="disabled", description="Migration mode: disabled, testing, gradual, full")
+    WEBSOCKET_FORCE_LEGACY_USERS: str = Field(default="", description="Comma-separated list of user IDs to force legacy WebSocket")
+    
+    @property
+    def websocket_rollout_user_list_parsed(self) -> List[str]:
+        """Get WEBSOCKET_ROLLOUT_USER_LIST as a list"""
+        if not self.WEBSOCKET_ROLLOUT_USER_LIST.strip():
+            return []
+        return [user_id.strip() for user_id in self.WEBSOCKET_ROLLOUT_USER_LIST.split(',') if user_id.strip()]
+    
+    @property
+    def websocket_force_legacy_users_parsed(self) -> List[str]:
+        """Get WEBSOCKET_FORCE_LEGACY_USERS as a list"""
+        if not self.WEBSOCKET_FORCE_LEGACY_USERS.strip():
+            return []
+        return [user_id.strip() for user_id in self.WEBSOCKET_FORCE_LEGACY_USERS.split(',') if user_id.strip()]
+    
     # File Paths
     @property
     def config_dir(self) -> Path:

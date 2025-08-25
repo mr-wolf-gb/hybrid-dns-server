@@ -7,7 +7,7 @@ This document summarizes the fixes applied to resolve installation issues on Ubu
 ### 1. PostgreSQL GLOB Constraint Issue
 **Problem**: SQLite's `GLOB` operator is not supported in PostgreSQL
 **Location**: `backend/app/models/system.py`
-**Fix**: Changed `GLOB '[a-zA-Z0-9_-]*'` to PostgreSQL regex `~ '^[a-zA-Z0-9_-]+$'`
+**Fix**: Changed `GLOB '[a-zA-Z0-9_-]*'` to PostgreSQL regex `~ '^[a-zA-Z0-9_-]+`
 
 ### 2. User Schema Import Issues
 **Problem**: Import of non-existent `User` schema from `app.schemas.auth`
@@ -123,4 +123,4 @@ All tests should now pass successfully.
 
 ## Production Deployment
 
-The system is now ready for production deployment. See `PRODUCTION_DEPLOYMENT.md` for detailed deployment instructions.
+The system is now ready for production deployment. See `production-deployment.md` for detailed deployment instructions.

@@ -37,6 +37,7 @@ from app.services.monitoring_service import MonitoringService
 from app.services.background_tasks import get_background_task_service
 from app.services.event_service import get_event_service
 from app.websocket.manager import get_websocket_manager
+from app.websocket.unified_manager import get_unified_websocket_manager
 
 # Initialize rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -60,6 +61,7 @@ async def lifespan(app: FastAPI):
     background_service = get_background_task_service()
     event_service = get_event_service()
     websocket_manager = get_websocket_manager()
+    unified_websocket_manager = get_unified_websocket_manager()
     
     # Start background services
     asyncio.create_task(monitoring_service.start())
@@ -76,9 +78,12 @@ async def lifespan(app: FastAPI):
     await monitoring_service.stop()
     await background_service.stop()
     await event_service.stop()
-    # Stop WebSocket manager
+    # Stop WebSocket managers
     websocket_manager = get_websocket_manager()
     await websocket_manager.stop_broadcasting()
+    
+    unified_websocket_manager = get_unified_websocket_manager()
+    await unified_websocket_manager._stop_background_services()
     logger.info("API server stopped")
 
 

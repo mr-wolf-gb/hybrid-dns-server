@@ -1,5 +1,5 @@
 """
-RPZ (Response Policy Zone) service with authentication integration
+RPZ (Response Policy Zone) service with authentication integration and event broadcasting
 """
 
 from typing import List, Optional, Dict, Any, Tuple
@@ -15,15 +15,18 @@ from ..schemas.security import RPZRuleCreate, RPZRuleUpdate, RPZAction
 from ..core.auth_context import get_current_user_id, track_user_action
 from ..core.logging_config import get_logger
 from ..core.exceptions import ValidationException, RPZException
+from .enhanced_event_service import get_enhanced_event_service
+from ..websocket.event_types import EventType, EventPriority, EventCategory, EventSeverity, create_event
 
 logger = get_logger(__name__)
 
 
 class RPZService(BaseService[RPZRule]):
-    """RPZ service with authentication and audit logging"""
+    """RPZ service with authentication, audit logging, and event broadcasting"""
     
     def __init__(self, db: Session | AsyncSession):
         super().__init__(db, RPZRule)
+        self.event_service = get_enhanced_event_service()
     
     async def create_rule(self, rule_data: Dict[str, Any]) -> RPZRule:
         """Create a new RPZ rule with validation and user tracking"""
@@ -59,6 +62,21 @@ class RPZService(BaseService[RPZRule]):
             
             # Create the rule
             rule = await self.create(rule_data, track_action=True)
+            
+            # Emit RPZ rule creation event
+            await self._emit_rpz_event(
+                event_type=EventType.SECURITY_RPZ_RULE_CREATED,
+                rule=rule,
+                action="create",
+                details={
+                    "domain": rule.domain,
+                    "rpz_zone": rule.rpz_zone,
+                    "action": rule.action,
+                    "redirect_target": rule.redirect_target,
+                    "source": rule.source,
+                    "threat_level": self._determine_threat_level(rule)
+                }
+            )
             
             logger.info(f"Created RPZ rule {rule.id} for domain {rule.domain} with action {rule.action}")
             return rule
@@ -1209,4 +1227,83 @@ class RPZService(BaseService[RPZRule]):
             'data': data
         }
         
-        return export_data
+        return export_data 
+   
+    async def _emit_rpz_event(self, event_type: EventType, rule: Optional[RPZRule], 
+                             action: str, details: Dict[str, Any]):
+        """Helper method to emit RPZ-related events"""
+        try:
+            user_id = get_current_user_id()
+            
+            # Create event data
+            event_data = {
+                "action": action,
+                "rule_id": rule.id if rule else details.get("rule_id"),
+                "domain": rule.domain if rule else details.get("domain"),
+                "rpz_zone": rule.rpz_zone if rule else details.get("rpz_zone"),
+                "rpz_action": rule.action if rule else details.get("action"),
+                "redirect_target": rule.redirect_target if rule else details.get("redirect_target"),
+                "source": rule.source if rule else details.get("source"),
+                **details
+            }
+            
+            # Determine event priority and severity based on threat level
+            threat_level = details.get("threat_level", "medium")
+            if threat_level == "critical":
+                priority = EventPriority.CRITICAL
+                severity = EventSeverity.CRITICAL
+            elif threat_level == "high":
+                priority = EventPriority.HIGH
+                severity = EventSeverity.HIGH
+            else:
+                priority = EventPriority.NORMAL
+                severity = EventSeverity.MEDIUM
+            
+            # Create and emit the event
+            event = create_event(
+                event_type=event_type,
+                category=EventCategory.SECURITY,
+                data=event_data,
+                user_id=user_id,
+                priority=priority,
+                severity=severity,
+                metadata={
+                    "service": "rpz_service",
+                    "action": action,
+                    "domain": rule.domain if rule else details.get("domain"),
+                    "threat_level": threat_level
+                }
+            )
+            
+            await self.event_service.emit_event(event)
+            
+        except Exception as e:
+            logger.error(f"Failed to emit RPZ event: {e}")
+            # Don't raise the exception to avoid breaking the main operation
+    
+    def _determine_threat_level(self, rule: RPZRule) -> str:
+        """Determine threat level based on rule characteristics"""
+        # Determine threat level based on domain, source, and action
+        domain = rule.domain.lower()
+        source = rule.source.lower()
+        action = rule.action
+        
+        # Critical threats
+        if any(keyword in domain for keyword in ['malware', 'trojan', 'virus', 'ransomware']):
+            return "critical"
+        
+        # High threats
+        if any(keyword in domain for keyword in ['phishing', 'scam', 'fraud']):
+            return "high"
+        
+        # Source-based threat levels
+        if 'threat' in source or 'malware' in source:
+            return "high"
+        
+        # Action-based threat levels
+        if action == 'block':
+            return "high"
+        elif action == 'redirect':
+            return "medium"
+        else:
+            return "low"

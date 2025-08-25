@@ -1,5 +1,5 @@
 """
-Threat Feed service for managing external threat intelligence sources
+Threat Feed service for managing external threat intelligence sources with event broadcasting
 """
 
 import asyncio
@@ -22,16 +22,19 @@ from ..schemas.security import (
 from ..core.auth_context import get_current_user_id, track_user_action
 from ..core.logging_config import get_logger
 from ..core.exceptions import ValidationException, ThreatFeedException
+from .enhanced_event_service import get_enhanced_event_service
+from ..websocket.event_types import EventType, EventPriority, EventCategory, EventSeverity, create_event
 
 logger = get_logger(__name__)
 
 
 class ThreatFeedService(BaseService[ThreatFeed]):
-    """Threat Feed service with authentication and automatic updates"""
+    """Threat Feed service with authentication, automatic updates, and event broadcasting"""
     
     def __init__(self, db: Session | AsyncSession):
         super().__init__(db, ThreatFeed)
         self.rpz_service = RPZService(db)
+        self.event_service = get_enhanced_event_service()
     
     async def create_feed(self, feed_data: Dict[str, Any]) -> ThreatFeed:
         """Create a new threat feed with validation"""
@@ -61,6 +64,20 @@ class ThreatFeedService(BaseService[ThreatFeed]):
             
             # Create the feed
             feed = await self.create(feed_data, track_action=True)
+            
+            # Emit threat feed creation event
+            await self._emit_threat_feed_event(
+                event_type=EventType.SECURITY_THREAT_FEED_CREATED,
+                feed=feed,
+                action="create",
+                details={
+                    "feed_name": feed.name,
+                    "feed_type": feed.feed_type,
+                    "url": feed.url,
+                    "format_type": feed.format_type,
+                    "update_frequency": feed.update_frequency
+                }
+            )
             
             logger.info(f"Created threat feed {feed.id}: {feed.name}")
             return feed
@@ -1221,4 +1238,103 @@ class ThreatFeedService(BaseService[ThreatFeed]):
             
         except Exception as e:
             logger.error(f"Failed to get feed update schedule: {str(e)}")
-            raise ThreatFeedException(f"Failed to get update schedule: {str(e)}")
+            raise ThreatFeedException(f"Failed to get update schedule: {str(e)}")   
+ 
+    async def _emit_threat_feed_event(self, event_type: EventType, feed: Optional[ThreatFeed], 
+                                     action: str, details: Dict[str, Any]):
+        """Helper method to emit threat feed-related events"""
+        try:
+            user_id = get_current_user_id()
+            
+            # Create event data
+            event_data = {
+                "action": action,
+                "feed_id": feed.id if feed else details.get("feed_id"),
+                "feed_name": feed.name if feed else details.get("feed_name"),
+                "feed_type": feed.feed_type if feed else details.get("feed_type"),
+                "url": feed.url if feed else details.get("url"),
+                "rules_count": feed.rules_count if feed else details.get("rules_count", 0),
+                "last_update_status": feed.last_update_status if feed else details.get("last_update_status"),
+                **details
+            }
+            
+            # Determine event priority and severity
+            if action == "update_failed":
+                priority = EventPriority.HIGH
+                severity = EventSeverity.HIGH
+            elif action == "update_success" and details.get("rules_added", 0) > 100:
+                priority = EventPriority.HIGH
+                severity = EventSeverity.MEDIUM
+            elif action == "delete":
+                priority = EventPriority.HIGH
+                severity = EventSeverity.MEDIUM
+            else:
+                priority = EventPriority.NORMAL
+                severity = EventSeverity.LOW
+            
+            # Create and emit the event
+            event = create_event(
+                event_type=event_type,
+                category=EventCategory.SECURITY,
+                data=event_data,
+                user_id=user_id,
+                priority=priority,
+                severity=severity,
+                metadata={
+                    "service": "threat_feed_service",
+                    "action": action,
+                    "feed_name": feed.name if feed else details.get("feed_name"),
+                    "feed_type": feed.feed_type if feed else details.get("feed_type")
+                }
+            )
+            
+            await self.event_service.emit_event(event)
+            
+        except Exception as e:
+            logger.error(f"Failed to emit threat feed event: {e}")
+            # Don't raise the exception to avoid breaking the main operation
+    
+    async def _emit_threat_detection_event(self, threat_type: str, domain: str, 
+                                          source: str, details: Dict[str, Any]):
+        """Helper method to emit real-time threat detection events"""
+        try:
+            # Create event data for threat detection
+            event_data = {
+                "threat_type": threat_type,
+                "domain": domain,
+                "source": source,
+                "detection_time": datetime.utcnow().isoformat(),
+                **details
+            }
+            
+            # Determine severity based on threat type
+            if threat_type in ["malware", "ransomware", "trojan"]:
+                severity = EventSeverity.CRITICAL
+                priority = EventPriority.CRITICAL
+            elif threat_type in ["phishing", "scam"]:
+                severity = EventSeverity.HIGH
+                priority = EventPriority.HIGH
+            else:
+                severity = EventSeverity.MEDIUM
+                priority = EventPriority.NORMAL
+            
+            # Create and emit the event
+            event = create_event(
+                event_type=EventType.SECURITY_THREAT_DETECTED,
+                category=EventCategory.SECURITY,
+                data=event_data,
+                priority=priority,
+                severity=severity,
+                metadata={
+                    "service": "threat_feed_service",
+                    "threat_type": threat_type,
+                    "domain": domain,
+                    "source": source
+                }
+            )
+            
+            await self.event_service.emit_event(event)
+            
+        except Exception as e:
+            logger.error(f"Failed to emit threat detection event: {e}")
+            # Don't raise the exception to avoid breaking the main operation

@@ -31,6 +31,23 @@ def clear_current_user() -> None:
     current_user_context.set(None)
 
 
+def get_current_user_from_token(token: str) -> Optional[Dict[str, Any]]:
+    """Get user information from JWT token"""
+    try:
+        from ..core.security import decode_access_token
+        payload = decode_access_token(token)
+        if payload:
+            return {
+                'id': payload.get('sub'),
+                'username': payload.get('username'),
+                'is_superuser': payload.get('is_superuser', False),
+                'permissions': payload.get('permissions', [])
+            }
+    except Exception:
+        pass
+    return None
+
+
 class UserTrackingMixin:
     """Mixin class to add user tracking functionality to models"""
     

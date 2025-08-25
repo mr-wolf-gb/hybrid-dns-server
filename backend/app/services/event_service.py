@@ -14,7 +14,8 @@ import uuid
 from ..core.logging_config import get_logger
 from ..core.database import get_database_session
 from ..models.events import Event, EventSubscription, EventDelivery, EventFilter, EventReplay
-from ..websocket.manager import WebSocketManager, EventType, get_websocket_manager
+from ..websocket.unified_manager import UnifiedWebSocketManager, get_unified_websocket_manager
+from ..websocket.models import EventType
 
 logger = get_logger(__name__)
 
@@ -24,8 +25,8 @@ class EventBroadcastingService:
     Enhanced event broadcasting service with persistence, filtering, routing, and replay
     """
     
-    def __init__(self, websocket_manager: Optional[WebSocketManager] = None):
-        self.websocket_manager = websocket_manager or get_websocket_manager()
+    def __init__(self, websocket_manager: Optional[UnifiedWebSocketManager] = None):
+        self.websocket_manager = websocket_manager or get_unified_websocket_manager()
         self.event_handlers: Dict[str, List[Callable]] = {}
         self.active_replays: Dict[str, asyncio.Task] = {}
         self._cleanup_task: Optional[asyncio.Task] = None

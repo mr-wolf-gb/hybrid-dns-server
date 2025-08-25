@@ -55,7 +55,7 @@ pip install -r backend/requirements.txt
 # Initialize database
 echo "🗄️  Initializing development database..."
 cd backend
-python init_db.py
+python scripts/database/init_db.py
 cd ..
 
 echo "✅ Development environment setup complete!"

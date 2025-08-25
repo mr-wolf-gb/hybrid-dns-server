@@ -8,13 +8,13 @@ hybrid-dns-server/
 ├── docs/                        # Comprehensive documentation
 ├── install.sh                   # Automated installation script
 ├── docker-compose.yml           # Container orchestration
+├── tools/                       # Development and utility tools
 ├── backend/                     # FastAPI backend application
 ├── frontend/                    # React web interface
 ├── bind9/                       # BIND9 DNS server configuration
 ├── monitoring/                  # Log monitoring service
 ├── systemd/                     # System service configurations
-├── scripts/                     # Maintenance and utility scripts
-└── docs/                        # Comprehensive documentation
+└── scripts/                     # Maintenance and utility scripts
 ```
 
 ## Backend Structure (`backend/`)
@@ -24,6 +24,25 @@ backend/
 ├── Dockerfile                   # Container build configuration
 ├── main.py                      # FastAPI application entry point
 ├── requirements.txt             # Python dependencies
+├── data/                        # Application data files
+│   └── dns_server.db           # SQLite database (development)
+├── logs/                        # Application log files
+├── scripts/                     # Utility and management scripts
+│   ├── database/               # Database management scripts
+│   │   ├── init_db.py          # Database initialization
+│   │   └── create_admin.py     # Admin user creation
+│   ├── websocket/              # WebSocket deployment scripts
+│   │   ├── deploy_websocket.py # WebSocket deployment manager
+│   │   ├── rollback_websocket.py # Emergency rollback
+│   │   ├── monitor_websocket_deployment.py # Deployment monitoring
+│   │   ├── production_websocket_monitor.py # Production monitoring
+│   │   └── websocket_monitoring_dashboard.py # Monitoring dashboard
+│   ├── deployment/             # Production deployment scripts
+│   │   ├── production_deployment_monitor.py # Deployment monitoring
+│   │   └── production_deployment_dashboard.py # Deployment dashboard
+│   └── monitoring/             # Production monitoring scripts
+│       ├── production_monitoring_cli.py # Monitoring CLI
+│       └── production_monitoring_integration.py # Integrated monitoring
 ├── alembic/                     # Database migrations
 │   └── versions/               # Migration files
 ├── examples/                    # Sample data and import examples
@@ -67,8 +86,7 @@ backend/
     │   │   ├── websocket.py    # WebSocket endpoints
     │   │   └── zones.py        # DNS zone management
     │   └── routes/             # Additional route modules
-    │       ├── analytics.py    # Analytics routes
-    │       └── websocket_demo.py # WebSocket demo
+    │       └── analytics.py    # Analytics routes
     ├── services/                # Business logic services
     │   ├── base_service.py     # Base service class
     │   ├── bind_service.py     # BIND9 management
@@ -125,6 +143,18 @@ backend/
     ├── utils/                   # Utility functions
     └── websocket/               # WebSocket handling
         └── manager.py          # WebSocket connection manager
+```
+
+## Tools Directory (`tools/`)
+
+```
+tools/
+├── README.md                    # Tools documentation
+├── setup-dev.sh               # Linux/macOS development setup
+├── setup-dev.bat              # Windows development setup
+├── emergency_rollback.ps1     # PowerShell emergency rollback
+├── emergency_rollback.bat     # Windows emergency rollback
+└── verify_installation.py     # Installation verification script
 ```
 
 ## Frontend Structure (`frontend/`)

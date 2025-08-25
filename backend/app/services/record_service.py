@@ -1,5 +1,5 @@
 """
-DNS Record service with authentication integration and comprehensive CRUD operations
+DNS Record service with authentication integration, comprehensive CRUD operations, and event broadcasting
 """
 
 from typing import List, Optional, Dict, Any, Tuple
@@ -14,15 +14,18 @@ from ..models.dns import DNSRecord, Zone
 from ..schemas.dns import DNSValidators
 from ..core.auth_context import get_current_user_id, track_user_action
 from ..core.logging_config import get_logger
+from .enhanced_event_service import get_enhanced_event_service
+from ..websocket.event_types import EventType, EventPriority, EventCategory, create_event
 
 logger = get_logger(__name__)
 
 
 class RecordService(BaseService[DNSRecord]):
-    """DNS Record service with authentication and comprehensive CRUD operations"""
+    """DNS Record service with authentication, comprehensive CRUD operations, and event broadcasting"""
     
     def __init__(self, db: Session | AsyncSession):
         super().__init__(db, DNSRecord)
+        self.event_service = get_enhanced_event_service()
     
     async def create_record(self, zone_id: int, record_data: Dict[str, Any]) -> DNSRecord:
         """Create a new DNS record with validation and user tracking"""
@@ -52,6 +55,23 @@ class RecordService(BaseService[DNSRecord]):
         
         # Create history entry
         await self._create_history_entry(record, "create")
+        
+        # Emit record creation event
+        await self._emit_record_event(
+            event_type=EventType.DNS_RECORD_CREATED,
+            record=record,
+            zone=zone,
+            action="create",
+            details={
+                "record_name": record.name,
+                "record_type": record.record_type,
+                "record_value": record.value,
+                "zone_name": zone.name,
+                "zone_id": zone_id,
+                "ttl": record.ttl,
+                "priority": record.priority
+            }
+        )
         
         logger.info(f"Created DNS record {record.name} {record.record_type} in zone {zone.name}")
         
@@ -120,6 +140,25 @@ class RecordService(BaseService[DNSRecord]):
             change_details = {field: record_data[field] for field in record_data.keys()}
             await self._create_history_entry(updated_record, "update", previous_values, change_details)
             
+            # Emit record update event
+            await self._emit_record_event(
+                event_type=EventType.DNS_RECORD_UPDATED,
+                record=updated_record,
+                zone=zone,
+                action="update",
+                details={
+                    "record_name": updated_record.name,
+                    "record_type": updated_record.record_type,
+                    "record_value": updated_record.value,
+                    "zone_name": zone.name,
+                    "zone_id": record.zone_id,
+                    "updated_fields": list(record_data.keys()),
+                    "previous_values": previous_values,
+                    "ttl": updated_record.ttl,
+                    "priority": updated_record.priority
+                }
+            )
+            
             logger.info(f"Updated DNS record {updated_record.name} {updated_record.record_type} in zone {zone.name}")
             
             # Track specific action with more details
@@ -151,9 +190,30 @@ class RecordService(BaseService[DNSRecord]):
         zone_name = zone.name if zone else f"Zone ID {record.zone_id}"
         
         record_info = f"{record.name} {record.record_type}"
+        record_name = record.name
+        record_type = record.record_type
+        record_value = record.value
+        zone_id = record.zone_id
+        
         success = await self.delete(record_id, track_action=True)
         
         if success:
+            # Emit record deletion event
+            await self._emit_record_event(
+                event_type=EventType.DNS_RECORD_DELETED,
+                record=None,  # Record is deleted, so pass None
+                zone=zone,
+                action="delete",
+                details={
+                    "record_id": record_id,
+                    "record_name": record_name,
+                    "record_type": record_type,
+                    "record_value": record_value,
+                    "zone_name": zone_name,
+                    "zone_id": zone_id
+                }
+            )
+            
             logger.info(f"Deleted DNS record {record_info} from zone {zone_name}")
             
             # Track specific action with more details
@@ -161,7 +221,7 @@ class RecordService(BaseService[DNSRecord]):
                 action="dns_record_delete",
                 resource_type="dns_record",
                 resource_id=str(record_id),
-                details=f"Deleted {record.record_type} record '{record.name}' from zone '{zone_name}'",
+                details=f"Deleted {record_type} record '{record_name}' from zone '{zone_name}'",
                 db=self.db
             )
         
@@ -343,6 +403,17 @@ class RecordService(BaseService[DNSRecord]):
                 error_msg = f"Record {i+1}: {str(e)}"
                 errors.append(error_msg)
                 logger.error(f"Failed to create record {i+1} in bulk operation: {e}")
+        
+        # Emit bulk operation progress event
+        await self._emit_bulk_operation_event(
+            event_type=EventType.DNS_BULK_OPERATION_PROGRESS,
+            zone=zone,
+            operation="bulk_create",
+            total_records=len(records_data),
+            processed_records=len(created_records),
+            failed_records=len(errors),
+            errors=errors[:5]  # Limit errors in event
+        )
         
         logger.info(f"Bulk created {len(created_records)} records, {len(errors)} errors")
         
@@ -916,4 +987,91 @@ class RecordService(BaseService[DNSRecord]):
             await history_service.create_history_entry(record, change_type, previous_values, change_details)
         except Exception as e:
             # Log error but don't fail the main operation
-            logger.error(f"Failed to create history entry for record {record.id}: {e}")
+            logger.error(f"Failed to create history entry for record {record.id}: {e}") 
+   
+    async def _emit_record_event(self, event_type: EventType, record: Optional[DNSRecord], 
+                                zone: Zone, action: str, details: Dict[str, Any]):
+        """Helper method to emit record-related events"""
+        try:
+            user_id = get_current_user_id()
+            
+            # Create event data
+            event_data = {
+                "action": action,
+                "record_id": record.id if record else details.get("record_id"),
+                "record_name": record.name if record else details.get("record_name"),
+                "record_type": record.record_type if record else details.get("record_type"),
+                "record_value": record.value if record else details.get("record_value"),
+                "zone_id": zone.id,
+                "zone_name": zone.name,
+                **details
+            }
+            
+            # Determine event priority
+            priority = EventPriority.HIGH if action == "delete" else EventPriority.NORMAL
+            
+            # Create and emit the event
+            event = create_event(
+                event_type=event_type,
+                category=EventCategory.DNS,
+                data=event_data,
+                user_id=user_id,
+                priority=priority,
+                metadata={
+                    "service": "record_service",
+                    "action": action,
+                    "record_type": record.record_type if record else details.get("record_type"),
+                    "zone_name": zone.name
+                }
+            )
+            
+            await self.event_service.emit_event(event)
+            
+        except Exception as e:
+            logger.error(f"Failed to emit record event: {e}")
+            # Don't raise the exception to avoid breaking the main operation
+    
+    async def _emit_bulk_operation_event(self, event_type: EventType, zone: Zone, 
+                                        operation: str, total_records: int, 
+                                        processed_records: int, failed_records: int,
+                                        errors: List[str] = None):
+        """Helper method to emit bulk operation events"""
+        try:
+            user_id = get_current_user_id()
+            
+            # Create event data
+            event_data = {
+                "operation": operation,
+                "zone_id": zone.id,
+                "zone_name": zone.name,
+                "total_records": total_records,
+                "processed_records": processed_records,
+                "failed_records": failed_records,
+                "success_rate": round((processed_records / total_records * 100) if total_records > 0 else 0, 2),
+                "errors": errors or []
+            }
+            
+            # Determine event priority based on success rate
+            success_rate = (processed_records / total_records * 100) if total_records > 0 else 0
+            priority = EventPriority.HIGH if success_rate < 50 else EventPriority.NORMAL
+            
+            # Create and emit the event
+            event = create_event(
+                event_type=event_type,
+                category=EventCategory.DNS,
+                data=event_data,
+                user_id=user_id,
+                priority=priority,
+                metadata={
+                    "service": "record_service",
+                    "operation": operation,
+                    "zone_name": zone.name,
+                    "success_rate": success_rate
+                }
+            )
+            
+            await self.event_service.emit_event(event)
+            
+        except Exception as e:
+            logger.error(f"Failed to emit bulk operation event: {e}")
+            # Don't raise the exception to avoid breaking the main operation

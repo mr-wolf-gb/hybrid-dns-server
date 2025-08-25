@@ -179,6 +179,149 @@ A production-ready hybrid DNS server solution running on Linux (Debian/Ubuntu), 
 └─────────────────┴─────────────────┴─────────────────────────────┘
 ```
 
+## 🔄 WebSocket System Deployment
+
+The hybrid DNS server includes a unified WebSocket system for real-time updates. The system supports gradual rollout with comprehensive production monitoring, automated alerting, and rollback capabilities.
+
+### Production Monitoring Features
+
+- **Real-time Performance Tracking**: Error rates, success rates, connection counts, and user adoption metrics
+- **Resource Usage Monitoring**: Memory, CPU, and system resource tracking with threshold alerts
+- **Health Score Calculation**: Comprehensive health assessment with trend analysis and recommendations
+- **Automated Alerting**: Multi-channel alerts (webhook, email, Slack) with escalation policies
+- **Performance Trends**: Historical analysis, variance tracking, and consistency assessment
+- **Emergency Rollback**: Automatic rollback based on configurable performance thresholds
+
+### Feature Flags Configuration
+
+Add these environment variables to your `.env` file:
+
+```bash
+# WebSocket Feature Flags for Gradual Rollout
+WEBSOCKET_UNIFIED_ENABLED=false
+WEBSOCKET_GRADUAL_ROLLOUT_ENABLED=false
+WEBSOCKET_ROLLOUT_PERCENTAGE=0
+WEBSOCKET_ROLLOUT_USER_LIST=
+WEBSOCKET_LEGACY_FALLBACK=true
+WEBSOCKET_MIGRATION_MODE=disabled
+WEBSOCKET_FORCE_LEGACY_USERS=
+```
+
+### Deployment Phases
+
+#### 1. Testing Mode
+Deploy to specific test users only:
+```bash
+cd backend
+python deploy_websocket.py testing --test-users admin testuser1 testuser2
+```
+
+#### 2. Gradual Rollout
+Gradually increase the percentage of users:
+```bash
+# Start with 5% and increase by 5% every 30 minutes
+python deploy_websocket.py gradual --initial-percentage 5 --step-size 5 --step-duration 30
+```
+
+#### 3. Full Deployment
+Deploy to all users:
+```bash
+python deploy_websocket.py full
+```
+
+### Emergency Rollback
+
+For immediate rollback to the legacy system:
+
+**Windows:**
+```cmd
+tools\emergency_rollback.bat
+```
+
+**PowerShell:**
+```powershell
+.\tools\emergency_rollback.ps1
+```
+
+**Linux/Python:**
+```bash
+cd backend
+python scripts/websocket/rollback_websocket.py emergency --reason "Production issue"
+```
+
+### Admin API Endpoints
+
+Use the admin API for controlled deployment:
+- `POST /api/websocket-admin/deploy` - Deploy WebSocket system
+- `POST /api/websocket-admin/rollback` - Rollback to legacy system
+- `GET /api/websocket-admin/status` - Check deployment status
+- `GET /api/websocket-admin/health` - System health check
+
+### Production Monitoring CLI
+
+Use the unified CLI for comprehensive production monitoring:
+
+```bash
+# Start production monitoring with comprehensive level for 4 hours
+python backend/scripts/monitoring/production_monitoring_cli.py monitor --duration 4 --level comprehensive
+
+# Show real-time monitoring dashboard
+python backend/scripts/monitoring/production_monitoring_cli.py dashboard --mode summary --refresh 5
+
+# Generate detailed deployment report
+python backend/scripts/monitoring/production_monitoring_cli.py report --hours 2 --format summary
+
+# Check current system status
+python backend/scripts/monitoring/production_monitoring_cli.py status
+
+# List and manage active alerts
+python backend/scripts/monitoring/production_monitoring_cli.py alerts list
+python backend/scripts/monitoring/production_monitoring_cli.py alerts stats
+
+# Check production readiness configuration
+python backend/scripts/monitoring/production_monitoring_cli.py config check
+```
+
+### Monitoring Levels and Thresholds
+
+**Monitoring Levels:**
+- **Basic**: 60s intervals, relaxed thresholds for development
+- **Standard**: 30s intervals, production thresholds (default)
+- **Comprehensive**: 15s intervals, strict thresholds for critical deployments
+- **Debug**: 10s intervals, very strict thresholds with detailed logging
+
+**Alert Thresholds:**
+- **Error Rate**: Critical > 5%, Warning > 2%
+- **Success Rate**: Critical < 95%, Warning < 97%
+- **User Adoption**: Warning < 80% of expected rollout percentage
+- **Performance Score**: Critical < 70, Warning < 80
+- **Health Score**: Critical < 80, Warning < 85
+- **Consecutive Failures**: Auto-rollback triggered after 3 consecutive failures
+
+### Notification Channels
+
+Configure alerts through environment variables:
+```bash
+# Webhook notifications
+WEBSOCKET_ALERT_WEBHOOK_ENABLED=true
+WEBSOCKET_ALERT_WEBHOOK_URL=https://your-webhook-url.com/alerts
+
+# Email notifications
+WEBSOCKET_ALERT_EMAIL_ENABLED=true
+WEBSOCKET_ALERT_SMTP_SERVER=smtp.gmail.com
+WEBSOCKET_ALERT_SMTP_PORT=587
+WEBSOCKET_ALERT_SMTP_USERNAME=your-email@gmail.com
+WEBSOCKET_ALERT_SMTP_PASSWORD=your-app-password
+WEBSOCKET_ALERT_EMAIL_RECIPIENTS=admin@company.com,ops@company.com
+
+# Slack notifications
+WEBSOCKET_ALERT_SLACK_ENABLED=true
+WEBSOCKET_ALERT_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK
+WEBSOCKET_ALERT_SLACK_CHANNEL=#alerts
+```
+
+For detailed deployment procedures, see the [WebSocket Deployment Guide](docs/websocket-deployment-guide.md).
+
 ## 🔧 Configuration Examples
 
 ### Multi-source Conditional Forwarding
@@ -404,8 +547,11 @@ hybrid-dns-server/
 ├── 🐳 docker-compose.yml           # Container orchestration
 ├── 📁 backend/                     # FastAPI backend application
 │   ├── 📄 main.py                  # Application entry point
-│   ├── 📄 init_db.py               # Database initialization
-│   ├── 📄 create_admin.py          # Admin user creation
+│   ├── 📁 scripts/                 # Utility scripts
+│   │   ├── 📁 database/            # Database management scripts
+│   │   ├── 📁 websocket/           # WebSocket deployment scripts
+│   │   ├── 📁 deployment/          # Deployment monitoring scripts
+│   │   └── 📁 monitoring/          # Production monitoring scripts
 │   ├── 📁 alembic/                 # (Removed) Alembic migrations are no longer used
 │   ├── 📁 app/                     # Application source code
 │   │   ├── 📁 api/                 # REST API endpoints
@@ -445,7 +591,7 @@ git clone https://github.com/mr-wolf-gb/hybrid-dns-server.git
 cd hybrid-dns-server
 
 # Run automated development setup
-./setup-dev.sh
+./tools/setup-dev.sh
 ```
 
 **Windows:**
@@ -455,7 +601,7 @@ git clone https://github.com/mr-wolf-gb/hybrid-dns-server.git
 cd hybrid-dns-server
 
 # Run automated development setup
-setup-dev.bat
+tools\setup-dev.bat
 ```
 
 #### Manual Development Setup
@@ -472,7 +618,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # 3. Initialize database
-python init_db.py
+python scripts/database/init_db.py
 
 # 4. Start development server
 python main.py

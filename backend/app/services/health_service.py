@@ -1,5 +1,5 @@
 """
-Health monitoring service for DNS forwarders and system health
+Health monitoring service for DNS forwarders and system health with event broadcasting
 """
 
 import asyncio
@@ -14,16 +14,19 @@ from ..core.database import get_database_session
 from ..core.logging_config import get_health_logger
 from ..models.dns import Forwarder, ForwarderHealth
 from .forwarder_service import ForwarderService
+from .enhanced_event_service import get_enhanced_event_service
+from ..websocket.event_types import EventType, EventPriority, EventCategory, EventSeverity, create_event
 
 
 class HealthService:
-    """Health monitoring for DNS forwarders and system components"""
+    """Health monitoring for DNS forwarders and system components with event broadcasting"""
     
     def __init__(self):
         self.running = False
         self._health_check_task = None
         self._logger = get_health_logger()
         self._performance_metrics = {}
+        self.event_service = get_enhanced_event_service()
         self._alert_thresholds = {
             "response_time_warning": 200,  # ms
             "response_time_critical": 500,  # ms
@@ -133,8 +136,8 @@ class HealthService:
                     
                     # Broadcast status changes via WebSocket
                     if status_changes:
-                        from ..websocket.manager import get_websocket_manager
-                        websocket_manager = get_websocket_manager()
+                        from ..websocket.unified_manager import get_unified_websocket_manager
+                        websocket_manager = get_unified_websocket_manager()
                         
                         for change in status_changes:
                             await websocket_manager.broadcast_forwarder_status_change(
@@ -849,4 +852,94 @@ def get_health_service() -> HealthService:
     global _health_service_instance
     if _health_service_instance is None:
         _health_service_instance = HealthService()
-    return _health_service_instance
+    return _health_service_instance    
+
+    async def _emit_health_event(self, event_type: EventType, forwarder_id: Optional[int], 
+                                 action: str, details: Dict[str, Any]):
+        """Helper method to emit health-related events"""
+        try:
+            # Create event data
+            event_data = {
+                "action": action,
+                "forwarder_id": forwarder_id,
+                "timestamp": datetime.utcnow().isoformat(),
+                **details
+            }
+            
+            # Determine event priority and severity based on health status
+            health_status = details.get("status", "unknown")
+            if health_status == "unhealthy":
+                priority = EventPriority.HIGH
+                severity = EventSeverity.HIGH
+            elif health_status == "degraded":
+                priority = EventPriority.NORMAL
+                severity = EventSeverity.MEDIUM
+            else:
+                priority = EventPriority.LOW
+                severity = EventSeverity.LOW
+            
+            # Create and emit the event
+            event = create_event(
+                event_type=event_type,
+                category=EventCategory.SYSTEM,
+                data=event_data,
+                priority=priority,
+                severity=severity,
+                metadata={
+                    "service": "health_service",
+                    "action": action,
+                    "forwarder_id": forwarder_id,
+                    "health_status": health_status
+                }
+            )
+            
+            await self.event_service.emit_event(event)
+            
+        except Exception as e:
+            self._logger.error(f"Failed to emit health event: {e}")
+            # Don't raise the exception to avoid breaking the main operation
+    
+    async def _emit_system_metrics_event(self, metrics: Dict[str, Any]):
+        """Helper method to emit system metrics events"""
+        try:
+            # Create event data
+            event_data = {
+                "action": "metrics_update",
+                "timestamp": datetime.utcnow().isoformat(),
+                "metrics": metrics
+            }
+            
+            # Determine priority based on metrics
+            success_rate = metrics.get("success_rate", 100)
+            avg_response_time = metrics.get("avg_response_time", 0)
+            
+            if success_rate < 90 or (avg_response_time and avg_response_time > 500):
+                priority = EventPriority.HIGH
+                severity = EventSeverity.HIGH
+            elif success_rate < 95 or (avg_response_time and avg_response_time > 200):
+                priority = EventPriority.NORMAL
+                severity = EventSeverity.MEDIUM
+            else:
+                priority = EventPriority.LOW
+                severity = EventSeverity.LOW
+            
+            # Create and emit the event
+            event = create_event(
+                event_type=EventType.SYSTEM_METRICS_UPDATED,
+                category=EventCategory.SYSTEM,
+                data=event_data,
+                priority=priority,
+                severity=severity,
+                metadata={
+                    "service": "health_service",
+                    "action": "metrics_update",
+                    "success_rate": success_rate,
+                    "avg_response_time": avg_response_time
+                }
+            )
+            
+            await self.event_service.emit_event(event)
+            
+        except Exception as e:
+            self._logger.error(f"Failed to emit system metrics event: {e}")
+            # Don't raise the exception to avoid breaking the main operation

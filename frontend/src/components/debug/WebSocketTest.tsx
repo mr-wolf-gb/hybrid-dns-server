@@ -39,7 +39,8 @@ export const WebSocketTest: React.FC = () => {
 
   const triggerTestEvent = async () => {
     try {
-      const response = await fetch('/api/websocket-demo/emit-dns-event', {
+      // Use the unified WebSocket system for testing events
+      const response = await fetch('/api/events/emit', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -56,7 +57,7 @@ export const WebSocketTest: React.FC = () => {
       })
 
       if (response.ok) {
-        console.log('Test event triggered successfully')
+        console.log('Test event triggered successfully via unified system')
       }
     } catch (error) {
       console.error('Failed to trigger test event:', error)

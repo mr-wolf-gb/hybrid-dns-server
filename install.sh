@@ -2,7 +2,7 @@
 
 # Hybrid DNS Server Installation Script
 # For Debian/Ubuntu systems
-# Author: Scout AI
+# Author: MR-WOLF-GB
 # Version: 1.1.0 - Added resume functionality
 #
 # Usage:
@@ -47,24 +47,41 @@ CHECKPOINT_FILE="/tmp/hybrid-dns-install.checkpoint"
 
 # Functions
 log() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
 }
 
 info() {
-    echo -e "${BLUE}[INFO]${NC} $1" | tee -a "$LOG_FILE"
+    echo -e "${BLUE}[INFO]${NC} $1"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - [INFO] $1" >> "$LOG_FILE"
 }
 
 success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1" | tee -a "$LOG_FILE"
+    echo -e "${GREEN}✓${NC} $1"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - [SUCCESS] $1" >> "$LOG_FILE"
 }
 
 warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1" | tee -a "$LOG_FILE"
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - [WARNING] $1" >> "$LOG_FILE"
 }
 
 error() {
-    echo -e "${RED}[ERROR]${NC} $1" | tee -a "$LOG_FILE"
+    echo -e "${RED}[ERROR]${NC} $1"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - [ERROR] $1" >> "$LOG_FILE"
     exit 1
+}
+
+# Silent execution with error checking
+silent_exec() {
+    local cmd="$1"
+    local description="$2"
+    
+    if eval "$cmd" >> "$LOG_FILE" 2>&1; then
+        return 0
+    else
+        error "$description failed. Check $LOG_FILE for details."
+        return 1
+    fi
 }
 
 # Checkpoint functions
@@ -161,11 +178,11 @@ run_step() {
     
     # Only run if we haven't passed this step yet
     if [[ $target_index -gt $current_index ]]; then
-        info "Running step: $step_name"
+        log "Running step: $step_name"
         $step_function
         save_checkpoint "$step_name"
     else
-        info "Skipping completed step: $step_name"
+        log "Skipping completed step: $step_name"
     fi
 }
 
@@ -181,25 +198,23 @@ check_os() {
     fi
     
     . /etc/os-release
-    info "Detected OS: $NAME $VERSION"
+    log "Detected OS: $NAME $VERSION"
     
     # Ubuntu 24.04 specific checks and warnings
     if [[ "$VERSION_ID" == "24.04" ]]; then
-        info "Ubuntu 24.04 LTS detected - applying compatibility fixes"
+        log "Ubuntu 24.04 LTS detected - applying compatibility fixes"
         
         # Check for snap-installed packages that might conflict
         if command -v snap &> /dev/null; then
-            if snap list | grep -q "node\|postgresql"; then
-                warning "Snap packages detected for Node.js or PostgreSQL"
-                warning "This may cause conflicts. Consider removing snap versions:"
-                warning "  sudo snap remove node postgresql"
+            if snap list 2>/dev/null | grep -q "node\|postgresql"; then
+                warning "Snap packages detected for Node.js or PostgreSQL - may cause conflicts"
             fi
         fi
         
         # Check Python version (Ubuntu 24.04 uses Python 3.12)
         python_version=$(python3 --version 2>/dev/null | cut -d' ' -f2 | cut -d'.' -f1,2)
         if [[ "$python_version" == "3.12" ]]; then
-            info "Python 3.12 detected - ensuring compatibility"
+            log "Python 3.12 detected - ensuring compatibility"
         fi
     fi
 }
@@ -209,11 +224,7 @@ load_server_configuration() {
     if [[ -f "$INSTALL_DIR/.env" ]]; then
         source "$INSTALL_DIR/.env" 2>/dev/null || true
         if [[ -n "$SERVER_IP" ]]; then
-            info "Loaded server configuration from existing installation:"
-            info "  IP Address: $SERVER_IP"
-            if [[ -n "$DOMAIN_NAME" ]]; then
-                info "  Domain Name: $DOMAIN_NAME"
-            fi
+            log "Loaded server configuration from existing installation: IP=$SERVER_IP, DOMAIN=$DOMAIN_NAME"
             return 0
         fi
     fi
@@ -288,7 +299,7 @@ EOF
 }
 
 check_requirements() {
-    info "Checking system requirements..."
+    log "Checking system requirements..."
     
     # Check available memory (minimum 2GB)
     local mem_gb=$(free -g | awk '/^Mem:/{print $2}')
@@ -302,13 +313,13 @@ check_requirements() {
         error "Insufficient disk space. At least 5GB required."
     fi
     
-    success "System requirements check passed"
+    log "System requirements check passed"
 }
 
 update_system() {
     info "Updating system packages..."
-    apt-get update -qq
-    apt-get upgrade -y -qq
+    silent_exec "apt-get update -qq" "System package update"
+    silent_exec "apt-get upgrade -y -qq" "System package upgrade"
     success "System updated"
 }
 
@@ -316,100 +327,53 @@ install_dependencies() {
     info "Installing system dependencies..."
     
     # Essential packages
-    apt-get install -y -qq \
-        curl \
-        wget \
-        gnupg \
-        software-properties-common \
-        apt-transport-https \
-        ca-certificates \
-        lsb-release \
-        ufw \
-        fail2ban \
-        unzip \
-        git \
-        htop \
-        nano \
-        vim \
-        sudo \
-        systemd \
-        dbus \
-        apparmor-utils
+    silent_exec "apt-get install -y -qq curl wget gnupg software-properties-common apt-transport-https ca-certificates lsb-release ufw fail2ban unzip git htop nano vim sudo systemd dbus apparmor-utils" "Essential packages installation"
     
     # BIND9 and DNS tools
-    apt-get install -y -qq \
-        bind9 \
-        bind9utils \
-        bind9-doc \
-        dnsutils
+    silent_exec "apt-get install -y -qq bind9 bind9utils bind9-doc dnsutils" "BIND9 installation"
     
-    # PostgreSQL (Ubuntu 24.04 includes PostgreSQL 16)
-    apt-get install -y -qq \
-        postgresql \
-        postgresql-contrib \
-        postgresql-client \
-        libpq-dev \
-        postgresql-server-dev-all
+    # PostgreSQL
+    silent_exec "apt-get install -y -qq postgresql postgresql-contrib postgresql-client libpq-dev postgresql-server-dev-all" "PostgreSQL installation"
     
     # Verify PostgreSQL installation
     if ! command -v psql &> /dev/null; then
         error "PostgreSQL installation failed"
     fi
+    log "PostgreSQL version: $(psql --version)"
     
-    info "PostgreSQL version: $(psql --version)"
-    
-    # Python (Ubuntu 24.04 uses Python 3.12 by default)
-    apt-get install -y -qq \
-        python3 \
-        python3-pip \
-        python3-venv \
-        python3-dev \
-        python3-setuptools \
-        python3-wheel \
-        build-essential \
-        pkg-config \
-        libffi-dev \
-        libssl-dev
+    # Python
+    silent_exec "apt-get install -y -qq python3 python3-pip python3-venv python3-dev python3-setuptools python3-wheel build-essential pkg-config libffi-dev libssl-dev" "Python installation"
     
     # Verify Python installation
     if ! command -v python3 &> /dev/null; then
         error "Python3 installation failed"
     fi
+    log "Python version: $(python3 --version)"
     
-    info "Python version: $(python3 --version)"
-    info "pip version: $(python3 -m pip --version)"
-    
-    # Node.js (via NodeSource) - Updated for Ubuntu 24.04 compatibility
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-    apt-get install -y -qq nodejs
+    # Node.js
+    silent_exec "curl -fsSL https://deb.nodesource.com/setup_20.x | bash -" "Node.js repository setup"
+    silent_exec "apt-get install -y -qq nodejs" "Node.js installation"
     
     # Verify Node.js installation
     if ! command -v node &> /dev/null; then
         error "Node.js installation failed"
     fi
-    
-    # Verify npm installation
     if ! command -v npm &> /dev/null; then
         error "npm installation failed"
     fi
-    
-    info "Node.js version: $(node --version)"
-    info "npm version: $(npm --version)"
+    log "Node.js version: $(node --version)"
     
     # Redis Server
-    apt-get install -y -qq redis-server
+    silent_exec "apt-get install -y -qq redis-server" "Redis installation"
     
     # Verify Redis installation
     if ! command -v redis-server &> /dev/null; then
         error "Redis installation failed"
     fi
-    
-    info "Redis version: $(redis-server --version)"
+    log "Redis version: $(redis-server --version)"
     
     # Nginx
-    apt-get install -y -qq nginx
-    
-    # Install npm (already included with Node.js)
+    silent_exec "apt-get install -y -qq nginx" "Nginx installation"
     
     success "Dependencies installed"
 }
@@ -418,38 +382,38 @@ create_user() {
     info "Creating service user..."
     
     if ! id "$SERVICE_USER" &>/dev/null; then
-        useradd -r -s /bin/bash -d "$INSTALL_DIR" -m "$SERVICE_USER"
+        silent_exec "useradd -r -s /bin/bash -d '$INSTALL_DIR' -m '$SERVICE_USER'" "Service user creation"
         success "User $SERVICE_USER created"
     else
-        info "User $SERVICE_USER already exists"
+        log "User $SERVICE_USER already exists"
     fi
     
     # Add service user to bind group for BIND9 file access
-    usermod -a -G bind "$SERVICE_USER"
-    info "Added $SERVICE_USER to bind group"
+    silent_exec "usermod -a -G bind '$SERVICE_USER'" "Adding user to bind group"
     
     # Add www-data to dns-server group for file access
-    usermod -a -G "$SERVICE_USER" www-data
-    info "Added www-data to $SERVICE_USER group"
+    silent_exec "usermod -a -G '$SERVICE_USER' www-data" "Adding www-data to service group"
+    
+    success "User configuration completed"
 }
 
 setup_database() {
     info "Setting up PostgreSQL database..."
     
     # Start PostgreSQL
-    systemctl start postgresql
-    systemctl enable postgresql
+    silent_exec "systemctl start postgresql" "PostgreSQL service start"
+    silent_exec "systemctl enable postgresql" "PostgreSQL service enable"
     
     # Start and enable Redis
-    systemctl start redis-server
-    systemctl enable redis-server
+    silent_exec "systemctl start redis-server" "Redis service start"
+    silent_exec "systemctl enable redis-server" "Redis service enable"
     
     # Verify Redis is running
     if ! systemctl is-active --quiet redis-server; then
         error "Redis service failed to start"
     fi
     
-    info "Redis service started and enabled"
+    log "Redis service started and enabled"
     
     # Generate random password for database user
     local db_password=$(openssl rand -base64 32)
@@ -529,26 +493,25 @@ EOF
 }
 
 download_application() {
-    info "Downloading Hybrid DNS Server application..."
+    info "Downloading application files..."
     
     # Create temporary directory for download
     local temp_dir=$(mktemp -d)
     cd "$temp_dir"
     
     # Download the latest release or main branch
-    info "Downloading from GitHub repository..."
-    if ! wget -q "https://github.com/mr-wolf-gb/hybrid-dns-server/archive/refs/heads/main.zip" -O hybrid-dns-server.zip; then
+    if ! silent_exec "wget -q 'https://github.com/mr-wolf-gb/hybrid-dns-server/archive/refs/heads/main.zip' -O hybrid-dns-server.zip" "GitHub download"; then
         error "Failed to download application files from GitHub"
     fi
     
     # Extract files
-    if ! unzip -q hybrid-dns-server.zip; then
+    if ! silent_exec "unzip -q hybrid-dns-server.zip" "File extraction"; then
         error "Failed to extract application files"
     fi
     
     # Move files to installation directory
-    mkdir -p "$INSTALL_DIR"
-    cp -r hybrid-dns-server-main/* "$INSTALL_DIR/"
+    silent_exec "mkdir -p '$INSTALL_DIR'" "Installation directory creation"
+    silent_exec "cp -r hybrid-dns-server-main/* '$INSTALL_DIR/'" "File installation"
     
     # Clean up
     cd /
@@ -573,7 +536,7 @@ install_application() {
     
     # Install Python dependencies
     info "Installing Python dependencies..."
-    sudo -u "$SERVICE_USER" bash << EOF
+    if ! sudo -u "$SERVICE_USER" bash << EOF >> "$LOG_FILE" 2>&1
 cd "$INSTALL_DIR/backend"
 python3 -m venv venv
 source venv/bin/activate
@@ -585,24 +548,30 @@ python -c "import fastapi; print('FastAPI:', fastapi.__version__)"
 python -c "import sqlalchemy; print('SQLAlchemy:', sqlalchemy.__version__)"
 python -c "import uvicorn; print('Uvicorn installed successfully')"
 EOF
+    then
+        error "Python dependencies installation failed. Check $LOG_FILE for details."
+    fi
     
     # Verify virtual environment was created successfully
     if [[ ! -f "$INSTALL_DIR/backend/venv/bin/python" ]]; then
         error "Python virtual environment creation failed"
     fi
     
-    success "Python dependencies installed successfully"
+    success "Python dependencies installed"
     
     # Configure frontend environment
-    info "Configuring frontend environment..."
-    sudo -u "$SERVICE_USER" bash << EOF
+    log "Configuring frontend environment..."
+    if ! sudo -u "$SERVICE_USER" bash << EOF >> "$LOG_FILE" 2>&1
 cd "$INSTALL_DIR/frontend"
 echo "VITE_API_URL=https://$SERVER_IP" > .env
 echo "VITE_API_URL=https://$SERVER_IP" > .env.production
 EOF
+    then
+        error "Frontend environment configuration failed"
+    fi
     
     # Validate vite.config.ts syntax
-    info "Validating Vite configuration..."
+    log "Validating Vite configuration..."
     if [[ -f "$INSTALL_DIR/frontend/vite.config.ts" ]]; then
         # Basic syntax check - ensure the file has proper structure
         if ! grep -q "export default defineConfig" "$INSTALL_DIR/frontend/vite.config.ts"; then
@@ -618,33 +587,24 @@ EOF
     # Clean any existing build artifacts
     sudo -u "$SERVICE_USER" rm -rf "$INSTALL_DIR/frontend/node_modules" "$INSTALL_DIR/frontend/package-lock.json" "$INSTALL_DIR/frontend/dist" 2>/dev/null || true
     
-    # Install dependencies with Ubuntu 24.04 compatibility
-    info "Installing frontend dependencies..."
-    
     # Set npm configuration for better compatibility
-    sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm config set fund false && npm config set audit false"
+    sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm config set fund false && npm config set audit false" >> "$LOG_FILE" 2>&1
     
     # Install with legacy peer deps for better compatibility
-    if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm install --legacy-peer-deps --no-audit --no-fund 2>&1"; then
-        warning "npm install with legacy-peer-deps failed, trying without..."
-        if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm install --no-audit --no-fund"; then
-            error "Failed to install frontend dependencies"
+    if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm install --legacy-peer-deps --no-audit --no-fund" >> "$LOG_FILE" 2>&1; then
+        log "npm install with legacy-peer-deps failed, trying without..."
+        if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm install --no-audit --no-fund" >> "$LOG_FILE" 2>&1; then
+            error "Failed to install frontend dependencies. Check $LOG_FILE for details."
         fi
     fi
     
-    # Verify critical dependencies
-    sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && npm list react vite typescript --depth=0" || warning "Some frontend dependencies may be missing"
-    
     # Build the application
-    info "Building frontend..."
-    
-    # Set NODE_OPTIONS for Ubuntu 24.04 compatibility
     export NODE_OPTIONS="--max-old-space-size=4096"
     
-    if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && NODE_OPTIONS='--max-old-space-size=4096' npm run build 2>&1"; then
-        warning "Frontend build failed, trying with legacy OpenSSL..."
-        if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && NODE_OPTIONS='--max-old-space-size=4096 --openssl-legacy-provider' npm run build 2>&1"; then
-            error "Frontend build failed - check vite.config.ts syntax and dependencies"
+    if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && NODE_OPTIONS='--max-old-space-size=4096' npm run build" >> "$LOG_FILE" 2>&1; then
+        log "Frontend build failed, trying with legacy OpenSSL..."
+        if ! sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/frontend' && NODE_OPTIONS='--max-old-space-size=4096 --openssl-legacy-provider' npm run build" >> "$LOG_FILE" 2>&1; then
+            error "Frontend build failed. Check $LOG_FILE for details."
         fi
     fi
     
@@ -653,21 +613,18 @@ EOF
         error "Frontend build completed but dist/index.html not found"
     fi
     
-    success "Frontend build completed successfully"
+    success "Frontend build completed"
     
     # Fix permissions for nginx to access frontend files
-    info "Setting proper permissions for web files..."
+    log "Setting proper permissions for web files..."
     if [[ -d "$INSTALL_DIR/frontend/dist" ]]; then
         # Set proper ownership and permissions for nginx access
-        # nginx (www-data) needs read access to files and execute access to directories
-        chown -R "$SERVICE_USER:www-data" "$INSTALL_DIR/frontend/dist"
-        find "$INSTALL_DIR/frontend/dist" -type d -exec chmod 755 {} \;
-        find "$INSTALL_DIR/frontend/dist" -type f -exec chmod 644 {} \;
+        silent_exec "chown -R '$SERVICE_USER:www-data' '$INSTALL_DIR/frontend/dist'" "Frontend file ownership"
+        silent_exec "find '$INSTALL_DIR/frontend/dist' -type d -exec chmod 755 {} \\;" "Frontend directory permissions"
+        silent_exec "find '$INSTALL_DIR/frontend/dist' -type f -exec chmod 644 {} \\;" "Frontend file permissions"
+        silent_exec "chmod 755 '$INSTALL_DIR/frontend'" "Frontend parent directory permissions"
         
-        # Ensure parent directories are accessible
-        chmod 755 "$INSTALL_DIR/frontend"
-        
-        success "Frontend file permissions set correctly"
+        log "Frontend file permissions set correctly"
     else
         error "Frontend dist directory not found - frontend build failed"
     fi
@@ -679,51 +636,48 @@ configure_bind9() {
     info "Configuring BIND9..."
     
     # Backup original configuration
-    cp /etc/bind/named.conf /etc/bind/named.conf.backup
-    cp /etc/bind/named.conf.options /etc/bind/named.conf.options.backup
-    cp /etc/bind/named.conf.local /etc/bind/named.conf.local.backup
+    silent_exec "cp /etc/bind/named.conf /etc/bind/named.conf.backup" "BIND9 config backup"
+    silent_exec "cp /etc/bind/named.conf.options /etc/bind/named.conf.options.backup" "BIND9 options backup"
+    silent_exec "cp /etc/bind/named.conf.local /etc/bind/named.conf.local.backup" "BIND9 local config backup"
     
     # Copy our BIND9 configuration
-    cp "$INSTALL_DIR/bind9/named.conf.options" /etc/bind/
-    cp "$INSTALL_DIR/bind9/named.conf.local" /etc/bind/
-    cp "$INSTALL_DIR/bind9/zones.conf" /etc/bind/
+    silent_exec "cp '$INSTALL_DIR/bind9/named.conf.options' /etc/bind/" "BIND9 options copy"
+    silent_exec "cp '$INSTALL_DIR/bind9/named.conf.local' /etc/bind/" "BIND9 local config copy"
+    silent_exec "cp '$INSTALL_DIR/bind9/zones.conf' /etc/bind/" "BIND9 zones config copy"
     
     # Create directories with proper permissions
-    mkdir -p /etc/bind/zones
-    mkdir -p /etc/bind/rpz
-    mkdir -p /var/log/bind
-    mkdir -p /etc/bind/backups
+    silent_exec "mkdir -p /etc/bind/zones /etc/bind/rpz /var/log/bind /etc/bind/backups" "BIND9 directories creation"
     
     # Copy zone files
-    cp -r "$INSTALL_DIR/bind9/zones/"* /etc/bind/zones/
-    cp -r "$INSTALL_DIR/bind9/rpz/"* /etc/bind/rpz/
+    silent_exec "cp -r '$INSTALL_DIR/bind9/zones/'* /etc/bind/zones/" "Zone files copy"
+    silent_exec "cp -r '$INSTALL_DIR/bind9/rpz/'* /etc/bind/rpz/" "RPZ files copy"
     
     # Fix zone files that don't end with newlines
-    find /etc/bind/zones -name "db.*" -exec sh -c 'echo "" >> "$1"' _ {} \;
-    find /etc/bind/rpz -name "db.*" -exec sh -c 'echo "" >> "$1"' _ {} \;
+    silent_exec "find /etc/bind/zones -name 'db.*' -exec sh -c 'echo \"\" >> \"\$1\"' _ {} \\;" "Zone files newline fix"
+    silent_exec "find /etc/bind/rpz -name 'db.*' -exec sh -c 'echo \"\" >> \"\$1\"' _ {} \\;" "RPZ files newline fix"
     
     # Set comprehensive permissions
-    chown -R root:bind /etc/bind/
-    chown -R bind:bind /etc/bind/zones
-    chown -R bind:bind /etc/bind/rpz
-    chown -R bind:bind /var/log/bind
-    chown -R "$SERVICE_USER:bind" /etc/bind/backups
+    silent_exec "chown -R root:bind /etc/bind/" "BIND9 root ownership"
+    silent_exec "chown -R bind:bind /etc/bind/zones" "Zone files ownership"
+    silent_exec "chown -R bind:bind /etc/bind/rpz" "RPZ files ownership"
+    silent_exec "chown -R bind:bind /var/log/bind" "BIND9 log ownership"
+    silent_exec "chown -R '$SERVICE_USER:bind' /etc/bind/backups" "BIND9 backup ownership"
     
-    # Set directory permissions (group writable for service user)
-    chmod 775 /etc/bind/zones
-    chmod 775 /etc/bind/rpz
-    chmod 755 /var/log/bind
-    chmod 755 /etc/bind/backups
+    # Set directory permissions
+    silent_exec "chmod 775 /etc/bind/zones" "Zone directory permissions"
+    silent_exec "chmod 775 /etc/bind/rpz" "RPZ directory permissions"
+    silent_exec "chmod 755 /var/log/bind" "BIND9 log permissions"
+    silent_exec "chmod 755 /etc/bind/backups" "BIND9 backup permissions"
     
     # Set file permissions
-    chmod 644 /etc/bind/*.conf
+    silent_exec "chmod 644 /etc/bind/*.conf" "BIND9 config permissions"
     chmod 644 /etc/bind/*.key 2>/dev/null || true
     chmod 664 /etc/bind/zones/db.* 2>/dev/null || true
     chmod 664 /etc/bind/rpz/db.* 2>/dev/null || true
     
     # Fix AppArmor profile if it exists (Ubuntu 24.04 specific)
     if [[ -f /etc/apparmor.d/usr.sbin.named ]]; then
-        info "Updating AppArmor profile for BIND9..."
+        log "Updating AppArmor profile for BIND9..."
         
         # Add necessary permissions to AppArmor profile
         if ! grep -q "/var/log/bind/" /etc/apparmor.d/usr.sbin.named; then
@@ -773,8 +727,8 @@ EOF
                     mv /tmp/usr.sbin.named.new /etc/apparmor.d/usr.sbin.named
                     
                     # Reload AppArmor profile
-                    if apparmor_parser -r /etc/apparmor.d/usr.sbin.named; then
-                        success "AppArmor profile updated successfully"
+                    if apparmor_parser -r /etc/apparmor.d/usr.sbin.named >> "$LOG_FILE" 2>&1; then
+                        log "AppArmor profile updated successfully"
                     else
                         warning "Could not reload AppArmor profile - restoring backup"
                         mv /etc/apparmor.d/usr.sbin.named.backup /etc/apparmor.d/usr.sbin.named
@@ -790,10 +744,10 @@ EOF
             # Clean up temporary files
             rm -f /tmp/apparmor_additions
         else
-            info "AppArmor profile already contains required permissions"
+            log "AppArmor profile already contains required permissions"
         fi
     else
-        info "AppArmor profile for BIND9 not found - skipping AppArmor configuration"
+        log "AppArmor profile for BIND9 not found - skipping AppArmor configuration"
     fi
     
     # Fix statistics-channels configuration issue (remove problematic CIDR line)
@@ -811,7 +765,7 @@ EOF
     fi
     
     # Test configuration
-    if named-checkconf; then
+    if named-checkconf >> "$LOG_FILE" 2>&1; then
         success "BIND9 configuration is valid"
     else
         error "BIND9 configuration is invalid"
@@ -835,30 +789,30 @@ EOF
         fi
     fi
     
-    info "Using BIND9 service name: $BIND_SERVICE"
+    log "Using BIND9 service name: $BIND_SERVICE"
     
     # Enable and start the service
-    if systemctl enable $BIND_SERVICE 2>/dev/null; then
-        success "BIND9 service enabled successfully"
+    if systemctl enable $BIND_SERVICE >> "$LOG_FILE" 2>&1; then
+        log "BIND9 service enabled successfully"
     else
-        warning "Could not enable BIND9 service - it may be an alias or masked"
+        log "Could not enable BIND9 service - it may be an alias or masked"
         # Try to unmask if it's masked
-        systemctl unmask $BIND_SERVICE 2>/dev/null || true
+        systemctl unmask $BIND_SERVICE >> "$LOG_FILE" 2>&1 || true
         # Try enabling again
-        systemctl enable $BIND_SERVICE 2>/dev/null || warning "BIND9 service enable failed - will try to start anyway"
+        systemctl enable $BIND_SERVICE >> "$LOG_FILE" 2>&1 || log "BIND9 service enable failed - will try to start anyway"
     fi
     
     # Start the service
-    if systemctl restart $BIND_SERVICE; then
-        success "BIND9 service started successfully"
+    if systemctl restart $BIND_SERVICE >> "$LOG_FILE" 2>&1; then
+        log "BIND9 service started successfully"
     else
-        warning "Failed to start $BIND_SERVICE, trying alternative service names..."
+        log "Failed to start $BIND_SERVICE, trying alternative service names..."
         # Try alternative service names
         for service in named bind9; do
             if [[ "$service" != "$BIND_SERVICE" ]]; then
-                if systemctl restart $service 2>/dev/null; then
+                if systemctl restart $service >> "$LOG_FILE" 2>&1; then
                     BIND_SERVICE="$service"
-                    success "BIND9 started successfully as $service"
+                    log "BIND9 started successfully as $service"
                     break
                 fi
             fi
@@ -879,14 +833,14 @@ EOF
         BIND_SERVICE="bind9"
     else
         warning "BIND9 failed to start, checking logs..."
-        journalctl -u $BIND_SERVICE --no-pager -n 10
-        error "BIND9 failed to start - check configuration"
+        journalctl -u $BIND_SERVICE --no-pager -n 10 >> "$LOG_FILE" 2>&1
+        error "BIND9 failed to start - check $LOG_FILE for details"
     fi
     
     # Test DNS resolution
-    info "Testing DNS resolution..."
-    if dig @localhost google.com +short > /dev/null 2>&1; then
-        success "DNS resolution test passed"
+    log "Testing DNS resolution..."
+    if dig @localhost google.com +short >> "$LOG_FILE" 2>&1; then
+        log "DNS resolution test passed"
     else
         warning "DNS resolution test failed - may need manual configuration"
     fi
@@ -903,16 +857,13 @@ setup_nginx() {
     fi
     
     # Generate SSL certificate (self-signed for now)
-    mkdir -p /etc/nginx/ssl
+    silent_exec "mkdir -p /etc/nginx/ssl" "SSL directory creation"
     local cert_cn="$SERVER_IP"
     if [[ -n "$DOMAIN_NAME" ]]; then
         cert_cn="$DOMAIN_NAME"
     fi
     
-    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-        -keyout /etc/nginx/ssl/dns-server.key \
-        -out /etc/nginx/ssl/dns-server.crt \
-        -subj "/C=US/ST=State/L=City/O=Hybrid DNS Server/CN=$cert_cn"
+    silent_exec "openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/ssl/dns-server.key -out /etc/nginx/ssl/dns-server.crt -subj '/C=US/ST=State/L=City/O=Hybrid DNS Server/CN=$cert_cn'" "SSL certificate generation"
     
     # Create Nginx configuration with dynamic server name
     local server_name="_"
@@ -1040,26 +991,26 @@ server {
 EOF
     
     # Enable site
-    ln -sf "$NGINX_AVAILABLE/hybrid-dns-server" "$NGINX_ENABLED/"
+    silent_exec "ln -sf '$NGINX_AVAILABLE/hybrid-dns-server' '$NGINX_ENABLED/'" "Nginx site enable"
     
     # Remove default site
-    rm -f "$NGINX_ENABLED/default"
+    silent_exec "rm -f '$NGINX_ENABLED/default'" "Default site removal"
     
     # Test configuration
-    if nginx -t; then
-        success "Nginx configuration is valid"
+    if nginx -t >> "$LOG_FILE" 2>&1; then
+        log "Nginx configuration is valid"
     else
-        error "Nginx configuration is invalid"
+        error "Nginx configuration is invalid. Check $LOG_FILE for details."
     fi
     
     # Restart Nginx
-    systemctl restart nginx
-    systemctl enable nginx
+    silent_exec "systemctl restart nginx" "Nginx restart"
+    silent_exec "systemctl enable nginx" "Nginx enable"
     
     # Verify nginx can access frontend files
-    info "Verifying nginx can access frontend files..."
+    log "Verifying nginx can access frontend files..."
     if sudo -u www-data test -r "$INSTALL_DIR/frontend/dist/index.html"; then
-        success "Frontend files are accessible by nginx"
+        log "Frontend files are accessible by nginx"
     else
         error "Frontend files are not accessible by nginx. Check permissions manually."
     fi
@@ -1235,10 +1186,10 @@ WantedBy=timers.target
 EOF
 
     # Reload systemd and enable services
-    systemctl daemon-reload
-    systemctl enable hybrid-dns-backend.service
-    systemctl enable hybrid-dns-monitor.service
-    systemctl enable hybrid-dns-backup.timer
+    silent_exec "systemctl daemon-reload" "Systemd daemon reload"
+    silent_exec "systemctl enable hybrid-dns-backend.service" "Backend service enable"
+    silent_exec "systemctl enable hybrid-dns-monitor.service" "Monitor service enable"
+    silent_exec "systemctl enable hybrid-dns-backup.timer" "Backup timer enable"
     
     success "Systemd services created"
 }
@@ -1247,25 +1198,25 @@ setup_firewall() {
     info "Configuring firewall..."
     
     # Reset UFW
-    ufw --force reset
+    silent_exec "ufw --force reset" "UFW reset"
     
     # Default policies
-    ufw default deny incoming
-    ufw default allow outgoing
+    silent_exec "ufw default deny incoming" "UFW default deny incoming"
+    silent_exec "ufw default allow outgoing" "UFW default allow outgoing"
     
     # Allow SSH
-    ufw allow ssh
+    silent_exec "ufw allow ssh" "UFW allow SSH"
     
     # Allow HTTP/HTTPS
-    ufw allow 80/tcp
-    ufw allow 443/tcp
+    silent_exec "ufw allow 80/tcp" "UFW allow HTTP"
+    silent_exec "ufw allow 443/tcp" "UFW allow HTTPS"
     
     # Allow DNS
-    ufw allow 53/tcp
-    ufw allow 53/udp
+    silent_exec "ufw allow 53/tcp" "UFW allow DNS TCP"
+    silent_exec "ufw allow 53/udp" "UFW allow DNS UDP"
     
     # Enable firewall
-    ufw --force enable
+    silent_exec "ufw --force enable" "UFW enable"
     
     success "Firewall configured"
 }
@@ -1307,8 +1258,8 @@ failregex = ^<HOST> -.*"(GET|POST|PUT|DELETE) /api/.*" (429|500|502|503)
 ignoreregex =
 EOF
 
-    systemctl restart fail2ban
-    systemctl enable fail2ban
+    silent_exec "systemctl restart fail2ban" "Fail2ban restart"
+    silent_exec "systemctl enable fail2ban" "Fail2ban enable"
     
     success "Fail2ban configured"
 }
@@ -1317,7 +1268,7 @@ configure_redis_security() {
     info "Configuring Redis security..."
     
     # Backup original Redis configuration
-    cp /etc/redis/redis.conf /etc/redis/redis.conf.backup
+    silent_exec "cp /etc/redis/redis.conf /etc/redis/redis.conf.backup" "Redis config backup"
     
     # Configure Redis for security
     cat >> /etc/redis/redis.conf << EOF
@@ -1336,7 +1287,7 @@ save 60 10000
 EOF
     
     # Restart Redis with new configuration
-    systemctl restart redis-server
+    silent_exec "systemctl restart redis-server" "Redis restart"
     
     # Verify Redis is still running
     if ! systemctl is-active --quiet redis-server; then
@@ -1350,22 +1301,25 @@ initialize_database() {
     info "Initializing database..."
     
     # Copy .env file to backend directory for the initialization
-    cp "$INSTALL_DIR/.env" "$INSTALL_DIR/backend/.env"
-    chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/backend/.env"
-    chmod 600 "$INSTALL_DIR/backend/.env"
+    silent_exec "cp '$INSTALL_DIR/.env' '$INSTALL_DIR/backend/.env'" "Backend env file copy"
+    silent_exec "chown '$SERVICE_USER:$SERVICE_USER' '$INSTALL_DIR/backend/.env'" "Backend env file ownership"
+    silent_exec "chmod 600 '$INSTALL_DIR/backend/.env'" "Backend env file permissions"
     
     # Reinstall requirements to ensure alembic is available
-    info "Ensuring all Python dependencies are installed..."
-    sudo -u "$SERVICE_USER" bash << EOF
+    log "Ensuring all Python dependencies are installed..."
+    if ! sudo -u "$SERVICE_USER" bash << EOF >> "$LOG_FILE" 2>&1
 cd "$INSTALL_DIR/backend"
 source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 EOF
+    then
+        error "Python dependencies installation failed. Check $LOG_FILE for details."
+    fi
     
     # Run database initialization
-    info "Running database initialization script..."
-    if sudo -u "$SERVICE_USER" bash << EOF
+    log "Running database initialization script..."
+    if sudo -u "$SERVICE_USER" bash << EOF >> "$LOG_FILE" 2>&1
 cd "$INSTALL_DIR/backend"
 source venv/bin/activate
 
@@ -1373,27 +1327,27 @@ source venv/bin/activate
 export PYTHONPATH="\$PWD:\$PYTHONPATH"
 
 # Initialize database tables
-python init_db.py
+python scripts/database/init_db.py
 EOF
     then
-        success "Database tables created successfully"
+        log "Database tables created successfully"
     else
         warning "Database initialization script failed, but continuing..."
     fi
     
     # Alembic is no longer required; migrations handled in-app
-    info "Skipping Alembic migrations (managed by application)"
+    log "Skipping Alembic migrations (managed by application)"
     
     # Verify database initialization
-    info "Verifying database health..."
-    if sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/backend' && source venv/bin/activate && python -c 'import asyncio; from app.core.database import check_database_health; print(asyncio.run(check_database_health()))'"; then
-        success "Database initialization verified"
+    log "Verifying database health..."
+    if sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR/backend' && source venv/bin/activate && python -c 'import asyncio; from app.core.database import check_database_health; print(asyncio.run(check_database_health()))'" >> "$LOG_FILE" 2>&1; then
+        log "Database initialization verified"
     else
         warning "Database initialization completed but verification failed"
     fi
     
     # Remove the temporary .env file from backend directory
-    rm -f "$INSTALL_DIR/backend/.env"
+    silent_exec "rm -f '$INSTALL_DIR/backend/.env'" "Temporary env file cleanup"
     
     success "Database initialized"
 }
@@ -1402,9 +1356,8 @@ start_services() {
     info "Starting services..."
     
     # Start backend service first
-    info "Starting backend service..."
-    if systemctl start hybrid-dns-backend; then
-        success "Backend service start command executed"
+    if systemctl start hybrid-dns-backend >> "$LOG_FILE" 2>&1; then
+        log "Backend service start command executed"
     else
         warning "Backend service start command failed"
     fi
@@ -1417,22 +1370,20 @@ start_services() {
         success "Backend service is running"
     else
         warning "Backend service failed to start, checking logs..."
-        journalctl -u hybrid-dns-backend --no-pager -n 20
-        error "Failed to start backend service - check logs above"
+        journalctl -u hybrid-dns-backend --no-pager -n 20 >> "$LOG_FILE" 2>&1
+        error "Failed to start backend service - check $LOG_FILE for details"
     fi
     
     # Start monitoring service
-    info "Starting monitoring service..."
-    if systemctl start hybrid-dns-monitor; then
-        success "Monitoring service start command executed"
+    if systemctl start hybrid-dns-monitor >> "$LOG_FILE" 2>&1; then
+        log "Monitoring service start command executed"
     else
         warning "Monitoring service start command failed"
     fi
     
     # Start backup timer
-    info "Starting backup timer..."
-    if systemctl start hybrid-dns-backup.timer; then
-        success "Backup timer started"
+    if systemctl start hybrid-dns-backup.timer >> "$LOG_FILE" 2>&1; then
+        log "Backup timer started"
     else
         warning "Backup timer failed to start"
     fi
@@ -1442,7 +1393,7 @@ start_services() {
     
     # Final status check
     if systemctl is-active --quiet hybrid-dns-monitor; then
-        success "Monitoring service is running"
+        log "Monitoring service is running"
     else
         warning "Monitoring service not started - check logs: journalctl -u hybrid-dns-monitor"
     fi
@@ -1453,20 +1404,20 @@ start_services() {
     sleep 10
     
     # Check if backend is responding
-    info "Testing backend API..."
+    log "Testing backend API..."
     local retry_count=0
     local max_retries=30
     
     while [[ $retry_count -lt $max_retries ]]; do
-        if curl -f -s "http://localhost:$BACKEND_PORT/health" > /dev/null; then
+        if curl -f -s "http://localhost:$BACKEND_PORT/health" >> "$LOG_FILE" 2>&1; then
             success "Backend API is responding"
             break
         else
             ((retry_count++))
             if [[ $retry_count -eq $max_retries ]]; then
-                warning "Backend API not responding after $max_retries attempts, checking logs..."
-                journalctl -u hybrid-dns-backend --no-pager -n 20
-                warning "Backend may need manual troubleshooting"
+                warning "Backend API not responding after $max_retries attempts"
+                journalctl -u hybrid-dns-backend --no-pager -n 20 >> "$LOG_FILE" 2>&1
+                warning "Backend may need manual troubleshooting - check $LOG_FILE"
             else
                 sleep 2
             fi
@@ -1474,9 +1425,9 @@ start_services() {
     done
     
     # Test web interface accessibility
-    info "Testing web interface..."
-    if curl -f -s -k "https://localhost/health" > /dev/null; then
-        success "Web interface is accessible"
+    log "Testing web interface..."
+    if curl -f -s -k "https://localhost/health" >> "$LOG_FILE" 2>&1; then
+        log "Web interface is accessible"
     else
         warning "Web interface may not be fully accessible yet"
     fi
@@ -1486,11 +1437,11 @@ create_admin_user() {
     info "Creating admin user..."
     
     # Copy .env file to backend directory for admin creation
-    cp "$INSTALL_DIR/.env" "$INSTALL_DIR/backend/.env"
-    chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/backend/.env"
-    chmod 600 "$INSTALL_DIR/backend/.env"
+    silent_exec "cp '$INSTALL_DIR/.env' '$INSTALL_DIR/backend/.env'" "Admin env file copy"
+    silent_exec "chown '$SERVICE_USER:$SERVICE_USER' '$INSTALL_DIR/backend/.env'" "Admin env file ownership"
+    silent_exec "chmod 600 '$INSTALL_DIR/backend/.env'" "Admin env file permissions"
     
-    sudo -u "$SERVICE_USER" bash << EOF
+    if ! sudo -u "$SERVICE_USER" bash << EOF >> "$LOG_FILE" 2>&1
 cd "$INSTALL_DIR/backend"
 source venv/bin/activate
 
@@ -1498,16 +1449,17 @@ source venv/bin/activate
 export PYTHONPATH="\$PWD:\$PYTHONPATH"
 
 # Create admin user
-python create_admin.py --username "$ADMIN_USERNAME" --password "$ADMIN_PASSWORD" --email "$ADMIN_EMAIL" --full-name "$ADMIN_FULL_NAME"
+python scripts/database/create_admin.py --username "$ADMIN_USERNAME" --password "$ADMIN_PASSWORD" --email "$ADMIN_EMAIL" --full-name "$ADMIN_FULL_NAME"
 EOF
+    then
+        error "Admin user creation failed. Check $LOG_FILE for details."
+    fi
     
     # Remove the temporary .env file from backend directory
-    rm -f "$INSTALL_DIR/backend/.env"
+    silent_exec "rm -f '$INSTALL_DIR/backend/.env'" "Admin env file cleanup"
     
     success "Admin user created successfully"
-    info "Admin credentials:"
-    info "  Username: $ADMIN_USERNAME"
-    info "  Email: $ADMIN_EMAIL"
+    log "Admin credentials: Username=$ADMIN_USERNAME, Email=$ADMIN_EMAIL"
 }
 
 print_summary() {
@@ -1723,6 +1675,7 @@ prompt_admin_credentials() {
 main() {
     echo "🚀 Hybrid DNS Server Installation Script"
     echo "========================================"
+    echo "📝 Detailed logs: $LOG_FILE"
     echo
     
     # Check for previous installation
