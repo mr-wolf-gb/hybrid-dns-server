@@ -1516,14 +1516,25 @@ print_summary() {
     echo "• Backend Direct: http://localhost:$BACKEND_PORT (internal only)"
     echo "• Allowed CORS Hosts: localhost, 127.0.0.1, $SERVER_IP$(if [[ -n "$DOMAIN_NAME" ]]; then echo ", $DOMAIN_NAME"; fi)"
     echo
+    echo "Quick Start:"
+    echo "• Test DNS: dig @$SERVER_IP example.com"
+    echo "• API Docs: https://$SERVER_IP/docs"
+    echo "• WebSocket Metrics: https://$SERVER_IP/api/websocket/metrics/summary"
+    echo "• Real-time Monitoring: /ws/queries, /ws/metrics, /ws/events"
+    echo
+    echo "Essential Commands:"
+    echo "• Check services: systemctl status hybrid-dns-backend"
+    echo "• View logs: journalctl -u hybrid-dns-backend -f"
+    echo "• Restart services: systemctl restart hybrid-dns-backend bind9"
+    echo "• BIND config check: named-checkconf"
+    echo
     echo "Next Steps:"
-    echo "1. Configure your clients to use this DNS server"
-    echo "2. Set up proper SSL certificates (Let's Encrypt recommended)"
-    echo "3. Configure external threat feed sources"
-    echo "4. Review and customize security settings"
+    echo "1. Configure clients to use DNS server: $SERVER_IP:53"
+    echo "2. Set up SSL certificates (Let's Encrypt recommended)"
+    echo "3. Configure threat feeds and security policies"
     echo
     echo "Documentation: $INSTALL_DIR/README.md"
-    echo "Support: Check the GitHub repository for issues and updates"
+    echo "Support: https://github.com/mr-wolf-gb/hybrid-dns-server"
     echo
     echo "Happy DNS serving! 🚀"
 }
