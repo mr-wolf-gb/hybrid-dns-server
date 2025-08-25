@@ -8,11 +8,11 @@ from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, HTTPException, Depends, Query, Body
 from fastapi.security import HTTPBearer
 
-from ...core.auth_context import get_current_user, require_admin
+from ...core.dependencies import get_current_user, get_current_superuser
 from ...models.auth import User
 from ...websocket.metrics import get_websocket_metrics
-from ...websocket.health_monitor import get_websocket_health_monitor, DebugLevel, TraceEventType
-from ...websocket.admin_tools import get_websocket_admin_tools
+from ...websocket.health_monitor import get_websocket_health_monitor
+from ...websocket.admin_tools import get_websocket_admin_tools, DebugLevel, TraceEventType
 from ...core.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -21,7 +21,7 @@ security = HTTPBearer()
 
 
 @router.get("/metrics/summary")
-async def get_metrics_summary(current_user: User = Depends(get_current_user)):
+async def get_metrics_summary(current_user: Dict[str, Any] = Depends(get_current_user)):
     """Get WebSocket metrics summary"""
     try:
         metrics = get_websocket_metrics()
@@ -39,7 +39,7 @@ async def get_metrics_summary(current_user: User = Depends(get_current_user)):
 
 @router.get("/metrics/connections")
 async def get_connection_metrics(
-    current_user: User = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(get_current_user),
     user_id: Optional[str] = Query(None, description="Filter by specific user ID")
 ):
     """Get detailed connection metrics"""
@@ -62,7 +62,7 @@ async def get_connection_metrics(
 
 @router.get("/metrics/events")
 async def get_event_metrics(
-    current_user: User = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(get_current_user),
     event_type: Optional[str] = Query(None, description="Filter by specific event type")
 ):
     """Get event processing metrics"""
@@ -82,7 +82,7 @@ async def get_event_metrics(
 
 @router.get("/metrics/performance")
 async def get_performance_metrics(
-    current_user: User = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(get_current_user),
     metric_name: str = Query(..., description="Performance metric name"),
     limit: int = Query(60, description="Number of data points to return")
 ):
@@ -107,7 +107,7 @@ async def get_performance_metrics(
 
 @router.get("/metrics/system")
 async def get_system_metrics(
-    current_user: User = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(get_current_user),
     limit: int = Query(60, description="Number of data points to return")
 ):
     """Get system resource metrics history"""
@@ -129,7 +129,7 @@ async def get_system_metrics(
 
 
 @router.get("/health/status")
-async def get_health_status(current_user: User = Depends(get_current_user)):
+async def get_health_status(current_user: Dict[str, Any] = Depends(get_current_user)):
     """Get overall WebSocket system health status"""
     try:
         health_monitor = get_websocket_health_monitor()
@@ -146,7 +146,7 @@ async def get_health_status(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/health/report")
-async def get_health_report(current_user: User = Depends(get_current_user)):
+async def get_health_report(current_user: Dict[str, Any] = Depends(get_current_user)):
     """Get comprehensive health report"""
     try:
         admin_tools = get_websocket_admin_tools()
@@ -165,7 +165,7 @@ async def get_health_report(current_user: User = Depends(get_current_user)):
 @router.get("/health/check/{check_name}")
 async def get_health_check_details(
     check_name: str,
-    current_user: User = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """Get detailed information about a specific health check"""
     try:
@@ -188,7 +188,7 @@ async def get_health_check_details(
 
 
 @router.get("/alerts")
-async def get_alerts(current_user: User = Depends(get_current_user)):
+async def get_alerts(current_user: Dict[str, Any] = Depends(get_current_user)):
     """Get current alert status"""
     try:
         metrics = get_websocket_metrics()
@@ -206,7 +206,7 @@ async def get_alerts(current_user: User = Depends(get_current_user)):
 
 # Admin-only endpoints
 @router.get("/admin/overview")
-async def get_admin_overview(current_user: User = Depends(require_admin)):
+async def get_admin_overview(current_user: Dict[str, Any] = Depends(get_current_superuser)):
     """Get comprehensive system overview (admin only)"""
     try:
         admin_tools = get_websocket_admin_tools()
@@ -224,7 +224,7 @@ async def get_admin_overview(current_user: User = Depends(require_admin)):
 
 @router.get("/admin/performance-analysis")
 async def get_performance_analysis(
-    current_user: User = Depends(require_admin),
+    current_user: Dict[str, Any] = Depends(get_current_superuser),
     hours: int = Query(1, description="Analysis period in hours")
 ):
     """Get detailed performance analysis (admin only)"""
@@ -244,7 +244,7 @@ async def get_performance_analysis(
 
 @router.post("/admin/debug/enable")
 async def enable_debug_mode(
-    current_user: User = Depends(require_admin),
+    current_user: Dict[str, Any] = Depends(get_current_superuser),
     config: Dict[str, Any] = Body(...)
 ):
     """Enable debug mode (admin only)"""
@@ -267,7 +267,7 @@ async def enable_debug_mode(
 
 
 @router.post("/admin/debug/disable")
-async def disable_debug_mode(current_user: User = Depends(require_admin)):
+async def disable_debug_mode(current_user: Dict[str, Any] = Depends(get_current_superuser)):
     """Disable debug mode (admin only)"""
     try:
         admin_tools = get_websocket_admin_tools()
@@ -285,7 +285,7 @@ async def disable_debug_mode(current_user: User = Depends(require_admin)):
 
 @router.post("/admin/tracing/enable")
 async def enable_event_tracing(
-    current_user: User = Depends(require_admin),
+    current_user: Dict[str, Any] = Depends(get_current_superuser),
     config: Dict[str, Any] = Body(...)
 ):
     """Enable event tracing (admin only)"""
@@ -311,7 +311,7 @@ async def enable_event_tracing(
 
 
 @router.post("/admin/tracing/disable")
-async def disable_event_tracing(current_user: User = Depends(require_admin)):
+async def disable_event_tracing(current_user: Dict[str, Any] = Depends(get_current_superuser)):
     """Disable event tracing (admin only)"""
     try:
         admin_tools = get_websocket_admin_tools()
@@ -329,7 +329,7 @@ async def disable_event_tracing(current_user: User = Depends(require_admin)):
 
 @router.get("/admin/tracing/events")
 async def get_trace_events(
-    current_user: User = Depends(require_admin),
+    current_user: Dict[str, Any] = Depends(get_current_superuser),
     limit: Optional[int] = Query(100, description="Maximum number of events to return"),
     event_type: Optional[str] = Query(None, description="Filter by event type"),
     user_id: Optional[str] = Query(None, description="Filter by user ID"),
@@ -369,7 +369,7 @@ async def get_trace_events(
 
 
 @router.post("/admin/profiling/enable")
-async def enable_profiling(current_user: User = Depends(require_admin)):
+async def enable_profiling(current_user: Dict[str, Any] = Depends(get_current_superuser)):
     """Enable performance profiling (admin only)"""
     try:
         admin_tools = get_websocket_admin_tools()
@@ -386,7 +386,7 @@ async def enable_profiling(current_user: User = Depends(require_admin)):
 
 
 @router.post("/admin/profiling/disable")
-async def disable_profiling(current_user: User = Depends(require_admin)):
+async def disable_profiling(current_user: Dict[str, Any] = Depends(get_current_superuser)):
     """Disable performance profiling (admin only)"""
     try:
         admin_tools = get_websocket_admin_tools()
@@ -405,7 +405,7 @@ async def disable_profiling(current_user: User = Depends(require_admin)):
 @router.post("/admin/connections/{user_id}/disconnect")
 async def force_disconnect_user(
     user_id: str,
-    current_user: User = Depends(require_admin),
+    current_user: Dict[str, Any] = Depends(get_current_superuser),
     reason: str = Body("Admin disconnect", embed=True)
 ):
     """Force disconnect a specific user (admin only)"""
@@ -430,7 +430,7 @@ async def force_disconnect_user(
 
 @router.post("/admin/broadcast")
 async def broadcast_admin_message(
-    current_user: User = Depends(require_admin),
+    current_user: Dict[str, Any] = Depends(get_current_superuser),
     message_data: Dict[str, Any] = Body(...)
 ):
     """Broadcast administrative message to all users (admin only)"""
@@ -459,7 +459,7 @@ async def broadcast_admin_message(
 
 
 @router.delete("/admin/metrics")
-async def clear_all_metrics(current_user: User = Depends(require_admin)):
+async def clear_all_metrics(current_user: Dict[str, Any] = Depends(get_current_superuser)):
     """Clear all collected metrics (admin only)"""
     try:
         admin_tools = get_websocket_admin_tools()
@@ -482,7 +482,7 @@ async def clear_all_metrics(current_user: User = Depends(require_admin)):
 
 @router.get("/admin/export")
 async def export_debug_data(
-    current_user: User = Depends(require_admin),
+    current_user: Dict[str, Any] = Depends(get_current_superuser),
     include_traces: bool = Query(True, description="Include trace events"),
     include_metrics: bool = Query(True, description="Include metrics data"),
     include_performance: bool = Query(True, description="Include performance data")
@@ -507,7 +507,7 @@ async def export_debug_data(
 
 
 @router.get("/admin/commands")
-async def get_debug_commands(current_user: User = Depends(require_admin)):
+async def get_debug_commands(current_user: Dict[str, Any] = Depends(get_current_superuser)):
     """Get list of available debug commands (admin only)"""
     try:
         admin_tools = get_websocket_admin_tools()

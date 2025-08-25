@@ -428,14 +428,18 @@ GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;
 \q
 EOF
     
+    # Generate secure keys
+    local secret_key=$(openssl rand -base64 64 | tr -d '\n')
+    local jwt_secret_key=$(openssl rand -base64 64 | tr -d '\n')
+    
     # Save database credentials and server configuration
     cat > "$INSTALL_DIR/.env" << EOF
 # Database Configuration
 DATABASE_URL=postgresql://$DB_USER:$db_password@localhost:5432/$DB_NAME
 
 # Security Configuration
-SECRET_KEY=$(openssl rand -base64 64)
-JWT_SECRET_KEY=$(openssl rand -base64 64)
+SECRET_KEY=$secret_key
+JWT_SECRET_KEY=$jwt_secret_key
 JWT_ALGORITHM=HS256
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
 JWT_REFRESH_TOKEN_EXPIRE_DAYS=7

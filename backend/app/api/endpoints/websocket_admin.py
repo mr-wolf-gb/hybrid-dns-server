@@ -8,10 +8,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 import asyncio
 
-from ...core.auth_context import get_current_admin_user
+from ...core.dependencies import get_current_superuser
 from ...core.feature_flags import get_websocket_feature_flags, WebSocketMigrationMode
 from ...websocket.router import get_websocket_router
-from ...models.auth import User
+
 from ...core.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -48,7 +48,7 @@ class WebSocketSystemInfo(BaseModel):
 
 @router.get("/status", response_model=Dict[str, Any])
 async def get_websocket_system_status(
-    current_user: User = Depends(get_current_admin_user)
+    current_user: Dict[str, Any] = Depends(get_current_superuser)
 ) -> Dict[str, Any]:
     """
     Get current WebSocket system status and statistics
@@ -76,7 +76,7 @@ async def get_websocket_system_status(
 @router.get("/user/{user_id}", response_model=WebSocketSystemInfo)
 async def get_user_websocket_info(
     user_id: str,
-    current_user: User = Depends(get_current_admin_user)
+    current_user: Dict[str, Any] = Depends(get_current_superuser)
 ) -> WebSocketSystemInfo:
     """
     Get WebSocket system information for a specific user
@@ -100,7 +100,7 @@ async def get_user_websocket_info(
 @router.post("/configure")
 async def configure_websocket_migration(
     config: WebSocketMigrationConfig,
-    current_user: User = Depends(get_current_admin_user)
+    current_user: Dict[str, Any] = Depends(get_current_superuser)
 ) -> Dict[str, Any]:
     """
     Configure WebSocket migration settings
@@ -133,7 +133,7 @@ async def configure_websocket_migration(
         # Clear user assignment cache to apply new settings
         feature_flags.clear_user_assignment_cache()
         
-        logger.info(f"WebSocket migration configuration updated by admin {current_user.username}")
+        logger.info(f"WebSocket migration configuration updated by admin {current_user['username']}")
         
         return {
             "success": True,
@@ -160,7 +160,7 @@ async def configure_websocket_migration(
 @router.post("/migrate-users")
 async def migrate_users(
     request: UserMigrationRequest,
-    current_user: User = Depends(get_current_admin_user)
+    current_user: Dict[str, Any] = Depends(get_current_superuser)
 ) -> Dict[str, Any]:
     """
     Migrate specific users between WebSocket systems
@@ -178,7 +178,7 @@ async def migrate_users(
         successful_migrations = sum(1 for r in results if r["success"])
         total_connections_migrated = sum(r["connections_migrated"] for r in results)
         
-        logger.info(f"Admin {current_user.username} migrated {successful_migrations} users "
+        logger.info(f"Admin {current_user['username']} migrated {successful_migrations} users "
                    f"to {'unified' if request.to_unified else 'legacy'} WebSocket system")
         
         return {
@@ -205,7 +205,7 @@ async def migrate_users(
 @router.post("/clear-cache")
 async def clear_user_assignment_cache(
     user_id: Optional[str] = None,
-    current_user: User = Depends(get_current_admin_user)
+    current_user: Dict[str, Any] = Depends(get_current_superuser)
 ) -> Dict[str, Any]:
     """
     Clear user assignment cache for WebSocket system selection
@@ -217,7 +217,7 @@ async def clear_user_assignment_cache(
         feature_flags.clear_user_assignment_cache(user_id)
         
         message = f"Cleared assignment cache for user {user_id}" if user_id else "Cleared all assignment cache"
-        logger.info(f"Admin {current_user.username}: {message}")
+        logger.info(f"Admin {current_user['username']}: {message}")
         
         return {
             "success": True,
@@ -235,7 +235,7 @@ async def clear_user_assignment_cache(
 
 @router.post("/emergency-rollback")
 async def emergency_rollback_to_legacy(
-    current_user: User = Depends(get_current_admin_user)
+    current_user: Dict[str, Any] = Depends(get_current_superuser)
 ) -> Dict[str, Any]:
     """
     Emergency rollback to legacy WebSocket system for all users
@@ -256,13 +256,13 @@ async def emergency_rollback_to_legacy(
         stats_before = router_instance.get_connection_stats()
         unified_connections = stats_before.get("unified_stats", {}).get("total_connections", 0)
         
-        logger.critical(f"EMERGENCY ROLLBACK initiated by admin {current_user.username}")
+        logger.critical(f"EMERGENCY ROLLBACK initiated by admin {current_user['username']}")
         
         return {
             "success": True,
             "message": "Emergency rollback to legacy WebSocket system completed",
             "rollback_info": {
-                "initiated_by": current_user.username,
+                "initiated_by": current_user['username'],
                 "unified_connections_before": unified_connections,
                 "migration_mode_set_to": "disabled",
                 "cache_cleared": True
@@ -285,7 +285,7 @@ async def emergency_rollback_to_legacy(
 
 @router.get("/health")
 async def websocket_system_health(
-    current_user: User = Depends(get_current_admin_user)
+    current_user: Dict[str, Any] = Depends(get_current_superuser)
 ) -> Dict[str, Any]:
     """
     Get health status of both WebSocket systems
@@ -351,7 +351,7 @@ async def websocket_system_health(
 
 @router.get("/production-monitoring")
 async def get_production_monitoring_status(
-    current_user: User = Depends(get_current_admin_user)
+    current_user: Dict[str, Any] = Depends(get_current_superuser)
 ) -> Dict[str, Any]:
     """
     Get comprehensive production monitoring status for WebSocket deployment
@@ -406,7 +406,7 @@ async def get_production_monitoring_status(
 @router.get("/production-report")
 async def get_production_deployment_report(
     hours: int = 1,
-    current_user: User = Depends(get_current_admin_user)
+    current_user: Dict[str, Any] = Depends(get_current_superuser)
 ) -> Dict[str, Any]:
     """
     Generate comprehensive production deployment report
@@ -425,7 +425,7 @@ async def get_production_deployment_report(
         return {
             "report": report,
             "generated_at": datetime.utcnow().isoformat(),
-            "generated_by": current_user.username,
+            "generated_by": current_user['username'],
             "report_period_hours": hours
         }
         
@@ -439,7 +439,7 @@ async def get_production_deployment_report(
 
 @router.post("/start-production-monitoring")
 async def start_production_monitoring(
-    current_user: User = Depends(get_current_admin_user)
+    current_user: Dict[str, Any] = Depends(get_current_superuser)
 ) -> Dict[str, Any]:
     """
     Start production deployment monitoring
@@ -461,12 +461,12 @@ async def start_production_monitoring(
         # Start monitoring in background task
         asyncio.create_task(monitoring_service.start_monitoring())
         
-        logger.info(f"Production monitoring started by admin {current_user.username}")
+        logger.info(f"Production monitoring started by admin {current_user['username']}")
         
         return {
             "success": True,
             "message": "Production monitoring started successfully",
-            "started_by": current_user.username,
+            "started_by": current_user['username'],
             "started_at": datetime.utcnow().isoformat(),
             "monitoring_active": True
         }
@@ -481,7 +481,7 @@ async def start_production_monitoring(
 
 @router.post("/stop-production-monitoring")
 async def stop_production_monitoring(
-    current_user: User = Depends(get_current_admin_user)
+    current_user: Dict[str, Any] = Depends(get_current_superuser)
 ) -> Dict[str, Any]:
     """
     Stop production deployment monitoring
@@ -502,12 +502,12 @@ async def stop_production_monitoring(
         
         monitoring_service.stop_monitoring()
         
-        logger.info(f"Production monitoring stopped by admin {current_user.username}")
+        logger.info(f"Production monitoring stopped by admin {current_user['username']}")
         
         return {
             "success": True,
             "message": "Production monitoring stopped successfully",
-            "stopped_by": current_user.username,
+            "stopped_by": current_user['username'],
             "stopped_at": datetime.utcnow().isoformat(),
             "monitoring_active": False
         }
@@ -534,7 +534,7 @@ class AlertThresholdUpdate(BaseModel):
 @router.post("/update-alert-thresholds")
 async def update_alert_thresholds(
     thresholds: AlertThresholdUpdate,
-    current_user: User = Depends(get_current_admin_user)
+    current_user: Dict[str, Any] = Depends(get_current_superuser)
 ) -> Dict[str, Any]:
     """
     Update alert thresholds for production monitoring
@@ -560,13 +560,13 @@ async def update_alert_thresholds(
         
         monitoring_service.update_thresholds(threshold_updates)
         
-        logger.info(f"Alert thresholds updated by admin {current_user.username}: {threshold_updates}")
+        logger.info(f"Alert thresholds updated by admin {current_user['username']}: {threshold_updates}")
         
         return {
             "success": True,
             "message": "Alert thresholds updated successfully",
             "updated_thresholds": threshold_updates,
-            "updated_by": current_user.username,
+            "updated_by": current_user['username'],
             "updated_at": datetime.utcnow().isoformat()
         }
         
@@ -592,7 +592,7 @@ class DeploymentRequest(BaseModel):
 @router.post("/deploy")
 async def deploy_websocket_system(
     request: DeploymentRequest,
-    current_user: User = Depends(get_current_admin_user)
+    current_user: Dict[str, Any] = Depends(get_current_superuser)
 ) -> Dict[str, Any]:
     """
     Deploy WebSocket system with specified configuration
@@ -655,13 +655,13 @@ async def deploy_websocket_system(
         # Clear user assignment cache
         feature_flags.clear_user_assignment_cache()
         
-        logger.info(f"WebSocket system deployed in {request.deployment_type} mode by admin {current_user.username}")
+        logger.info(f"WebSocket system deployed in {request.deployment_type} mode by admin {current_user['username']}")
         
         return {
             "success": True,
             "message": f"WebSocket system deployed in {request.deployment_type} mode",
             "deployment_info": deployment_info,
-            "deployed_by": current_user.username,
+            "deployed_by": current_user['username'],
             "timestamp": datetime.utcnow().isoformat()
         }
         
@@ -679,7 +679,7 @@ async def deploy_websocket_system(
 async def rollback_websocket_system(
     rollback_type: str = "emergency",
     reason: str = "Manual rollback via API",
-    current_user: User = Depends(get_current_admin_user)
+    current_user: Dict[str, Any] = Depends(get_current_superuser)
 ) -> Dict[str, Any]:
     """
     Rollback WebSocket system to legacy mode
@@ -712,7 +712,7 @@ async def rollback_websocket_system(
         # Clear user assignment cache
         feature_flags.clear_user_assignment_cache()
         
-        logger.critical(f"WebSocket system rollback ({rollback_type}) initiated by admin {current_user.username}: {reason}")
+        logger.critical(f"WebSocket system rollback ({rollback_type}) initiated by admin {current_user['username']}: {reason}")
         
         return {
             "success": True,
@@ -720,7 +720,7 @@ async def rollback_websocket_system(
             "rollback_info": {
                 "type": rollback_type,
                 "reason": reason,
-                "initiated_by": current_user.username,
+                "initiated_by": current_user['username'],
                 "unified_connections_before": unified_connections,
                 "timestamp": datetime.utcnow().isoformat()
             },
