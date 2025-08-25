@@ -93,38 +93,21 @@ async def websocket_endpoint(
     try:
         await websocket_manager.connect(websocket, user.username, connection_type)
         logger.info(f"WebSocket connected: user={user.username}, type={connection_type}")
-    except Exception as e:
-        logger.error(f"Failed to connect WebSocket for user {user.username}: {e}")
-        try:
-            await websocket.close(code=1011, reason="Internal server error during connection")
-        except:
-            pass
-        return
         
-        # Create automatic subscription for this connection
+        # Create connection identifier for this session
         connection_id = f"{user.username}_{connection_type}_{datetime.utcnow().timestamp()}"
-        await event_service.create_subscription(
-            user_id=user.username,
-            connection_id=connection_id,
-            event_category=connection_type if connection_type != "admin" else None,
-            expires_at=None  # No expiration for WebSocket subscriptions
-        )
         
-        # Send welcome message
-        await websocket_manager.send_personal_message({
-            "type": "welcome",
-            "data": {
-                "user_id": user.username,
-                "connection_type": connection_type,
-                "connection_id": connection_id,
-                "server_time": datetime.utcnow().isoformat()
-            },
-            "timestamp": datetime.utcnow().isoformat()
-        }, websocket)
+        # Connection established, manager already sent confirmation
+        logger.info(f"Starting message loop for user={user.username}, type={connection_type}")
         
         # Handle incoming messages
         while True:
             try:
+                # Check if WebSocket is still connected before trying to receive
+                if websocket.client_state.name != "CONNECTED":
+                    logger.warning(f"WebSocket not in CONNECTED state: {websocket.client_state.name}")
+                    break
+                
                 # Receive message from client
                 data = await websocket.receive_text()
                 message = json.loads(data)
@@ -135,18 +118,34 @@ async def websocket_endpoint(
                 logger.info(f"WebSocket disconnected: user={user.username}, type={connection_type}")
                 break
             except json.JSONDecodeError:
-                await websocket_manager.send_personal_message({
-                    "type": "error",
-                    "data": {"message": "Invalid JSON format"},
-                    "timestamp": datetime.utcnow().isoformat()
-                }, websocket)
+                try:
+                    await websocket_manager.send_personal_message({
+                        "type": "error",
+                        "data": {"message": "Invalid JSON format"},
+                        "timestamp": datetime.utcnow().isoformat()
+                    }, websocket)
+                except Exception as send_error:
+                    logger.error(f"Failed to send JSON error message: {send_error}")
+                    break
             except Exception as e:
                 logger.error(f"Error handling WebSocket message: {e}")
-                await websocket_manager.send_personal_message({
-                    "type": "error",
-                    "data": {"message": f"Error processing message: {str(e)}"},
-                    "timestamp": datetime.utcnow().isoformat()
-                }, websocket)
+                try:
+                    await websocket_manager.send_personal_message({
+                        "type": "error",
+                        "data": {"message": f"Error processing message: {str(e)}"},
+                        "timestamp": datetime.utcnow().isoformat()
+                    }, websocket)
+                except Exception as send_error:
+                    logger.error(f"Failed to send error message: {send_error}")
+                    break
+                
+    except Exception as e:
+        logger.error(f"Failed to connect WebSocket for user {user.username}: {e}")
+        try:
+            await websocket.close(code=1011, reason="Internal server error during connection")
+        except:
+            pass
+        return
     
     except Exception as e:
         logger.error(f"WebSocket connection error: {e}")

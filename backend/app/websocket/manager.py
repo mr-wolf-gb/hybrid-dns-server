@@ -124,19 +124,23 @@ class WebSocketManager:
         
         logger.info(f"WebSocket connected for user {user_id}, type: {connection_type} (total: {total_connections + 1})")
         
-        # Send initial connection confirmation
-        await self.send_personal_message({
-            "type": "connection_established",
-            "data": {
-                "connection_type": connection_type,
-                "subscribed_events": self.connection_metadata[websocket]["subscribed_events"]
-            },
-            "timestamp": datetime.utcnow().isoformat()
-        }, websocket)
-        
         # Start broadcasting services if this is the first connection
         if not self._running:
             await self.start_broadcasting()
+        
+        # Send initial connection confirmation after a small delay to ensure connection is ready
+        try:
+            await asyncio.sleep(0.1)  # Small delay to ensure WebSocket is fully ready
+            await self.send_personal_message({
+                "type": "connection_established",
+                "data": {
+                    "connection_type": connection_type,
+                    "subscribed_events": self.connection_metadata[websocket]["subscribed_events"]
+                },
+                "timestamp": datetime.utcnow().isoformat()
+            }, websocket)
+        except Exception as e:
+            logger.warning(f"Failed to send initial connection message: {e}")
     
     def disconnect(self, websocket: WebSocket):
         """Remove a WebSocket connection"""
@@ -197,7 +201,9 @@ class WebSocketManager:
             await websocket.send_text(json.dumps(message, default=self._json_default))
         except Exception as e:
             logger.error(f"Error sending personal message: {e}")
-            self.disconnect(websocket)
+            # Only disconnect if the WebSocket is in a bad state, not on first error
+            if "close message has been sent" in str(e) or "not connected" in str(e):
+                self.disconnect(websocket)
     
     async def send_to_user(self, message: Dict[str, Any], user_id: str, connection_type: Optional[str] = None):
         """Send a message to all connections for a specific user"""
