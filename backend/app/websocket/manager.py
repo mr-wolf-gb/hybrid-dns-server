@@ -67,6 +67,9 @@ class WebSocketManager:
         """Accept a new WebSocket connection - ONLY ONE per connection type per user"""
         async with self._connection_lock:
             try:
+                # Ensure user_id is always a string for consistency
+                user_id = str(user_id)
+                
                 # Check total connections
                 total_connections = sum(len(user_conns) for user_conns in self.connections.values())
                 if total_connections >= self.max_total_connections:
@@ -137,7 +140,7 @@ class WebSocketManager:
             return
         
         metadata = self.metadata[websocket]
-        user_id = metadata["user_id"]
+        user_id = str(metadata["user_id"])  # Ensure string consistency
         connection_type = metadata["connection_type"]
         
         # Remove from connections
@@ -161,6 +164,7 @@ class WebSocketManager:
     
     async def _close_oldest_connection(self, user_id: str):
         """Close the oldest connection for a user"""
+        user_id = str(user_id)  # Ensure string consistency
         if user_id not in self.connections:
             return
         
@@ -234,6 +238,7 @@ class WebSocketManager:
     
     async def send_to_user(self, message: Dict[str, Any], user_id: str):
         """Send a message to all connections for a user"""
+        user_id = str(user_id)  # Ensure string consistency
         if user_id not in self.connections:
             return
         
@@ -300,6 +305,7 @@ class WebSocketManager:
     
     async def disconnect_user(self, user_id: str, reason: str = "User logged out"):
         """Disconnect all connections for a user"""
+        user_id = str(user_id)  # Ensure string consistency
         if user_id not in self.connections:
             return 0
         

@@ -1,11 +1,46 @@
 /**
  * WebSocket context for managing real-time event broadcasting across the application
+ * Uses a global WebSocket service to prevent connection storms
  */
 
-import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
-import { useWebSocket, WebSocketMessage, WebSocketState, WebSocketActions } from '../hooks/useWebSocket';
+import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { toast } from 'react-toastify';
+import globalWebSocketService from '../services/GlobalWebSocketService';
+
+export interface WebSocketMessage {
+  type: string;
+  data?: any;
+  timestamp?: string;
+  event_id?: string;
+  category?: string;
+  source?: string;
+  severity?: string;
+  tags?: string[];
+  metadata?: any;
+}
+
+export interface WebSocketState {
+  isConnected: boolean;
+  isConnecting: boolean;
+  error: string | null;
+  lastMessage: WebSocketMessage | null;
+  connectionStats: any;
+  reconnectAttempts: number;
+}
+
+export interface WebSocketActions {
+  connect: () => void;
+  disconnect: () => void;
+  sendMessage: (message: any) => void;
+  subscribeToEvents: (eventTypes: string[]) => void;
+  emitEvent: (eventData: any) => void;
+  getRecentEvents: (limit?: number) => void;
+  startReplay: (replayConfig: any) => void;
+  stopReplay: (replayId: string) => void;
+  getReplayStatus: (replayId: string) => void;
+  ping: () => void;
+}
 
 // Notification throttling to prevent spam
 const notificationThrottle = new Map<string, number>();
@@ -29,7 +64,13 @@ interface EventHandler {
 }
 
 interface WebSocketContextType {
-  // Connection states for different types
+  // Connection state
+  isConnected: boolean;
+  isConnecting: boolean;
+  error: string | null;
+  lastMessage: WebSocketMessage | null;
+
+  // Legacy compatibility - return the same connection state for all types
   healthConnection: [WebSocketState, WebSocketActions];
   dnsConnection: [WebSocketState, WebSocketActions];
   securityConnection: [WebSocketState, WebSocketActions];
@@ -53,6 +94,9 @@ interface WebSocketContextType {
 
   // Statistics
   getConnectionStats: () => any;
+
+  // Direct messaging
+  sendMessage: (message: any) => boolean;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
@@ -62,12 +106,19 @@ interface WebSocketProviderProps {
 }
 
 export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
   const [eventHandlers, setEventHandlers] = useState<EventHandler[]>([]);
   const [connectionStats, setConnectionStats] = useState<any>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
+  const subscriberIdRef = useRef<string>(`websocket-context-${Date.now()}`);
 
   // Global message handler with throttling
   const handleMessage = useCallback((message: WebSocketMessage) => {
+    setLastMessage(message);
+
     // Handle global events with notification throttling
     if (message.type === 'health_alert' && message.severity === 'critical') {
       if (shouldShowNotification('health_alert_critical')) {
@@ -99,97 +150,113 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     });
   }, [eventHandlers]);
 
-  // Connection error handler
+  // Connection handlers
+  const handleConnect = useCallback(() => {
+    setIsConnected(true);
+    setIsConnecting(false);
+    setError(null);
+    if (shouldShowNotification('connection_established')) {
+      toast.success('Real-time connection established');
+    }
+  }, []);
+
+  const handleDisconnect = useCallback(() => {
+    setIsConnected(false);
+    setIsConnecting(false);
+    if (shouldShowNotification('connection_lost')) {
+      toast.error('Real-time connection lost');
+    }
+  }, []);
+
   const handleError = useCallback((error: Event) => {
+    setError('WebSocket connection error');
+    setIsConnecting(false);
     console.error('WebSocket error:', error);
     toast.error('WebSocket connection error');
   }, []);
 
-  // Track which connections have already shown notifications
-  const [connectedTypes, setConnectedTypes] = useState<Set<string>>(new Set());
-
-  // Connection handlers with deduplication
-  const createConnectHandler = useCallback((connectionType: string) => {
-    return () => {
-      setConnectedTypes(prev => {
-        const newSet = new Set(prev);
-        if (!newSet.has(connectionType)) {
-          newSet.add(connectionType);
-          // Only show notification for the first connection or if all were disconnected
-          if (newSet.size === 1 && shouldShowNotification('connection_established')) {
-            toast.success('Real-time connection established');
-          }
-        }
-        return newSet;
-      });
+  // Create mock WebSocket state and actions for backward compatibility
+  const createMockConnection = useCallback((): [WebSocketState, WebSocketActions] => {
+    const state: WebSocketState = {
+      isConnected,
+      isConnecting,
+      error,
+      lastMessage,
+      connectionStats,
+      reconnectAttempts: 0
     };
-  }, []);
 
-  const createDisconnectHandler = useCallback((connectionType: string) => {
-    return () => {
-      setConnectedTypes(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(connectionType);
-        // Only show disconnect notification if all connections are lost
-        if (newSet.size === 0 && shouldShowNotification('connection_lost')) {
-          toast.error('Real-time connection lost');
+    const actions: WebSocketActions = {
+      connect: () => {
+        if (user && accessToken && !isConnecting && !isConnected) {
+          setIsConnecting(true);
+          globalWebSocketService.subscribe('admin', subscriberIdRef.current, accessToken, {
+            onMessage: handleMessage,
+            onConnect: handleConnect,
+            onDisconnect: handleDisconnect,
+            onError: handleError
+          });
         }
-        return newSet;
-      });
+      },
+      disconnect: () => {
+        globalWebSocketService.unsubscribe('admin', subscriberIdRef.current);
+        setIsConnected(false);
+        setIsConnecting(false);
+      },
+      sendMessage: (message: any) => {
+        return globalWebSocketService.sendMessage('admin', message);
+      },
+      subscribeToEvents: (eventTypes: string[]) => {
+        globalWebSocketService.sendMessage('admin', {
+          type: 'subscribe_events',
+          data: { event_types: eventTypes }
+        });
+      },
+      emitEvent: (eventData: any) => {
+        globalWebSocketService.sendMessage('admin', {
+          type: 'emit_event',
+          data: eventData
+        });
+      },
+      getRecentEvents: (limit: number = 50) => {
+        globalWebSocketService.sendMessage('admin', {
+          type: 'get_recent_events',
+          data: { limit }
+        });
+      },
+      startReplay: (replayConfig: any) => {
+        globalWebSocketService.sendMessage('admin', {
+          type: 'start_replay',
+          data: replayConfig
+        });
+      },
+      stopReplay: (replayId: string) => {
+        globalWebSocketService.sendMessage('admin', {
+          type: 'stop_replay',
+          data: { replay_id: replayId }
+        });
+      },
+      getReplayStatus: (replayId: string) => {
+        globalWebSocketService.sendMessage('admin', {
+          type: 'get_replay_status',
+          data: { replay_id: replayId }
+        });
+      },
+      ping: () => {
+        globalWebSocketService.sendMessage('admin', { type: 'ping', data: {} });
+      }
     };
-  }, []);
 
+    return [state, actions];
+  }, [isConnected, isConnecting, error, lastMessage, connectionStats, user, accessToken, handleMessage, handleConnect, handleDisconnect, handleError]);
 
-
-  // Health monitoring connection
-  const healthConnection = useWebSocket({
-    connectionType: 'health',
-    autoReconnect: true,
-    onMessage: handleMessage,
-    onConnect: createConnectHandler('health'),
-    onDisconnect: createDisconnectHandler('health'),
-    onError: handleError
-  });
-
-  // DNS management connection
-  const dnsConnection = useWebSocket({
-    connectionType: 'dns_management',
-    autoReconnect: true,
-    onMessage: handleMessage,
-    onConnect: createConnectHandler('dns'),
-    onDisconnect: createDisconnectHandler('dns'),
-    onError: handleError
-  });
-
-  // Security monitoring connection
-  const securityConnection = useWebSocket({
-    connectionType: 'security',
-    autoReconnect: true,
-    onMessage: handleMessage,
-    onConnect: createConnectHandler('security'),
-    onDisconnect: createDisconnectHandler('security'),
-    onError: handleError
-  });
-
-  // System monitoring connection
-  const systemConnection = useWebSocket({
-    connectionType: 'system',
-    autoReconnect: true,
-    onMessage: handleMessage,
-    onConnect: createConnectHandler('system'),
-    onDisconnect: createDisconnectHandler('system'),
-    onError: handleError
-  });
-
-  // Admin connection (only for admin users)
-  const adminConnection = user?.is_admin ? useWebSocket({
-    connectionType: 'admin',
-    autoReconnect: true,
-    onMessage: handleMessage,
-    onConnect: createConnectHandler('admin'),
-    onDisconnect: createDisconnectHandler('admin'),
-    onError: handleError
-  }) : undefined;
+  // For backward compatibility, return the same connection for all types
+  const connection = createMockConnection();
+  const healthConnection = connection;
+  const dnsConnection = connection;
+  const securityConnection = connection;
+  const systemConnection = connection;
+  const adminConnection = user?.is_admin ? connection : undefined;
 
   // Register event handler
   const registerEventHandler = useCallback((
@@ -211,108 +278,82 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
   // Broadcast event
   const broadcastEvent = useCallback((eventData: any, connectionType?: string) => {
-    const connections = [
-      healthConnection,
-      dnsConnection,
-      securityConnection,
-      systemConnection,
-      ...(adminConnection ? [adminConnection] : [])
-    ];
-
-    if (connectionType) {
-      const targetConnection = connections.find(([state, actions]) => {
-        // This is a simplified check - in practice you'd need to track connection types
-        return true; // For now, broadcast to all
-      });
-
-      if (targetConnection) {
-        targetConnection[1].emitEvent(eventData);
-      }
-    } else {
-      // Broadcast to all connections
-      connections.forEach(([state, actions]) => {
-        if (state.isConnected) {
-          actions.emitEvent(eventData);
-        }
-      });
-    }
-  }, [healthConnection, dnsConnection, securityConnection, systemConnection, adminConnection]);
+    globalWebSocketService.sendMessage('admin', {
+      type: 'emit_event',
+      data: eventData
+    });
+  }, []);
 
   // Start event replay
   const startEventReplay = useCallback((replayConfig: any) => {
-    // Use admin connection if available, otherwise use system connection
-    const connection = adminConnection || systemConnection;
-    if (connection[0].isConnected) {
-      connection[1].startReplay(replayConfig);
+    if (isConnected) {
+      globalWebSocketService.sendMessage('admin', {
+        type: 'start_replay',
+        data: replayConfig
+      });
     } else {
       toast.error('No active connection for event replay');
     }
-  }, [adminConnection, systemConnection]);
+  }, [isConnected]);
 
   // Stop event replay
   const stopEventReplay = useCallback((replayId: string) => {
-    const connection = adminConnection || systemConnection;
-    if (connection[0].isConnected) {
-      connection[1].stopReplay(replayId);
+    if (isConnected) {
+      globalWebSocketService.sendMessage('admin', {
+        type: 'stop_replay',
+        data: { replay_id: replayId }
+      });
     } else {
       toast.error('No active connection to stop replay');
     }
-  }, [adminConnection, systemConnection]);
+  }, [isConnected]);
 
-  // Connect all connections
+  // Connect all connections (now just one)
   const connectAll = useCallback(() => {
-    healthConnection[1].connect();
-    dnsConnection[1].connect();
-    securityConnection[1].connect();
-    systemConnection[1].connect();
-    if (adminConnection) {
-      adminConnection[1].connect();
+    if (user && accessToken && !isConnecting && !isConnected) {
+      setIsConnecting(true);
+      globalWebSocketService.subscribe('admin', subscriberIdRef.current, accessToken, {
+        onMessage: handleMessage,
+        onConnect: handleConnect,
+        onDisconnect: handleDisconnect,
+        onError: handleError
+      });
     }
-  }, [healthConnection, dnsConnection, securityConnection, systemConnection, adminConnection]);
+  }, [user, accessToken, isConnecting, isConnected, handleMessage, handleConnect, handleDisconnect, handleError]);
 
-  // Disconnect all connections
+  // Disconnect all connections (now just one)
   const disconnectAll = useCallback(() => {
-    healthConnection[1].disconnect();
-    dnsConnection[1].disconnect();
-    securityConnection[1].disconnect();
-    systemConnection[1].disconnect();
-    if (adminConnection) {
-      adminConnection[1].disconnect();
-    }
-  }, [healthConnection, dnsConnection, securityConnection, systemConnection, adminConnection]);
+    globalWebSocketService.unsubscribe('admin', subscriberIdRef.current);
+    setIsConnected(false);
+    setIsConnecting(false);
+  }, []);
+
+  // Send message directly
+  const sendMessage = useCallback((message: any) => {
+    return globalWebSocketService.sendMessage('admin', message);
+  }, []);
 
   // Get connection statistics
   const getConnectionStats = useCallback(() => {
+    const globalStats = globalWebSocketService.getStats();
+    const baseStats = {
+      connected: isConnected,
+      error: error,
+      reconnectAttempts: 0
+    };
+
+    // Return the same stats for all connection types for backward compatibility
     const stats = {
-      health: {
-        connected: healthConnection[0].isConnected,
-        error: healthConnection[0].error,
-        reconnectAttempts: healthConnection[0].reconnectAttempts
-      },
-      dns: {
-        connected: dnsConnection[0].isConnected,
-        error: dnsConnection[0].error,
-        reconnectAttempts: dnsConnection[0].reconnectAttempts
-      },
-      security: {
-        connected: securityConnection[0].isConnected,
-        error: securityConnection[0].error,
-        reconnectAttempts: securityConnection[0].reconnectAttempts
-      },
-      system: {
-        connected: systemConnection[0].isConnected,
-        error: systemConnection[0].error,
-        reconnectAttempts: systemConnection[0].reconnectAttempts
-      },
-      admin: adminConnection ? {
-        connected: adminConnection[0].isConnected,
-        error: adminConnection[0].error,
-        reconnectAttempts: adminConnection[0].reconnectAttempts
-      } : null
+      health: baseStats,
+      dns: baseStats,
+      security: baseStats,
+      system: baseStats,
+      admin: user?.is_admin ? baseStats : null,
+      global: globalStats
     };
 
     return stats;
-  }, [healthConnection, dnsConnection, securityConnection, systemConnection, adminConnection]);
+  }, [isConnected, error, user?.is_admin]);
 
   // Update connection stats periodically
   useEffect(() => {
@@ -325,17 +366,19 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
   // Auto-connect when user is available
   useEffect(() => {
-    if (user) {
+    if (user && accessToken && !isConnecting && !isConnected) {
+      console.log('Auto-connecting WebSocket for user:', user.username);
       connectAll();
-    } else {
+    } else if (!user) {
       // Disconnect all connections when user logs out
+      console.log('User logged out, disconnecting WebSocket');
       disconnectAll();
-      // Clear connection tracking
-      setConnectedTypes(new Set());
       // Clear event handlers
       setEventHandlers([]);
+      setError(null);
+      setLastMessage(null);
     }
-  }, [user, connectAll, disconnectAll]);
+  }, [user, accessToken, connectAll, disconnectAll, isConnecting, isConnected]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -345,6 +388,10 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   }, [disconnectAll]);
 
   const contextValue: WebSocketContextType = {
+    isConnected,
+    isConnecting,
+    error,
+    lastMessage,
     healthConnection,
     dnsConnection,
     securityConnection,
@@ -357,7 +404,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     stopEventReplay,
     connectAll,
     disconnectAll,
-    getConnectionStats
+    getConnectionStats,
+    sendMessage
   };
 
   return (

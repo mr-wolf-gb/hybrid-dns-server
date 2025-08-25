@@ -9,7 +9,7 @@ import {
   PauseIcon
 } from '@heroicons/react/24/outline'
 import { Card, Badge, Loading } from '@/components/ui'
-import { useSystemWebSocket } from '@/hooks/useWebSocket'
+import { useWebSocketContext } from '@/contexts/WebSocketContext'
 import { formatNumber, formatRelativeTime } from '@/utils'
 import RealTimeChart from './RealTimeChart'
 
@@ -60,12 +60,8 @@ const RealTimeQueryMonitor: React.FC<RealTimeQueryMonitorProps> = ({
   const [lastUpdate, setLastUpdate] = useState<string>('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // WebSocket connection for real-time updates
-  const { subscribe, isConnected } = useSystemWebSocket(userId, {
-    onConnect: () => {
-      console.log('Real-time query monitor connected')
-    }
-  })
+  // Use existing WebSocket connection from context
+  const { isConnected, registerEventHandler, unregisterEventHandler } = useWebSocketContext()
 
   // Fetch live stats periodically
   const { data: statsData, refetch: refetchStats } = useQuery({

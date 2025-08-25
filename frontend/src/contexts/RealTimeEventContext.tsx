@@ -1,8 +1,42 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode, useCallback } from 'react'
-import { useWebSocketService, ConnectionType, EventType } from '../hooks/useWebSocket'
-import { WebSocketMessage } from '@/services/websocketService'
+import { useWebSocketContext, WebSocketMessage } from './WebSocketContext'
 import { useAuth } from './AuthContext'
 import { toast } from 'react-toastify'
+
+// Event types enum for consistency
+export enum EventType {
+  // Health monitoring events
+  HEALTH_UPDATE = 'health_update',
+  HEALTH_ALERT = 'health_alert',
+  FORWARDER_STATUS_CHANGE = 'forwarder_status_change',
+
+  // DNS zone events
+  ZONE_CREATED = 'zone_created',
+  ZONE_UPDATED = 'zone_updated',
+  ZONE_DELETED = 'zone_deleted',
+  RECORD_CREATED = 'record_created',
+  RECORD_UPDATED = 'record_updated',
+  RECORD_DELETED = 'record_deleted',
+
+  // Security events
+  SECURITY_ALERT = 'security_alert',
+  RPZ_UPDATE = 'rpz_update',
+  THREAT_DETECTED = 'threat_detected',
+
+  // System events
+  SYSTEM_STATUS = 'system_status',
+  BIND_RELOAD = 'bind_reload',
+  CONFIG_CHANGE = 'config_change',
+
+  // User events
+  USER_LOGIN = 'user_login',
+  USER_LOGOUT = 'user_logout',
+  SESSION_EXPIRED = 'session_expired',
+
+  // Connection events
+  CONNECTION_ESTABLISHED = 'connection_established',
+  SUBSCRIPTION_UPDATED = 'subscription_updated'
+}
 
 interface SystemEvent {
   id: string
@@ -154,50 +188,34 @@ const RealTimeEventContext = createContext<RealTimeEventContextType | undefined>
 
 interface RealTimeEventProviderProps {
   children: ReactNode
-  connectionType?: ConnectionType
 }
 
-export const RealTimeEventProvider: React.FC<RealTimeEventProviderProps> = ({ 
-  children, 
-  connectionType = ConnectionType.ADMIN 
-}) => {
+export const RealTimeEventProvider: React.FC<RealTimeEventProviderProps> = ({ children }) => {
   const { user } = useAuth()
-  const userId = user?.username || 'anonymous'
   const [state, dispatch] = useReducer(realTimeEventReducer, initialState)
-
-  // Only create WebSocket connection if user is authenticated
-  const shouldConnect = user && user.username && user.username !== 'anonymous'
-
-  // WebSocket connection for real-time events (only if user is authenticated)
-  const {
-    isConnected,
-    connectionStatus,
-    reconnectAttempts,
+  
+  // Use the existing WebSocket context instead of creating a new connection
+  const { 
+    isConnected, 
+    isConnecting, 
+    error,
+    registerEventHandler, 
+    unregisterEventHandler,
     sendMessage,
-    subscribe,
-    getStats
-  } = useWebSocketService(connectionType, userId, {
-    onConnect: () => {
-      console.log('Real-time event WebSocket connected')
-      toast.success('Connected to real-time updates', { autoClose: 2000 })
-    },
-    onDisconnect: () => {
-      console.log('Real-time event WebSocket disconnected')
-      toast.warning('Disconnected from real-time updates', { autoClose: 3000 })
-    },
-    onError: (error) => {
-      console.error('Real-time event WebSocket error:', error)
-      toast.error('Connection error - some features may not work', { autoClose: 5000 })
-    }
-  })
+    getConnectionStats
+  } = useWebSocketContext()
 
   // Update connection status in state
   useEffect(() => {
     dispatch({
       type: 'SET_CONNECTION_STATUS',
-      payload: { isConnected, status: connectionStatus, attempts: reconnectAttempts }
+      payload: { 
+        isConnected, 
+        status: isConnected ? 'connected' : isConnecting ? 'connecting' : 'disconnected', 
+        attempts: 0 
+      }
     })
-  }, [isConnected, connectionStatus, reconnectAttempts])
+  }, [isConnected, isConnecting])
 
   // Create event from WebSocket message
   const createEvent = useCallback((message: WebSocketMessage, severity: SystemEvent['severity'] = 'info'): SystemEvent => {
@@ -211,112 +229,133 @@ export const RealTimeEventProvider: React.FC<RealTimeEventProviderProps> = ({
     }
   }, [])
 
-  // Set up event handlers
+  // Set up event handlers using the WebSocket context
   useEffect(() => {
-    // System events
-    subscribe(EventType.SYSTEM_STATUS, (data) => {
-      dispatch({ type: 'SET_SYSTEM_STATUS', payload: data })
-    })
+    if (!user) return;
 
-    subscribe(EventType.CONFIG_CHANGE, (data) => {
-      const event = createEvent({ type: EventType.CONFIG_CHANGE, data, timestamp: new Date().toISOString() }, 'info')
-      dispatch({ type: 'ADD_EVENT', payload: event })
-      toast.info('Configuration updated', { autoClose: 3000 })
-    })
+    const handlerId = 'realtime-event-context';
 
-    subscribe(EventType.BIND_RELOAD, (data) => {
-      const event = createEvent({ type: EventType.BIND_RELOAD, data, timestamp: new Date().toISOString() }, 'success')
-      dispatch({ type: 'ADD_EVENT', payload: event })
-      toast.success('DNS server reloaded', { autoClose: 3000 })
-    })
+    // Register a single event handler for all event types
+    registerEventHandler(handlerId, ['*'], (message: WebSocketMessage) => {
+      const eventType = message.type;
+      const data = message.data;
 
-    // DNS events
-    subscribe(EventType.ZONE_CREATED, (data) => {
-      const event = createEvent({ type: EventType.ZONE_CREATED, data, timestamp: new Date().toISOString() }, 'success')
-      dispatch({ type: 'ADD_DNS_EVENT', payload: event })
-      toast.success(`DNS zone "${data.name}" created`, { autoClose: 3000 })
-    })
+      // Handle different event types
+      switch (eventType) {
+        case EventType.SYSTEM_STATUS:
+          dispatch({ type: 'SET_SYSTEM_STATUS', payload: data });
+          break;
 
-    subscribe(EventType.ZONE_UPDATED, (data) => {
-      const event = createEvent({ type: EventType.ZONE_UPDATED, data, timestamp: new Date().toISOString() }, 'info')
-      dispatch({ type: 'ADD_DNS_EVENT', payload: event })
-      toast.info(`DNS zone "${data.name}" updated`, { autoClose: 3000 })
-    })
+        case EventType.CONFIG_CHANGE:
+          const configEvent = createEvent(message, 'info');
+          dispatch({ type: 'ADD_EVENT', payload: configEvent });
+          toast.info('Configuration updated', { autoClose: 3000 });
+          break;
 
-    subscribe(EventType.ZONE_DELETED, (data) => {
-      const event = createEvent({ type: EventType.ZONE_DELETED, data, timestamp: new Date().toISOString() }, 'warning')
-      dispatch({ type: 'ADD_DNS_EVENT', payload: event })
-      toast.warning(`DNS zone "${data.name}" deleted`, { autoClose: 3000 })
-    })
+        case EventType.BIND_RELOAD:
+          const reloadEvent = createEvent(message, 'success');
+          dispatch({ type: 'ADD_EVENT', payload: reloadEvent });
+          toast.success('DNS server reloaded', { autoClose: 3000 });
+          break;
 
-    subscribe(EventType.RECORD_CREATED, (data) => {
-      const event = createEvent({ type: EventType.RECORD_CREATED, data, timestamp: new Date().toISOString() }, 'success')
-      dispatch({ type: 'ADD_DNS_EVENT', payload: event })
-    })
+        // DNS events
+        case EventType.ZONE_CREATED:
+          const zoneCreatedEvent = createEvent(message, 'success');
+          dispatch({ type: 'ADD_DNS_EVENT', payload: zoneCreatedEvent });
+          toast.success(`DNS zone "${data?.name}" created`, { autoClose: 3000 });
+          break;
 
-    subscribe(EventType.RECORD_UPDATED, (data) => {
-      const event = createEvent({ type: EventType.RECORD_UPDATED, data, timestamp: new Date().toISOString() }, 'info')
-      dispatch({ type: 'ADD_DNS_EVENT', payload: event })
-    })
+        case EventType.ZONE_UPDATED:
+          const zoneUpdatedEvent = createEvent(message, 'info');
+          dispatch({ type: 'ADD_DNS_EVENT', payload: zoneUpdatedEvent });
+          toast.info(`DNS zone "${data?.name}" updated`, { autoClose: 3000 });
+          break;
 
-    subscribe(EventType.RECORD_DELETED, (data) => {
-      const event = createEvent({ type: EventType.RECORD_DELETED, data, timestamp: new Date().toISOString() }, 'warning')
-      dispatch({ type: 'ADD_DNS_EVENT', payload: event })
-    })
+        case EventType.ZONE_DELETED:
+          const zoneDeletedEvent = createEvent(message, 'warning');
+          dispatch({ type: 'ADD_DNS_EVENT', payload: zoneDeletedEvent });
+          toast.warning(`DNS zone "${data?.name}" deleted`, { autoClose: 3000 });
+          break;
 
-    // Security events
-    subscribe(EventType.SECURITY_ALERT, (data) => {
-      const event = createEvent({ type: EventType.SECURITY_ALERT, data, timestamp: new Date().toISOString() }, 'error')
-      dispatch({ type: 'ADD_SECURITY_EVENT', payload: event })
-      toast.error(`Security Alert: ${data.message}`, { autoClose: 5000 })
-    })
+        case EventType.RECORD_CREATED:
+          const recordCreatedEvent = createEvent(message, 'success');
+          dispatch({ type: 'ADD_DNS_EVENT', payload: recordCreatedEvent });
+          break;
 
-    subscribe(EventType.RPZ_UPDATE, (data) => {
-      const event = createEvent({ type: EventType.RPZ_UPDATE, data, timestamp: new Date().toISOString() }, 'info')
-      dispatch({ type: 'ADD_SECURITY_EVENT', payload: event })
-      toast.info('Security rules updated', { autoClose: 3000 })
-    })
+        case EventType.RECORD_UPDATED:
+          const recordUpdatedEvent = createEvent(message, 'info');
+          dispatch({ type: 'ADD_DNS_EVENT', payload: recordUpdatedEvent });
+          break;
 
-    subscribe(EventType.THREAT_DETECTED, (data) => {
-      const event = createEvent({ type: EventType.THREAT_DETECTED, data, timestamp: new Date().toISOString() }, 'error')
-      dispatch({ type: 'ADD_SECURITY_EVENT', payload: event })
-      toast.error(`Threat detected: ${data.threat_type}`, { autoClose: 5000 })
-    })
+        case EventType.RECORD_DELETED:
+          const recordDeletedEvent = createEvent(message, 'warning');
+          dispatch({ type: 'ADD_DNS_EVENT', payload: recordDeletedEvent });
+          break;
 
-    // Health events
-    subscribe(EventType.HEALTH_ALERT, (data) => {
-      const event = createEvent({ type: EventType.HEALTH_ALERT, data, timestamp: new Date().toISOString() }, 'warning')
-      dispatch({ type: 'ADD_HEALTH_EVENT', payload: event })
-      toast.warning(`Health Alert: ${data.message}`, { autoClose: 4000 })
-    })
+        // Security events
+        case EventType.SECURITY_ALERT:
+          const securityEvent = createEvent(message, 'error');
+          dispatch({ type: 'ADD_SECURITY_EVENT', payload: securityEvent });
+          toast.error(`Security Alert: ${data?.message}`, { autoClose: 5000 });
+          break;
 
-    subscribe(EventType.FORWARDER_STATUS_CHANGE, (data) => {
-      const event = createEvent({ type: EventType.FORWARDER_STATUS_CHANGE, data, timestamp: new Date().toISOString() }, 
-        data.new_status === 'healthy' ? 'success' : 'warning')
-      dispatch({ type: 'ADD_HEALTH_EVENT', payload: event })
-      
-      if (data.new_status !== 'healthy') {
-        toast.warning(`Forwarder ${data.forwarder_id} status: ${data.new_status}`, { autoClose: 4000 })
+        case EventType.RPZ_UPDATE:
+          const rpzEvent = createEvent(message, 'info');
+          dispatch({ type: 'ADD_SECURITY_EVENT', payload: rpzEvent });
+          toast.info('Security rules updated', { autoClose: 3000 });
+          break;
+
+        case EventType.THREAT_DETECTED:
+          const threatEvent = createEvent(message, 'error');
+          dispatch({ type: 'ADD_SECURITY_EVENT', payload: threatEvent });
+          toast.error(`Threat detected: ${data?.threat_type}`, { autoClose: 5000 });
+          break;
+
+        // Health events
+        case EventType.HEALTH_ALERT:
+          const healthEvent = createEvent(message, 'warning');
+          dispatch({ type: 'ADD_HEALTH_EVENT', payload: healthEvent });
+          toast.warning(`Health Alert: ${data?.message}`, { autoClose: 4000 });
+          break;
+
+        case EventType.FORWARDER_STATUS_CHANGE:
+          const forwarderEvent = createEvent(message, data?.new_status === 'healthy' ? 'success' : 'warning');
+          dispatch({ type: 'ADD_HEALTH_EVENT', payload: forwarderEvent });
+          
+          if (data?.new_status !== 'healthy') {
+            toast.warning(`Forwarder ${data?.forwarder_id} status: ${data?.new_status}`, { autoClose: 4000 });
+          }
+          break;
+
+        // User events
+        case EventType.USER_LOGIN:
+          const loginEvent = createEvent(message, 'info');
+          dispatch({ type: 'ADD_EVENT', payload: loginEvent });
+          break;
+
+        case EventType.USER_LOGOUT:
+          const logoutEvent = createEvent(message, 'info');
+          dispatch({ type: 'ADD_EVENT', payload: logoutEvent });
+          break;
+
+        // Connection stats
+        case 'stats':
+          dispatch({ type: 'SET_CONNECTION_STATS', payload: data });
+          break;
+
+        default:
+          // Handle unknown events as general events
+          const unknownEvent = createEvent(message, 'info');
+          dispatch({ type: 'ADD_EVENT', payload: unknownEvent });
+          break;
       }
-    })
+    });
 
-    // User events
-    subscribe(EventType.USER_LOGIN, (data) => {
-      const event = createEvent({ type: EventType.USER_LOGIN, data, timestamp: new Date().toISOString() }, 'info')
-      dispatch({ type: 'ADD_EVENT', payload: event })
-    })
-
-    subscribe(EventType.USER_LOGOUT, (data) => {
-      const event = createEvent({ type: EventType.USER_LOGOUT, data, timestamp: new Date().toISOString() }, 'info')
-      dispatch({ type: 'ADD_EVENT', payload: event })
-    })
-
-    // Connection stats
-    subscribe('stats', (data) => {
-      dispatch({ type: 'SET_CONNECTION_STATS', payload: data })
-    })
-
-  }, [subscribe, createEvent])
+    // Cleanup on unmount or user change
+    return () => {
+      unregisterEventHandler(handlerId);
+    };
+  }, [user, registerEventHandler, unregisterEventHandler, createEvent])
 
   const acknowledgeEvent = useCallback((eventId: string) => {
     dispatch({ type: 'ACKNOWLEDGE_EVENT', payload: eventId })
@@ -326,15 +365,18 @@ export const RealTimeEventProvider: React.FC<RealTimeEventProviderProps> = ({
     dispatch({ type: 'CLEAR_EVENTS' })
   }, [])
 
-  const getConnectionStats = useCallback(() => {
-    getStats()
-  }, [getStats])
+  const getConnectionStatsCallback = useCallback(() => {
+    const stats = getConnectionStats();
+    if (stats) {
+      dispatch({ type: 'SET_CONNECTION_STATS', payload: stats });
+    }
+  }, [getConnectionStats])
 
   const contextValue: RealTimeEventContextType = {
     ...state,
     acknowledgeEvent,
     clearEvents,
-    getConnectionStats,
+    getConnectionStats: getConnectionStatsCallback,
     sendMessage
   }
 

@@ -12,7 +12,7 @@ import {
   Filler
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
-import { useSystemWebSocket } from '@/hooks/useWebSocket'
+import { useWebSocketContext } from '@/contexts/WebSocketContext'
 
 ChartJS.register(
   CategoryScale,
@@ -49,8 +49,8 @@ const RealTimeChart: React.FC<RealTimeChartProps> = ({
   const [isLive, setIsLive] = useState(autoRefresh)
   const chartRef = useRef<ChartJS<'line'>>(null)
 
-  // WebSocket connection for real-time updates
-  const { subscribe, isConnected } = useSystemWebSocket(userId)
+  // Use existing WebSocket connection from context
+  const { isConnected, registerEventHandler, unregisterEventHandler } = useWebSocketContext()
 
   // Fetch query stream data
   const { data: queryStream, refetch } = useQuery({

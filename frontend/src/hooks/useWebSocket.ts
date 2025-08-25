@@ -126,7 +126,7 @@ export const useWebSocket = (config: WebSocketConfig): [WebSocketState, WebSocke
     }
   }, []);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (!accessToken || state.isConnecting || state.isConnected) {
       return;
     }
@@ -140,96 +140,78 @@ export const useWebSocket = (config: WebSocketConfig): [WebSocketState, WebSocke
     setState(prev => ({ ...prev, isConnecting: true, error: null }));
 
     try {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.host;
-      const wsUrl = `${protocol}//${host}/api/websocket/ws/${config.connectionType}?token=${encodeURIComponent(accessToken)}`;
+      // Import the connection manager dynamically to avoid circular dependencies
+      const { default: webSocketConnectionManager } = await import('../services/WebSocketConnectionManager');
+      
+      const ws = await webSocketConnectionManager.getConnection(
+        config.connectionType,
+        'user', // We'll use a generic user ID since we don't have access to actual user ID here
+        accessToken,
+        // onMessage
+        (event) => {
+          try {
+            const message: WebSocketMessage = JSON.parse(event.data);
+            setState(prev => ({ ...prev, lastMessage: message }));
+            configRef.current.onMessage?.(message);
 
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        setState(prev => ({
-          ...prev,
-          isConnected: true,
-          isConnecting: false,
-          error: null,
-          reconnectAttempts: 0
-        }));
-
-        // Start ping interval to keep connection alive
-        pingIntervalRef.current = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'ping', data: {} }));
+            // Handle special message types
+            if (message.type === 'connection_stats') {
+              setState(prev => ({ ...prev, connectionStats: message.data }));
+            }
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error);
           }
-        }, 30000); // Ping every 30 seconds
-
-        configRef.current.onConnect?.();
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const message: WebSocketMessage = JSON.parse(event.data);
-          setState(prev => ({ ...prev, lastMessage: message }));
-          configRef.current.onMessage?.(message);
-
-          // Handle special message types
-          if (message.type === 'connection_stats') {
-            setState(prev => ({ ...prev, connectionStats: message.data }));
-          }
-        } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
-        }
-      };
-
-      ws.onclose = (event) => {
-        cleanup();
-        setState(prev => ({
-          ...prev,
-          isConnected: false,
-          isConnecting: false
-        }));
-
-        configRef.current.onDisconnect?.();
-
-        // Check if close was due to authentication issues
-        if (event.code === 1008 || event.code === 4001) {
-          // Authentication failed - don't reconnect
-          console.warn('WebSocket closed due to authentication issues, not reconnecting');
+        },
+        // onConnect
+        () => {
           setState(prev => ({
             ...prev,
-            error: 'Authentication failed'
+            isConnected: true,
+            isConnecting: false,
+            error: null,
+            reconnectAttempts: 0
           }));
-          return;
+
+          // Start ping interval to keep connection alive
+          pingIntervalRef.current = setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'ping', data: {} }));
+            }
+          }, 30000); // Ping every 30 seconds
+
+          configRef.current.onConnect?.();
+        },
+        // onDisconnect
+        () => {
+          cleanup();
+          setState(prev => ({
+            ...prev,
+            isConnected: false,
+            isConnecting: false
+          }));
+          configRef.current.onDisconnect?.();
+        },
+        // onError
+        (error) => {
+          console.error('WebSocket connection error:', error);
+          setState(prev => ({
+            ...prev,
+            error: 'WebSocket connection error',
+            isConnecting: false
+          }));
+          configRef.current.onError?.(error);
         }
+      );
 
-        // Auto-reconnect if enabled and not a normal closure
-        if (configRef.current.autoReconnect !== false && event.code !== 1000) {
-          const maxAttempts = configRef.current.maxReconnectAttempts || 5;
-          const interval = configRef.current.reconnectInterval || 5000;
-
-          if (state.reconnectAttempts < maxAttempts) {
-            setState(prev => ({ ...prev, reconnectAttempts: prev.reconnectAttempts + 1 }));
-            reconnectTimeoutRef.current = setTimeout(() => {
-              connect();
-            }, interval);
-          } else {
-            setState(prev => ({
-              ...prev,
-              error: 'Max reconnection attempts reached'
-            }));
-          }
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error('WebSocket connection error:', error);
+      if (ws) {
+        wsRef.current = ws;
+      } else {
         setState(prev => ({
           ...prev,
-          error: 'WebSocket connection error',
+          error: 'Failed to create WebSocket connection - connection manager returned null',
           isConnecting: false
         }));
-        configRef.current.onError?.(error);
-      };
+      }
 
     } catch (error) {
       setState(prev => ({
@@ -240,8 +222,17 @@ export const useWebSocket = (config: WebSocketConfig): [WebSocketState, WebSocke
     }
   }, [accessToken, state.isConnecting, state.isConnected, config.connectionType, cleanup]);
 
-  const disconnect = useCallback(() => {
+  const disconnect = useCallback(async () => {
     cleanup();
+    
+    try {
+      // Import the connection manager dynamically
+      const { default: webSocketConnectionManager } = await import('../services/WebSocketConnectionManager');
+      webSocketConnectionManager.disconnect(config.connectionType, 'user');
+    } catch (error) {
+      console.error('Error disconnecting from WebSocket manager:', error);
+    }
+    
     if (wsRef.current) {
       wsRef.current.close(1000, 'User disconnected');
       wsRef.current = null;
@@ -253,7 +244,7 @@ export const useWebSocket = (config: WebSocketConfig): [WebSocketState, WebSocke
       error: null,
       reconnectAttempts: 0
     }));
-  }, [cleanup]);
+  }, [cleanup, config.connectionType]);
 
   const sendMessage = useCallback((message: any) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -400,19 +391,90 @@ export const useWebSocketService = (
 };
 
 // Specialized hooks for different connection types
-export const useHealthWebSocket = (userId: string, options?: any) =>
-  useWebSocketService('health', userId, options);
+// These now use the WebSocketContext to avoid creating multiple connections
+export const useHealthWebSocket = (userId: string, options?: any) => {
+  console.warn('useHealthWebSocket is deprecated. Use useWebSocketContext instead to avoid connection storms.');
+  return {
+    isConnected: false,
+    isConnecting: false,
+    connectionStatus: 'disconnected',
+    reconnectAttempts: 0,
+    error: 'Deprecated hook - use useWebSocketContext',
+    sendMessage: () => {},
+    subscribe: () => {},
+    unsubscribe: () => {},
+    getStats: () => {},
+    connect: () => {},
+    disconnect: () => {}
+  };
+};
 
-export const useDNSWebSocket = (userId: string, options?: any) =>
-  useWebSocketService('dns_management', userId, options);
+export const useDNSWebSocket = (userId: string, options?: any) => {
+  console.warn('useDNSWebSocket is deprecated. Use useWebSocketContext instead to avoid connection storms.');
+  return {
+    isConnected: false,
+    isConnecting: false,
+    connectionStatus: 'disconnected',
+    reconnectAttempts: 0,
+    error: 'Deprecated hook - use useWebSocketContext',
+    sendMessage: () => {},
+    subscribe: () => {},
+    unsubscribe: () => {},
+    getStats: () => {},
+    connect: () => {},
+    disconnect: () => {}
+  };
+};
 
-export const useSecurityWebSocket = (userId: string, options?: any) =>
-  useWebSocketService('security', userId, options);
+export const useSecurityWebSocket = (userId: string, options?: any) => {
+  console.warn('useSecurityWebSocket is deprecated. Use useWebSocketContext instead to avoid connection storms.');
+  return {
+    isConnected: false,
+    isConnecting: false,
+    connectionStatus: 'disconnected',
+    reconnectAttempts: 0,
+    error: 'Deprecated hook - use useWebSocketContext',
+    sendMessage: () => {},
+    subscribe: () => {},
+    unsubscribe: () => {},
+    getStats: () => {},
+    connect: () => {},
+    disconnect: () => {}
+  };
+};
 
-export const useSystemWebSocket = (userId: string, options?: any) =>
-  useWebSocketService('system', userId, options);
+export const useSystemWebSocket = (userId: string, options?: any) => {
+  console.warn('useSystemWebSocket is deprecated. Use useWebSocketContext instead to avoid connection storms.');
+  return {
+    isConnected: false,
+    isConnecting: false,
+    connectionStatus: 'disconnected',
+    reconnectAttempts: 0,
+    error: 'Deprecated hook - use useWebSocketContext',
+    sendMessage: () => {},
+    subscribe: () => {},
+    unsubscribe: () => {},
+    getStats: () => {},
+    connect: () => {},
+    disconnect: () => {}
+  };
+};
 
-export const useAdminWebSocket = (userId: string, options?: any) =>
-  useWebSocketService('admin', userId, options);
+export const useAdminWebSocket = (userId: string, options?: any) => {
+  console.warn('useAdminWebSocket is deprecated. Use useWebSocketContext instead to avoid connection storms.');
+  return {
+    isConnected: false,
+    isConnecting: false,
+    connectionStatus: 'disconnected',
+    reconnectAttempts: 0,
+    error: 'Deprecated hook - use useWebSocketContext',
+    sendMessage: () => {},
+    subscribe: () => {},
+    unsubscribe: () => {},
+    getStats: () => {},
+    connect: () => {},
+    disconnect: () => {}
+  };
+};
 
 export default useWebSocket;

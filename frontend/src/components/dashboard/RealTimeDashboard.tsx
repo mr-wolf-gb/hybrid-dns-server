@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useRealTimeEvents, useDNSEvents, useSecurityEvents, useHealthEvents } from '@/contexts/RealTimeEventContext'
-import { useDNSWebSocket, useSecurityWebSocket } from '@/hooks/useWebSocket'
+import { useWebSocketContext } from '@/contexts/WebSocketContext'
 import { ConnectionStatus } from '@/components/ui/ConnectionStatus'
 import { RealTimeNotifications } from '@/components/ui/RealTimeNotifications'
 import { 
@@ -27,16 +27,8 @@ export const RealTimeDashboard: React.FC<RealTimeDashboardProps> = ({ userId }) 
   const { securityEvents } = useSecurityEvents()
   const { healthEvents } = useHealthEvents()
 
-  // Additional WebSocket connections for specific features
-  const dnsWebSocket = useDNSWebSocket(userId, {
-    onConnect: () => console.log('DNS WebSocket connected'),
-    onMessage: (message) => console.log('DNS message:', message)
-  })
-
-  const securityWebSocket = useSecurityWebSocket(userId, {
-    onConnect: () => console.log('Security WebSocket connected'),
-    onMessage: (message) => console.log('Security message:', message)
-  })
+  // Use existing WebSocket connection from context (no additional connections needed)
+  const { isConnected: wsConnected } = useWebSocketContext()
 
   const getEventSeverityCount = (events: any[], severity: string) => {
     return events.filter(event => event.severity === severity).length

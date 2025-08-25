@@ -31,20 +31,67 @@ def clear_current_user() -> None:
     current_user_context.set(None)
 
 
-def get_current_user_from_token(token: str) -> Optional[Dict[str, Any]]:
-    """Get user information from JWT token"""
+def get_current_user_from_token_sync(token: str) -> Optional[Dict[str, Any]]:
+    """Get user information from JWT token (synchronous version)"""
     try:
-        from ..core.security import decode_access_token
-        payload = decode_access_token(token)
-        if payload:
-            return {
-                'id': payload.get('sub'),
-                'username': payload.get('username'),
-                'is_superuser': payload.get('is_superuser', False),
-                'permissions': payload.get('permissions', [])
-            }
-    except Exception:
-        pass
+        from ..core.security import verify_token
+        
+        payload = verify_token(token)
+        if not payload:
+            return None
+            
+        user_id = payload.get('user_id')
+        username = payload.get('sub')
+        
+        if not user_id and not username:
+            return None
+            
+        # Return basic user info from token payload
+        return {
+            'id': user_id or 1,  # Default to 1 if not present
+            'username': username or 'unknown',
+            'is_admin': payload.get('is_admin', False),
+            'is_superuser': payload.get('is_admin', False),  # For compatibility
+            'permissions': []
+        }
+            
+    except Exception as e:
+        from ..core.logging_config import get_logger
+        logger = get_logger(__name__)
+        logger.error(f"Error getting user from token: {e}")
+        
+    return None
+
+
+async def get_current_user_from_token(token: str) -> Optional[Dict[str, Any]]:
+    """Get user information from JWT token (async version)"""
+    try:
+        from ..core.security import verify_token
+        
+        payload = verify_token(token)
+        if not payload:
+            return None
+            
+        user_id = payload.get('user_id')
+        username = payload.get('sub')
+        
+        if not user_id and not username:
+            return None
+            
+        # Return basic user info from token payload
+        return {
+            'id': user_id or 1,  # Default to 1 if not present
+            'username': username or 'unknown',
+            'is_admin': payload.get('is_admin', False),
+            'is_superuser': payload.get('is_admin', False),  # For compatibility
+            'permissions': []
+        }
+            
+    except Exception as e:
+        from ..core.logging_config import get_logger
+        logger = get_logger(__name__)
+        logger.error(f"Error getting user from token: {e}")
+        
     return None
 
 

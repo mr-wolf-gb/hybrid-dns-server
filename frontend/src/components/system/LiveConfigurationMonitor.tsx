@@ -8,7 +8,7 @@ import {
   ArrowPathIcon
 } from '@heroicons/react/24/outline'
 import { Card, Badge, Loading } from '@/components/ui'
-import { useSystemWebSocket } from '@/hooks/useWebSocket'
+import { useWebSocketContext } from '@/contexts/WebSocketContext'
 import { formatRelativeTime } from '@/utils'
 
 interface ConfigurationChange {
@@ -37,16 +37,13 @@ const LiveConfigurationMonitor: React.FC<LiveConfigurationMonitorProps> = ({
   const [isConnected, setIsConnected] = useState(false)
   const [lastUpdate, setLastUpdate] = useState<string>('')
 
-  // WebSocket connection for real-time configuration updates
-  const { subscribe, isConnected: wsConnected } = useSystemWebSocket(userId, {
-    onConnect: () => {
-      console.log('Live configuration monitor connected')
-      setIsConnected(true)
-    },
-    onDisconnect: () => {
-      setIsConnected(false)
-    }
-  })
+  // Use existing WebSocket connection from context
+  const { isConnected: wsConnected, registerEventHandler, unregisterEventHandler } = useWebSocketContext()
+  
+  // Update local connection state based on WebSocket context
+  useEffect(() => {
+    setIsConnected(wsConnected)
+  }, [wsConnected])
 
   // Set up WebSocket event handlers
   useEffect(() => {

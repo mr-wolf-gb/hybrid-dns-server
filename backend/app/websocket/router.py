@@ -9,7 +9,7 @@ from datetime import datetime
 
 from ..core.logging_config import get_logger
 from ..core.feature_flags import get_websocket_feature_flags, WebSocketMigrationMode
-from ..core.auth_context import get_current_user_from_token
+from ..core.websocket_auth import get_current_user_websocket
 from .manager import get_websocket_manager, WebSocketManager  # Legacy system
 from .unified_manager import get_unified_websocket_manager, UnifiedWebSocketManager  # New system
 from .models import WSUser
@@ -60,9 +60,9 @@ class WebSocketRouter:
                 return False
             
             # Determine which system to use
-            should_use_unified = self.feature_flags.should_use_unified_websocket(user.user_id)
+            should_use_unified = self.feature_flags.should_use_unified_websocket(user.id)
             
-            logger.info(f"Routing WebSocket connection for user {user.user_id} to "
+            logger.debug(f"Routing WebSocket connection for user {user.id} to "
                        f"{'unified' if should_use_unified else 'legacy'} system")
             
             if should_use_unified:
@@ -76,7 +76,7 @@ class WebSocketRouter:
             
             # Try fallback if enabled and user is authenticated
             if user and self.feature_flags.settings.WEBSOCKET_LEGACY_FALLBACK:
-                logger.info(f"Attempting fallback to legacy system for user {user.user_id}")
+                logger.info(f"Attempting fallback to legacy system for user {user.id}")
                 try:
                     result = await self._route_to_legacy(websocket, user, connection_type)
                     if result:
@@ -102,17 +102,14 @@ class WebSocketRouter:
             WSUser object if authentication successful, None otherwise
         """
         try:
-            # Use existing authentication system
-            user_data = await get_current_user_from_token(token)
-            if not user_data:
+            # Use WebSocket-specific authentication
+            ws_user = await get_current_user_websocket(token)
+            if not ws_user:
+                logger.error("WebSocket authentication failed: get_current_user_websocket returned None")
                 return None
             
-            return WSUser(
-                user_id=str(user_data.id),
-                username=user_data.username,
-                is_admin=user_data.is_admin,
-                permissions=set()  # Will be populated by the WebSocket system
-            )
+            # Return the WSUser object directly (it's already the correct format)
+            return ws_user
             
         except Exception as e:
             logger.error(f"Authentication error: {e}")
@@ -142,7 +139,7 @@ class WebSocketRouter:
             success = await self.unified_manager.connect_user(websocket, user)
             if success:
                 self._connection_stats["unified_connections"] += 1
-                logger.info(f"Successfully connected user {user.user_id} to unified WebSocket system")
+                logger.debug(f"Successfully connected user {user.id} to unified WebSocket system")
             
             return success
             
@@ -171,10 +168,10 @@ class WebSocketRouter:
             if not self.legacy_manager:
                 self.legacy_manager = get_websocket_manager()
             
-            success = await self.legacy_manager.connect(websocket, user.user_id, connection_type)
+            success = await self.legacy_manager.connect(websocket, str(user.id), connection_type)
             if success:
                 self._connection_stats["legacy_connections"] += 1
-                logger.info(f"Successfully connected user {user.user_id} to legacy WebSocket system")
+                logger.debug(f"Successfully connected user {user.id} to legacy WebSocket system")
             
             return success
             

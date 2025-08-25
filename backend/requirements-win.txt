@@ -1,0 +1,71 @@
+# FastAPI and related dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-dotenv==1.0.0
+
+# Database
+sqlalchemy==2.0.36
+aiosqlite==0.19.0
+
+# Authentication and Security
+pyotp==2.9.0
+qrcode[pil]==7.4.2
+cryptography==42.0.8
+# Pin bcrypt to 4.0.1 to avoid passlib's bcrypt __about__ warning
+bcrypt==4.0.1
+
+# HTTP Clients and requests
+httpx==0.25.2
+aiohttp==3.9.1
+aiofiles==23.2.1
+requests==2.31.0
+
+# Date/Time handling
+python-dateutil==2.8.2
+
+# DNS and system utilities
+dnspython==2.4.2
+psutil==5.9.6
+
+# File monitoring
+watchdog==3.0.0
+
+# Configuration and validation
+pydantic==2.9.2
+pydantic-settings==2.1.0
+
+# Background tasks
+celery==5.3.4
+redis==5.0.1
+greenlet==3.2.4
+
+# Logging and monitoring
+structlog==23.2.0
+
+# Development and testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+black==23.11.0
+flake8==6.1.0
+mypy==1.7.1
+
+# CORS and middleware
+
+# Email (for notifications)
+fastapi-mail==1.4.1
+
+# Rate limiting
+slowapi==0.1.9
+
+# Template engine for zone file generation
+jinja2==3.1.2
+
+# Data analysis and reporting (pandas removed - not currently used)
+
+
+# PostgreSQL support
+--pre asyncpg==0.29.0
+--pre psycopg2-binary==2.9.9
