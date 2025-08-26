@@ -165,7 +165,7 @@ class RPZRuleBase(BaseModel):
 
     @validator('domain')
     def validate_domain(cls, v):
-        """Basic domain validation"""
+        """Basic domain validation for RPZ rules"""
         if not v:
             raise ValueError('Domain cannot be empty')
         
@@ -175,9 +175,27 @@ class RPZRuleBase(BaseModel):
         if not domain:
             raise ValueError('Domain cannot be empty')
         
-        # Basic domain format check (after trimming)
-        if not all(c.isalnum() or c in '.-_' for c in domain):
+        # RPZ domain format check - allow wildcards and standard domain characters
+        # Valid characters: alphanumeric, dots, hyphens, underscores, and asterisks for wildcards
+        if not all(c.isalnum() or c in '.-_*' for c in domain):
             raise ValueError('Domain contains invalid characters')
+        
+        # Additional RPZ-specific validations
+        if domain.startswith('.') or domain.endswith('.'):
+            raise ValueError('Domain cannot start or end with a dot')
+        
+        if '..' in domain:
+            raise ValueError('Domain cannot contain consecutive dots')
+        
+        # Validate wildcard patterns
+        if '*' in domain:
+            # Wildcard must be at the beginning and followed by a dot
+            if not domain.startswith('*.'):
+                raise ValueError('Wildcard (*) must be at the beginning and followed by a dot (e.g., *.example.com)')
+            
+            # Only one wildcard allowed and it must be at the start
+            if domain.count('*') > 1:
+                raise ValueError('Only one wildcard (*) is allowed per domain')
         
         return domain
 

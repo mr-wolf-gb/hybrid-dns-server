@@ -24,6 +24,11 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, onClose }
   const { preferences, shouldShowNotification } = useNotificationPreferences()
   const [filter, setFilter] = useState<'all' | 'unread' | 'dns' | 'security' | 'health' | 'system'>('all')
 
+  // Calculate filtered unread count based on preferences
+  const filteredUnreadCount = events.filter(event => 
+    !event.acknowledged && shouldShowNotification(event)
+  ).length
+
   const filteredEvents = events.filter(event => {
     // First apply preference filtering
     if (!shouldShowNotification(event)) {

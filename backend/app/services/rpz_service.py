@@ -530,10 +530,11 @@ class RPZService(BaseService[RPZRule]):
             elif not rule_data['redirect_target'].strip():
                 errors.append("Redirect target cannot be empty")
         
-        # Domain format validation (basic)
+        # Domain format validation for RPZ rules
         domain = rule_data.get('domain', '').strip().lower()
         if domain:
-            if not all(c.isalnum() or c in '.-_' for c in domain):
+            # RPZ domain format check - allow wildcards and standard domain characters
+            if not all(c.isalnum() or c in '.-_*' for c in domain):
                 errors.append("Domain contains invalid characters")
             
             if domain.startswith('.') or domain.endswith('.'):
@@ -541,6 +542,16 @@ class RPZService(BaseService[RPZRule]):
             
             if '..' in domain:
                 errors.append("Domain cannot contain consecutive dots")
+            
+            # Validate wildcard patterns
+            if '*' in domain:
+                # Wildcard must be at the beginning and followed by a dot
+                if not domain.startswith('*.'):
+                    errors.append("Wildcard (*) must be at the beginning and followed by a dot (e.g., *.example.com)")
+                
+                # Only one wildcard allowed and it must be at the start
+                if domain.count('*') > 1:
+                    errors.append("Only one wildcard (*) is allowed per domain")
         
         return errors
     

@@ -37,6 +37,27 @@ const Settings: React.FC = () => {
   const initialTab = urlParams.get('tab') || 'account'
   const [activeTab, setActiveTab] = useState(initialTab)
 
+  // Helper function to safely get BIND status
+  const getBindServiceStatus = () => {
+    try {
+      return bindStatus?.data?.data?.running || false
+    } catch {
+      return false
+    }
+  }
+
+  // Helper function to get BIND status text
+  const getBindStatusText = () => {
+    if (bindStatusError) return 'Error'
+    return getBindServiceStatus() ? 'Running' : 'Stopped'
+  }
+
+  // Helper function to get BIND status variant
+  const getBindStatusVariant = () => {
+    if (bindStatusError) return 'warning'
+    return getBindServiceStatus() ? 'success' : 'danger'
+  }
+
   // Fetch system status
   const { data: systemStatus } = useQuery({
     queryKey: ['system-status'],
@@ -45,10 +66,11 @@ const Settings: React.FC = () => {
   })
 
   // Fetch BIND status
-  const { data: bindStatus } = useQuery({
+  const { data: bindStatus, error: bindStatusError } = useQuery({
     queryKey: ['bind-status'],
     queryFn: () => systemService.getBindStatus(),
     refetchInterval: 10000,
+    retry: 1,
   })
 
   const {
@@ -341,12 +363,12 @@ const Settings: React.FC = () => {
                     DNS server daemon status
                   </p>
                 </div>
-                <Badge variant={bindStatus?.data.data.running ? 'success' : 'danger'}>
-                  {bindStatus?.data.data.running ? 'Running' : 'Stopped'}
+                <Badge variant={getBindServiceStatus() ? 'success' : 'danger'}>
+                  {getBindServiceStatus() ? 'Running' : 'Stopped'}
                 </Badge>
               </div>
 
-              {systemStatus && (
+              {systemStatus?.data?.data && (
                 <>
                   <div className="flex items-center justify-between">
                     <div>
@@ -358,7 +380,7 @@ const Settings: React.FC = () => {
                       </p>
                     </div>
                     <Badge variant="success">
-                      {systemStatus.data.data.status}
+                      {systemStatus.data.data.status || "Unknown"}
                     </Badge>
                   </div>
 
@@ -368,7 +390,7 @@ const Settings: React.FC = () => {
                         BIND Version
                       </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">
-                        {systemStatus.data.data.version}
+                        {systemStatus.data.data.version || "Unknown"}
                       </p>
                     </div>
                   </div>
@@ -379,7 +401,7 @@ const Settings: React.FC = () => {
                         Uptime
                       </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {Math.floor(systemStatus.data.data.uptime / 3600)} hours
+                        {systemStatus.data.data.uptime ? Math.floor(systemStatus.data.data.uptime / 3600) : 0} hours
                       </p>
                     </div>
                   </div>
@@ -471,12 +493,12 @@ const Settings: React.FC = () => {
                     DNS server daemon status
                   </p>
                 </div>
-                <Badge variant={bindStatus?.data.data.running ? 'success' : 'danger'}>
-                  {bindStatus?.data.data.running ? 'Running' : 'Stopped'}
+                <Badge variant={getBindServiceStatus() ? 'success' : 'danger'}>
+                  {getBindServiceStatus() ? 'Running' : 'Stopped'}
                 </Badge>
               </div>
 
-              {systemStatus && (
+              {systemStatus?.data?.data && (
                 <>
                   <div className="flex items-center justify-between">
                     <div>
@@ -488,7 +510,7 @@ const Settings: React.FC = () => {
                       </p>
                     </div>
                     <Badge variant="success">
-                      {systemStatus.data.data.status}
+                      {systemStatus.data.data.status || "Unknown"}
                     </Badge>
                   </div>
 
@@ -498,7 +520,7 @@ const Settings: React.FC = () => {
                         BIND Version
                       </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">
-                        {systemStatus.data.data.version}
+                        {systemStatus.data.data.version || "Unknown"}
                       </p>
                     </div>
                   </div>
@@ -509,7 +531,7 @@ const Settings: React.FC = () => {
                         Uptime
                       </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {Math.floor(systemStatus.data.data.uptime / 3600)} hours
+                        {systemStatus.data.data.uptime ? Math.floor(systemStatus.data.data.uptime / 3600) : 0} hours
                       </p>
                     </div>
                   </div>

@@ -12,6 +12,18 @@
     "description": "Phishing site targeting banks"
   },
   {
+    "domain": "*.malware-network.com",
+    "rpz_zone": "malware",
+    "action": "block",
+    "description": "Block all subdomains of malware network"
+  },
+  {
+    "domain": "*.ads.example.com",
+    "rpz_zone": "custom",
+    "action": "block",
+    "description": "Block all advertising subdomains"
+  },
+  {
     "domain": "redirect-me.com",
     "rpz_zone": "custom",
     "action": "redirect",
