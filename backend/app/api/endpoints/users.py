@@ -41,7 +41,7 @@ async def get_notification_preferences(
     try:
         # For now, we'll store preferences in user metadata
         # In a production system, you might want a separate table
-        preferences = current_user.metadata.get("notification_preferences") if current_user.metadata else None
+        preferences = current_user.user_metadata.get("notification_preferences") if current_user.user_metadata else None
         
         if not preferences:
             preferences = DEFAULT_NOTIFICATION_PREFERENCES
@@ -93,10 +93,10 @@ async def update_notification_preferences(
             raise HTTPException(status_code=400, detail="Max notifications per minute must be at least 1")
         
         # Update user metadata
-        if not current_user.metadata:
-            current_user.metadata = {}
+        if not current_user.user_metadata:
+            current_user.user_metadata = {}
         
-        current_user.metadata["notification_preferences"] = preferences
+        current_user.user_metadata["notification_preferences"] = preferences
         
         # Mark the metadata as modified for SQLAlchemy
         from sqlalchemy.orm.attributes import flag_modified
