@@ -1792,10 +1792,10 @@ class MonitoringService:
                 severity = EventSeverity.MEDIUM
             elif action == "high_block_rate":
                 priority = EventPriority.HIGH
-                severity = EventSeverity.HIGH
+                severity = EventSeverity.WARNING
             elif action == "performance_degradation":
                 priority = EventPriority.HIGH
-                severity = EventSeverity.HIGH
+                severity = EventSeverity.WARNING
             else:
                 priority = EventPriority.NORMAL
                 severity = EventSeverity.LOW

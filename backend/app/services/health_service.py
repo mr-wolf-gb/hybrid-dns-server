@@ -873,7 +873,7 @@ def get_health_service() -> HealthService:
             health_status = details.get("status", "unknown")
             if health_status == "unhealthy":
                 priority = EventPriority.HIGH
-                severity = EventSeverity.HIGH
+                severity = EventSeverity.ERROR
             elif health_status == "degraded":
                 priority = EventPriority.NORMAL
                 severity = EventSeverity.MEDIUM
@@ -918,7 +918,7 @@ def get_health_service() -> HealthService:
             
             if success_rate < 90 or (avg_response_time and avg_response_time > 500):
                 priority = EventPriority.HIGH
-                severity = EventSeverity.HIGH
+                severity = EventSeverity.ERROR
             elif success_rate < 95 or (avg_response_time and avg_response_time > 200):
                 priority = EventPriority.NORMAL
                 severity = EventSeverity.MEDIUM

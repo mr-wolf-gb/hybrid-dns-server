@@ -1286,7 +1286,7 @@ class RPZService(BaseService[RPZRule]):
                 severity = EventSeverity.CRITICAL
             elif threat_level == "high":
                 priority = EventPriority.HIGH
-                severity = EventSeverity.HIGH
+                severity = EventSeverity.WARNING
             else:
                 priority = EventPriority.NORMAL
                 severity = EventSeverity.MEDIUM

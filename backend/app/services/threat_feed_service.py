@@ -1261,7 +1261,7 @@ class ThreatFeedService(BaseService[ThreatFeed]):
             # Determine event priority and severity
             if action == "update_failed":
                 priority = EventPriority.HIGH
-                severity = EventSeverity.HIGH
+                severity = EventSeverity.ERROR
             elif action == "update_success" and details.get("rules_added", 0) > 100:
                 priority = EventPriority.HIGH
                 severity = EventSeverity.MEDIUM
@@ -1312,7 +1312,7 @@ class ThreatFeedService(BaseService[ThreatFeed]):
                 severity = EventSeverity.CRITICAL
                 priority = EventPriority.CRITICAL
             elif threat_type in ["phishing", "scam"]:
-                severity = EventSeverity.HIGH
+                severity = EventSeverity.WARNING
                 priority = EventPriority.HIGH
             else:
                 severity = EventSeverity.MEDIUM
