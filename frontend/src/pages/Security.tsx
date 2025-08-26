@@ -199,7 +199,7 @@ const Security: React.FC = () => {
     return rules.data.filter(rule => {
       const matchesSearch = searchTerm === '' || 
         rule.domain.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        rule.zone.toLowerCase().includes(searchTerm.toLowerCase())
+        rule.rpz_zone.toLowerCase().includes(searchTerm.toLowerCase())
       
       const matchesCategory = categoryFilter === 'all' || rule.category === categoryFilter
       const matchesAction = actionFilter === 'all' || rule.action === actionFilter
@@ -240,7 +240,7 @@ const Security: React.FC = () => {
             {rule.domain}
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400">
-            Zone: {rule.zone}
+            Zone: {rule.rpz_zone}
           </div>
         </div>
       ),

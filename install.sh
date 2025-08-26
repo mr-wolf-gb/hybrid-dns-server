@@ -696,7 +696,7 @@ configure_bind9() {
     
     # Create forwarders.conf with proper permissions for backend service
     silent_exec "touch /etc/bind/forwarders.conf" "Create forwarders.conf"
-    silent_exec "chown root:bind /etc/bind/forwarders.conf" "Set forwarders.conf ownership"
+    silent_exec "chown '$SERVICE_USER:bind' /etc/bind/forwarders.conf" "Set forwarders.conf ownership"
     silent_exec "chmod 664 /etc/bind/forwarders.conf" "Set forwarders.conf permissions"
     
     # Ensure backend service user can write to BIND config files
@@ -705,15 +705,15 @@ configure_bind9() {
     
     # Fix AppArmor profile if it exists (Ubuntu 24.04 specific)
     if [[ -f /etc/apparmor.d/usr.sbin.named ]]; then
-        log "Updating AppArmor profile for BIND9..."
+    log "Updating AppArmor profile for BIND9..."
+    
+    # Add necessary permissions to AppArmor profile
+    if ! grep -q "/var/log/bind/" /etc/apparmor.d/usr.sbin.named; then
+        # Create a backup of the original profile
+        cp /etc/apparmor.d/usr.sbin.named /etc/apparmor.d/usr.sbin.named.backup
         
-        # Add necessary permissions to AppArmor profile
-        if ! grep -q "/var/log/bind/" /etc/apparmor.d/usr.sbin.named; then
-            # Create a backup of the original profile
-            cp /etc/apparmor.d/usr.sbin.named /etc/apparmor.d/usr.sbin.named.backup
-            
-            # Create a temporary file with the additions
-            cat > /tmp/apparmor_additions << 'EOF'
+        # Create a temporary file with the additions
+        cat > /tmp/apparmor_additions << 'EOF'
   # Additional permissions for Hybrid DNS Server
   /var/log/bind/ rw,
   /var/log/bind/** rw,
@@ -725,50 +725,36 @@ configure_bind9() {
   /etc/bind/backups/** rw,
 EOF
             
-            # Find the last closing brace and insert before it
-            if grep -q "^}$" /etc/apparmor.d/usr.sbin.named; then
-                # Use awk to insert before the last closing brace
-                awk '
-                    /^}$/ && !found_last {
-                        # Check if this is the last closing brace
-                        rest = $0
-                        getline rest
-                        if (rest == "") {
-                            # This is the last line, insert before it
-                            while ((getline line < "/tmp/apparmor_additions") > 0) {
-                                print line
-                            }
-                            close("/tmp/apparmor_additions")
-                            print $0
-                            found_last = 1
-                        } else {
-                            print $0
-                            print rest
-                        }
+            # Insert rules just before the final closing brace
+            awk '
+                BEGIN { added=0 }
+                /^}$/ && !added {
+                    while ((getline line < "/tmp/apparmor_additions") > 0) {
+                        print line
                     }
-                    !/^}$/ { print }
-                ' /etc/apparmor.d/usr.sbin.named > /tmp/usr.sbin.named.new
-                
-                # Validate the new profile syntax
-                if apparmor_parser -Q /tmp/usr.sbin.named.new; then
-                    # Syntax is valid, replace the original
-                    mv /tmp/usr.sbin.named.new /etc/apparmor.d/usr.sbin.named
+                    close("/tmp/apparmor_additions")
+                    added=1
+                }
+                { print }
+            ' /etc/apparmor.d/usr.sbin.named > /tmp/usr.sbin.named.new
                     
-                    # Reload AppArmor profile
-                    if apparmor_parser -r /etc/apparmor.d/usr.sbin.named >> "$LOG_FILE" 2>&1; then
-                        log "AppArmor profile updated successfully"
-                    else
-                        warning "Could not reload AppArmor profile - restoring backup"
-                        mv /etc/apparmor.d/usr.sbin.named.backup /etc/apparmor.d/usr.sbin.named
-                    fi
+            # Validate the new profile syntax
+            if apparmor_parser -Q /tmp/usr.sbin.named.new; then
+                # Syntax is valid, replace the original
+                mv /tmp/usr.sbin.named.new /etc/apparmor.d/usr.sbin.named
+                
+                # Reload AppArmor profile
+                if apparmor_parser -r /etc/apparmor.d/usr.sbin.named >> "$LOG_FILE" 2>&1; then
+                    log "AppArmor profile updated successfully"
                 else
-                    warning "AppArmor profile syntax validation failed - keeping original profile"
-                    rm -f /tmp/usr.sbin.named.new
+                    warning "Could not reload AppArmor profile - restoring backup"
+                    mv /etc/apparmor.d/usr.sbin.named.backup /etc/apparmor.d/usr.sbin.named
                 fi
             else
-                warning "Could not find proper location to insert AppArmor rules - skipping AppArmor update"
+                warning "AppArmor profile syntax validation failed - keeping original profile"
+                rm -f /tmp/usr.sbin.named.new
             fi
-            
+                
             # Clean up temporary files
             rm -f /tmp/apparmor_additions
         else

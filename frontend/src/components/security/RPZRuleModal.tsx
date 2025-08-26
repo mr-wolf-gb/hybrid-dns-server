@@ -78,13 +78,13 @@ const RPZRuleModal: React.FC<RPZRuleModalProps> = ({
     control,
   } = useForm<RPZRuleFormData>({
     defaultValues: rule ? {
-      zone: rule.zone,
+      rpz_zone: rule.rpz_zone,
       domain: rule.domain,
       action: rule.action,
       category: rule.category,
       redirect_target: rule.redirect_target || '',
     } : {
-      zone: 'rpz.malware',
+      rpz_zone: 'rpz.malware',
       domain: '',
       action: 'block',
       category: 'malware',
@@ -93,7 +93,7 @@ const RPZRuleModal: React.FC<RPZRuleModalProps> = ({
   })
 
   const watchAction = watch('action')
-  const watchZone = watch('zone')
+  const watchZone = watch('rpz_zone')
   const watchCategory = watch('category')
 
   // Fetch rule templates
@@ -206,7 +206,7 @@ const RPZRuleModal: React.FC<RPZRuleModalProps> = ({
   // Handle template selection
   const applyTemplate = (template: RPZRuleTemplate) => {
     setSelectedTemplate(template)
-    setValue('zone', template.zone)
+    setValue('rpz_zone', template.zone)
     setValue('action', template.action)
     setValue('category', template.category)
     if (template.redirect_target) {
@@ -241,7 +241,7 @@ const RPZRuleModal: React.FC<RPZRuleModalProps> = ({
     const formData = watch()
     const bulkData: BulkImportData = {
       domains: validDomains,
-      zone: formData.zone,
+      zone: formData.rpz_zone,
       action: formData.action,
       category: formData.category,
       redirect_target: formData.redirect_target,
@@ -488,8 +488,8 @@ const RPZRuleModal: React.FC<RPZRuleModalProps> = ({
                     { value: 'rpz.custom-block', label: 'Custom Block List' },
                     { value: 'rpz.custom-allow', label: 'Custom Allow List' },
                   ]}
-                  {...register('zone', { required: 'RPZ zone is required' })}
-                  error={errors.zone?.message}
+                  {...register('rpz_zone', { required: 'RPZ zone is required' })}
+                  error={errors.rpz_zone?.message}
                   helperText={getZoneDescription(watchZone)}
                 />
               </div>

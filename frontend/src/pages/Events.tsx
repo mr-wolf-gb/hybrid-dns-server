@@ -3,11 +3,11 @@
  */
 
 import React, { useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger, Badge, Card, CardHeader, CardContent, CardTitle } from '../components/ui';
-import EventMonitor from '../components/events/EventMonitor';
-import EventReplay from '../components/events/EventReplay';
-import { useWebSocketContext } from '../contexts/WebSocketContext';
-import { useAuth } from '../contexts/AuthContext';
+import { Tabs, TabsContent, TabsList, TabsTrigger, Badge, Card, CardHeader, CardContent, CardTitle } from '@/components/ui';
+import EventMonitor from '@/components/events/EventMonitor';
+import EventReplay from '@/components/events/EventReplay';
+import { useWebSocketContext } from '@/contexts/WebSocketContext';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   ChartBarIcon as Activity,
   ArrowPathIcon as RotateCcw,

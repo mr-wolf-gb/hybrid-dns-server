@@ -15,7 +15,7 @@ from ..schemas.dns import DNSValidators
 from ..core.auth_context import get_current_user_id, track_user_action
 from ..core.logging_config import get_logger
 from .enhanced_event_service import get_enhanced_event_service
-from ..websocket.event_types import EventType, EventPriority, EventCategory, create_event
+from ..websocket.event_types import EventType, EventPriority, EventCategory, EventMetadata, create_event
 
 logger = get_logger(__name__)
 
@@ -1013,16 +1013,17 @@ class RecordService(BaseService[DNSRecord]):
             # Create and emit the event
             event = create_event(
                 event_type=event_type,
-                category=EventCategory.DNS,
                 data=event_data,
-                user_id=user_id,
+                source_user_id=user_id,
                 priority=priority,
-                metadata={
-                    "service": "record_service",
-                    "action": action,
-                    "record_type": record.record_type if record else details.get("record_type"),
-                    "zone_name": zone.name
-                }
+                metadata=EventMetadata(
+                    source_service="record_service",
+                    source_component=action,
+                    custom_fields={
+                        "record_type": record.record_type if record else details.get("record_type"),
+                        "zone_name": zone.name
+                    }
+                )
             )
             
             await self.event_service.emit_event(event)
@@ -1058,16 +1059,17 @@ class RecordService(BaseService[DNSRecord]):
             # Create and emit the event
             event = create_event(
                 event_type=event_type,
-                category=EventCategory.DNS,
                 data=event_data,
-                user_id=user_id,
+                source_user_id=user_id,
                 priority=priority,
-                metadata={
-                    "service": "record_service",
-                    "operation": operation,
-                    "zone_name": zone.name,
-                    "success_rate": success_rate
-                }
+                metadata=EventMetadata(
+                    source_service="record_service",
+                    source_component=operation,
+                    custom_fields={
+                        "zone_name": zone.name,
+                        "success_rate": success_rate
+                    }
+                )
             )
             
             await self.event_service.emit_event(event)

@@ -260,11 +260,14 @@ const Forwarders: React.FC = () => {
     {
       key: 'policy',
       header: 'Policy',
-      render: (forwarder: Forwarder) => (
-        <Badge variant={forwarder.forward_policy === 'first' ? 'info' : 'default'}>
-          {forwarder.forward_policy}
-        </Badge>
-      ),
+      render: (forwarder: Forwarder) => {
+        const policy = forwarder.forwarder_type === 'intranet' ? 'only' : 'first'
+        return (
+          <Badge variant={policy === 'first' ? 'info' : 'default'}>
+            forward {policy}
+          </Badge>
+        )
+      },
     },
     {
       key: 'health',

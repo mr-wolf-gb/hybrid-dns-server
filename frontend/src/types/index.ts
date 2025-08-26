@@ -108,7 +108,7 @@ export interface Forwarder {
 // RPZ types
 export interface RPZRule {
   id: number
-  zone: string
+  rpz_zone: string
   domain: string
   action: 'block' | 'redirect' | 'passthru'
   category: 'malware' | 'phishing' | 'social_media' | 'adult' | 'gambling' | 'custom'
@@ -288,7 +288,7 @@ export interface ServerConfig {
 }
 
 export interface RPZRuleFormData {
-  zone: string
+  rpz_zone: string
   domain: string
   action: 'block' | 'redirect' | 'passthru'
   category: 'malware' | 'phishing' | 'social_media' | 'adult' | 'gambling' | 'custom'
