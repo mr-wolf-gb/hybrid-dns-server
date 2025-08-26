@@ -1,7 +1,6 @@
 export { default as Badge } from './Badge'
 export { default as Button } from './Button'
-export { default as Card } from './Card'
-export { Card as CardComponent, CardHeader, CardContent, CardTitle } from './card'
+export { default as Card, CardHeader, CardContent, CardTitle } from './Card'
 export { default as Input } from './Input'
 export { default as Loading } from './Loading'
 export { default as Modal } from './Modal'

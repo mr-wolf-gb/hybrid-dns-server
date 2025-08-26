@@ -8,7 +8,7 @@ import {
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline'
 import { dashboardService } from '@/services/api'
-import { Card, Loading, Badge } from '@/components/ui'
+import { Card, CardHeader, CardContent, CardTitle, Loading, Badge } from '@/components/ui'
 import { formatNumber, formatPercentage, formatRelativeTime, getStatusColor } from '@/utils'
 import DashboardChart from '@/components/dashboard/DashboardChart'
 import RecentQueriesTable from '@/components/dashboard/RecentQueriesTable'
@@ -167,34 +167,42 @@ const Dashboard: React.FC = () => {
       {/* Charts and tables grid */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Query volume chart */}
-        <Card
-          title="Query Volume (24h)"
-          description="DNS queries over the last 24 hours"
-        >
-          {dashboardData?.queries_per_hour && (
-            <DashboardChart data={dashboardData.queries_per_hour} />
-          )}
+        <Card>
+          <CardHeader>
+            <CardTitle>Query Volume (24h)</CardTitle>
+            <p className="text-sm text-gray-500">DNS queries over the last 24 hours</p>
+          </CardHeader>
+          <CardContent>
+            {dashboardData?.queries_per_hour && (
+              <DashboardChart data={dashboardData.queries_per_hour} />
+            )}
+          </CardContent>
         </Card>
 
         {/* Forwarder status */}
-        <Card
-          title="Forwarder Health"
-          description="Status of DNS forwarders"
-        >
-          {dashboardData?.forwarder_health && (
-            <ForwarderStatusCard forwarders={dashboardData.forwarder_health} />
-          )}
+        <Card>
+          <CardHeader>
+            <CardTitle>Forwarder Health</CardTitle>
+            <p className="text-sm text-gray-500">Status of DNS forwarders</p>
+          </CardHeader>
+          <CardContent>
+            {dashboardData?.forwarder_health && (
+              <ForwarderStatusCard forwarders={dashboardData.forwarder_health} />
+            )}
+          </CardContent>
         </Card>
       </div>
 
       {/* Top domains and recent queries */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Top domains */}
-        <Card
-          title="Top Domains"
-          description="Most queried domains today"
-        >
-          <div className="space-y-3">
+        <Card>
+          <CardHeader>
+            <CardTitle>Top Domains</CardTitle>
+            <p className="text-sm text-gray-500">Most queried domains today</p>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
             {dashboardData?.top_domains?.slice(0, 8).map((domain, index) => (
               <div key={index} className="flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
@@ -207,14 +215,17 @@ const Dashboard: React.FC = () => {
             )) || (
               <p className="text-sm text-gray-500 dark:text-gray-400">No data available</p>
             )}
-          </div>
+            </div>
+          </CardContent>
         </Card>
 
         {/* Blocked domains */}
-        <Card
-          title="Blocked Domains"
-          description="Recently blocked domains"
-        >
+        <Card>
+          <CardHeader>
+            <CardTitle>Blocked Domains</CardTitle>
+            <p className="text-sm text-gray-500">Recently blocked domains</p>
+          </CardHeader>
+          <CardContent>
           <div className="space-y-3">
             {dashboardData?.blocked_domains?.slice(0, 8).map((domain, index) => (
               <div key={index} className="flex items-center justify-between">
@@ -233,19 +244,23 @@ const Dashboard: React.FC = () => {
             )) || (
               <p className="text-sm text-gray-500 dark:text-gray-400">No blocked domains</p>
             )}
-          </div>
+            </div>
+          </CardContent>
         </Card>
 
         {/* Recent queries */}
-        <Card
-          title="Recent Queries"
-          description="Latest DNS queries"
-        >
-          {queriesLoading ? (
-            <Loading text="Loading queries..." />
-          ) : (
-            <RecentQueriesTable queries={recentQueries?.data || []} />
-          )}
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Queries</CardTitle>
+            <p className="text-sm text-gray-500">Latest DNS queries</p>
+          </CardHeader>
+          <CardContent>
+            {queriesLoading ? (
+              <Loading text="Loading queries..." />
+            ) : (
+              <RecentQueriesTable queries={recentQueries?.data || []} />
+            )}
+          </CardContent>
         </Card>
       </div>
 

@@ -3,8 +3,7 @@
  */
 
 import React, { useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger, Badge } from '../components/ui';
-import { Card, CardHeader, CardContent, CardTitle } from '../components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger, Badge, Card, CardHeader, CardContent, CardTitle } from '../components/ui';
 import EventMonitor from '../components/events/EventMonitor';
 import EventReplay from '../components/events/EventReplay';
 import { useWebSocketContext } from '../contexts/WebSocketContext';

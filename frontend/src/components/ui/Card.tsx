@@ -63,3 +63,4 @@ const CardTitle: React.FC<CardTitleProps> = ({ children, className }) => {
 }
 
 export { Card, CardHeader, CardContent, CardTitle }
+export default Card
