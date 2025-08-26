@@ -10,7 +10,7 @@ import json
 from ...core.database import get_database_session
 from ...core.dependencies import get_current_user
 from ...models.auth import User
-from ...schemas.auth import UserResponse
+from ...schemas.auth import UserInfo
 from ...core.logging_config import get_logger
 
 logger = get_logger(__name__)

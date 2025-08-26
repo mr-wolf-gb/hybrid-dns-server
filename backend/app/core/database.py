@@ -11,7 +11,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 
 from .config import get_settings
 from .logging_config import get_logger
@@ -23,6 +23,8 @@ Base = declarative_base()
 # Database setup will be initialized when needed
 engine = None
 async_session = None
+sync_engine = None
+sync_session = None
 
 # Metadata for table creation
 metadata = Base.metadata
@@ -38,6 +40,8 @@ class Database:
     def __init__(self):
         self.engine = None
         self.async_session = None
+        self.sync_engine = None
+        self.sync_session = None
         self._initialized = False
     
     def _initialize_engine(self):
@@ -45,19 +49,22 @@ class Database:
         if not self._initialized:
             settings = get_settings()
             
-            # Database URL setup
+            # Database URL setup for async operations
             if settings.DATABASE_URL.startswith("sqlite"):
                 # For SQLite, use aiosqlite for async operations
-                database_url = settings.DATABASE_URL.replace("sqlite://", "sqlite+aiosqlite://")
+                async_database_url = settings.DATABASE_URL.replace("sqlite://", "sqlite+aiosqlite://")
+                sync_database_url = settings.DATABASE_URL  # Keep original for sync
             elif settings.DATABASE_URL.startswith("postgresql"):
                 # For PostgreSQL, use asyncpg for async operations
-                database_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+                async_database_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+                sync_database_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://")
             else:
-                database_url = settings.DATABASE_URL
+                async_database_url = settings.DATABASE_URL
+                sync_database_url = settings.DATABASE_URL
 
-            # SQLAlchemy setup
+            # Async SQLAlchemy setup
             self.engine = create_async_engine(
-                database_url,
+                async_database_url,
                 echo=settings.DATABASE_ECHO,
                 future=True
             )
@@ -65,6 +72,18 @@ class Database:
             self.async_session = sessionmaker(
                 self.engine, class_=AsyncSession, expire_on_commit=False
             )
+            
+            # Sync SQLAlchemy setup for legacy services
+            self.sync_engine = create_engine(
+                sync_database_url,
+                echo=settings.DATABASE_ECHO,
+                future=True
+            )
+            
+            self.sync_session = sessionmaker(
+                self.sync_engine, class_=Session, expire_on_commit=False
+            )
+            
             self._initialized = True
     
     async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
@@ -126,18 +145,31 @@ database = Database()
 
 def _initialize_database_engine():
     """Initialize database engine and session maker (legacy function)"""
-    global engine, async_session
+    global engine, async_session, sync_engine, sync_session
     
     if engine is None:
         database._initialize_engine()
         engine = database.engine
         async_session = database.async_session
+        sync_engine = database.sync_engine
+        sync_session = database.sync_session
 
 
 async def get_database_session() -> AsyncGenerator[AsyncSession, None]:
     """Get database session for dependency injection"""
     async for session in database.get_session():
         yield session
+
+
+def get_db():
+    """Get synchronous database session for legacy services"""
+    database._initialize_engine()
+    
+    db = database.sync_session()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 async def init_database():
