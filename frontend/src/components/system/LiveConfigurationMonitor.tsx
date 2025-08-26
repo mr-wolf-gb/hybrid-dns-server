@@ -47,98 +47,112 @@ const LiveConfigurationMonitor: React.FC<LiveConfigurationMonitorProps> = ({
 
   // Set up WebSocket event handlers
   useEffect(() => {
-    // DNS Zone events
-    subscribe('zone_created', (data) => {
-      addConfigChange({
-        type: 'zone_created',
-        entity_type: 'zone',
-        entity_name: data.name || data.zone_name,
-        action: 'Created DNS zone',
-        details: data,
-        status: 'completed'
-      })
+    if (!wsConnected) return
+
+    const handlerId = 'live-config-monitor'
+    
+    registerEventHandler(handlerId, [
+      'zone_created', 'zone_updated', 'zone_deleted',
+      'record_created', 'record_updated', 'record_deleted',
+      'bind_reload', 'config_change'
+    ], (message) => {
+      const data = message.data
+      
+      switch (message.type) {
+        case 'zone_created':
+          addConfigChange({
+            type: 'zone_created',
+            entity_type: 'zone',
+            entity_name: data.name || data.zone_name,
+            action: 'Created DNS zone',
+            details: data,
+            status: 'completed'
+          })
+          break
+
+        case 'zone_updated':
+          addConfigChange({
+            type: 'zone_updated',
+            entity_type: 'zone',
+            entity_name: data.name || data.zone_name,
+            action: 'Updated DNS zone',
+            details: data,
+            status: 'completed'
+          })
+          break
+
+        case 'zone_deleted':
+          addConfigChange({
+            type: 'zone_deleted',
+            entity_type: 'zone',
+            entity_name: data.name || data.zone_name,
+            action: 'Deleted DNS zone',
+            details: data,
+            status: 'completed'
+          })
+          break
+
+        case 'record_created':
+          addConfigChange({
+            type: 'record_created',
+            entity_type: 'record',
+            entity_name: `${data.name || data.record_name} (${data.type})`,
+            action: 'Created DNS record',
+            details: data,
+            status: 'completed'
+          })
+          break
+
+        case 'record_updated':
+          addConfigChange({
+            type: 'record_updated',
+            entity_type: 'record',
+            entity_name: `${data.name || data.record_name} (${data.type})`,
+            action: 'Updated DNS record',
+            details: data,
+            status: 'completed'
+          })
+          break
+
+        case 'record_deleted':
+          addConfigChange({
+            type: 'record_deleted',
+            entity_type: 'record',
+            entity_name: `${data.name || data.record_name} (${data.type})`,
+            action: 'Deleted DNS record',
+            details: data,
+            status: 'completed'
+          })
+          break
+
+        case 'bind_reload':
+          addConfigChange({
+            type: 'bind_reload',
+            entity_type: 'system',
+            entity_name: 'BIND9 DNS Server',
+            action: data.success ? 'Configuration reloaded successfully' : 'Configuration reload failed',
+            details: data,
+            status: data.success ? 'completed' : 'failed'
+          })
+          break
+
+        case 'config_change':
+          addConfigChange({
+            type: 'config_change',
+            entity_type: data.entity_type || 'system',
+            entity_name: data.entity_name || 'System Configuration',
+            action: data.action || 'Configuration changed',
+            details: data,
+            status: data.status || 'completed'
+          })
+          break
+      }
     })
 
-    subscribe('zone_updated', (data) => {
-      addConfigChange({
-        type: 'zone_updated',
-        entity_type: 'zone',
-        entity_name: data.name || data.zone_name,
-        action: 'Updated DNS zone',
-        details: data,
-        status: 'completed'
-      })
-    })
-
-    subscribe('zone_deleted', (data) => {
-      addConfigChange({
-        type: 'zone_deleted',
-        entity_type: 'zone',
-        entity_name: data.name || data.zone_name,
-        action: 'Deleted DNS zone',
-        details: data,
-        status: 'completed'
-      })
-    })
-
-    // DNS Record events
-    subscribe('record_created', (data) => {
-      addConfigChange({
-        type: 'record_created',
-        entity_type: 'record',
-        entity_name: `${data.name || data.record_name} (${data.type})`,
-        action: 'Created DNS record',
-        details: data,
-        status: 'completed'
-      })
-    })
-
-    subscribe('record_updated', (data) => {
-      addConfigChange({
-        type: 'record_updated',
-        entity_type: 'record',
-        entity_name: `${data.name || data.record_name} (${data.type})`,
-        action: 'Updated DNS record',
-        details: data,
-        status: 'completed'
-      })
-    })
-
-    subscribe('record_deleted', (data) => {
-      addConfigChange({
-        type: 'record_deleted',
-        entity_type: 'record',
-        entity_name: `${data.name || data.record_name} (${data.type})`,
-        action: 'Deleted DNS record',
-        details: data,
-        status: 'completed'
-      })
-    })
-
-    // BIND reload events
-    subscribe('bind_reload', (data) => {
-      addConfigChange({
-        type: 'bind_reload',
-        entity_type: 'system',
-        entity_name: 'BIND9 DNS Server',
-        action: data.success ? 'Configuration reloaded successfully' : 'Configuration reload failed',
-        details: data,
-        status: data.success ? 'completed' : 'failed'
-      })
-    })
-
-    // General configuration changes
-    subscribe('config_change', (data) => {
-      addConfigChange({
-        type: 'config_change',
-        entity_type: data.entity_type || 'system',
-        entity_name: data.entity_name || 'System Configuration',
-        action: data.action || 'Configuration changed',
-        details: data,
-        status: data.status || 'completed'
-      })
-    })
-  }, [subscribe])
+    return () => {
+      unregisterEventHandler(handlerId)
+    }
+  }, [wsConnected, registerEventHandler, unregisterEventHandler])
 
   const addConfigChange = (changeData: Partial<ConfigurationChange>) => {
     const change: ConfigurationChange = {

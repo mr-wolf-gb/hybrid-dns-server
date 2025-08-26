@@ -106,7 +106,7 @@ interface WebSocketProviderProps {
 }
 
 export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
-  const { user, accessToken } = useAuth();
+  const { user, accessToken, isLoading } = useAuth();
   const [eventHandlers, setEventHandlers] = useState<EventHandler[]>([]);
   const [connectionStats, setConnectionStats] = useState<any>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -114,6 +114,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   const [error, setError] = useState<string | null>(null);
   const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
   const subscriberIdRef = useRef<string>(`websocket-context-${Date.now()}`);
+  const hasInitialized = useRef(false);
 
   // Global message handler with throttling
   const handleMessage = useCallback((message: WebSocketMessage) => {
@@ -256,7 +257,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   const dnsConnection = connection;
   const securityConnection = connection;
   const systemConnection = connection;
-  const adminConnection = user?.is_admin ? connection : undefined;
+  const adminConnection = user?.is_superuser ? connection : undefined;
 
   // Register event handler
   const registerEventHandler = useCallback((
@@ -277,7 +278,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   }, []);
 
   // Broadcast event
-  const broadcastEvent = useCallback((eventData: any, connectionType?: string) => {
+  const broadcastEvent = useCallback((eventData: any, _connectionType?: string) => {
     globalWebSocketService.sendMessage('admin', {
       type: 'emit_event',
       data: eventData
@@ -348,12 +349,12 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
       dns: baseStats,
       security: baseStats,
       system: baseStats,
-      admin: user?.is_admin ? baseStats : null,
+      admin: user?.is_superuser ? baseStats : null,
       global: globalStats
     };
 
     return stats;
-  }, [isConnected, error, user?.is_admin]);
+  }, [isConnected, error, user?.is_superuser]);
 
   // Update connection stats periodically
   useEffect(() => {
@@ -366,19 +367,24 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
   // Auto-connect when user is available
   useEffect(() => {
+    // Don't do anything while auth is still loading
+    if (isLoading) return;
+
     if (user && accessToken && !isConnecting && !isConnected) {
       console.log('Auto-connecting WebSocket for user:', user.username);
+      hasInitialized.current = true;
       connectAll();
-    } else if (!user) {
-      // Disconnect all connections when user logs out
+    } else if (!user && hasInitialized.current && (isConnected || isConnecting)) {
+      // Only disconnect if we were previously initialized and connected
       console.log('User logged out, disconnecting WebSocket');
       disconnectAll();
       // Clear event handlers
       setEventHandlers([]);
       setError(null);
       setLastMessage(null);
+      hasInitialized.current = false;
     }
-  }, [user, accessToken, connectAll, disconnectAll, isConnecting, isConnected]);
+  }, [user, accessToken, isLoading, connectAll, disconnectAll, isConnecting, isConnected]);
 
   // Cleanup on unmount
   useEffect(() => {

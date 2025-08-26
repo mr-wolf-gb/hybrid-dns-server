@@ -199,7 +199,7 @@ const RealTimeHealthStatus: React.FC = () => {
                   {forwarder.status}
                 </Badge>
                 {!forwarder.is_active && (
-                  <Badge variant="secondary" size="sm">
+                  <Badge variant="default" size="sm">
                     Inactive
                   </Badge>
                 )}

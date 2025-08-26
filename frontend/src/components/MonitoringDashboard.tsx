@@ -378,7 +378,7 @@ const MonitoringDashboard: React.FC = () => {
                     .map(([domain, count]) => (
                       <div key={domain} className="flex justify-between items-center">
                         <span className="text-sm truncate flex-1">{domain}</span>
-                        <Badge variant="secondary">{count}</Badge>
+                        <Badge variant="default">{count}</Badge>
                       </div>
                     ))}
                 </div>
@@ -538,7 +538,7 @@ const MonitoringDashboard: React.FC = () => {
                     .map(([client, count]) => (
                       <div key={client} className="flex justify-between items-center">
                         <span className="text-sm font-mono">{client}</span>
-                        <Badge variant="outline">{count}</Badge>
+                        <Badge variant="default">{count}</Badge>
                       </div>
                     ))}
                 </div>

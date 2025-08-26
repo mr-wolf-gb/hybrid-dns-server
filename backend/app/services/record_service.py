@@ -58,7 +58,7 @@ class RecordService(BaseService[DNSRecord]):
         
         # Emit record creation event
         await self._emit_record_event(
-            event_type=EventType.DNS_RECORD_CREATED,
+            event_type=EventType.RECORD_CREATED,
             record=record,
             zone=zone,
             action="create",
@@ -142,7 +142,7 @@ class RecordService(BaseService[DNSRecord]):
             
             # Emit record update event
             await self._emit_record_event(
-                event_type=EventType.DNS_RECORD_UPDATED,
+                event_type=EventType.RECORD_UPDATED,
                 record=updated_record,
                 zone=zone,
                 action="update",
@@ -200,7 +200,7 @@ class RecordService(BaseService[DNSRecord]):
         if success:
             # Emit record deletion event
             await self._emit_record_event(
-                event_type=EventType.DNS_RECORD_DELETED,
+                event_type=EventType.RECORD_DELETED,
                 record=None,  # Record is deleted, so pass None
                 zone=zone,
                 action="delete",
@@ -406,7 +406,7 @@ class RecordService(BaseService[DNSRecord]):
         
         # Emit bulk operation progress event
         await self._emit_bulk_operation_event(
-            event_type=EventType.DNS_BULK_OPERATION_PROGRESS,
+            event_type=EventType.BULK_OPERATION_PROGRESS,
             zone=zone,
             operation="bulk_create",
             total_records=len(records_data),

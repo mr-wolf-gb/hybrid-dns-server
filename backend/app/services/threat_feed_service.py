@@ -67,7 +67,7 @@ class ThreatFeedService(BaseService[ThreatFeed]):
             
             # Emit threat feed creation event
             await self._emit_threat_feed_event(
-                event_type=EventType.SECURITY_THREAT_FEED_CREATED,
+                event_type=EventType.THREAT_FEED_UPDATE,
                 feed=feed,
                 action="create",
                 details={

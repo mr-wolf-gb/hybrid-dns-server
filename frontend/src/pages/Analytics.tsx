@@ -64,52 +64,54 @@ export const Analytics: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'overview' | 'performance' | 'security' | 'zones' | 'clients'>('overview')
 
-  // Calculate hours from date range
+  // Calculate hours from date range with max limit
   const getHoursFromDateRange = () => {
     const diffMs = filters.dateRange.end.getTime() - filters.dateRange.start.getTime()
-    return Math.ceil(diffMs / (1000 * 60 * 60))
+    const hours = Math.ceil(diffMs / (1000 * 60 * 60))
+    // Backend only accepts up to 168 hours (7 days)
+    return Math.min(hours, 168)
   }
 
   // Query trends data
   const { data: trendsData, isLoading: trendsLoading, error: trendsError } = useQuery({
     queryKey: ['analytics', 'trends', filters.dateRange, filters.interval],
-    queryFn: () => analyticsService.getQueryAnalytics(getHoursFromDateRange()),
+    queryFn: () => analyticsService.getQueryTrends('', ''),
   })
 
   // Performance analytics
   const { data: performanceData, isLoading: performanceLoading } = useQuery({
     queryKey: ['analytics', 'performance', filters.dateRange],
-    queryFn: () => analyticsService.getPerformanceMetrics(getHoursFromDateRange()),
+    queryFn: () => analyticsService.getPerformanceAnalytics('', ''),
   })
 
   // Security analytics
   const { data: securityData, isLoading: securityLoading } = useQuery({
     queryKey: ['analytics', 'security', filters.dateRange],
-    queryFn: () => analyticsService.getThreatAnalytics(Math.ceil(getHoursFromDateRange() / 24)),
+    queryFn: () => analyticsService.getSecurityAnalytics('', ''),
   })
 
   // Top domains
   const { data: topDomainsData, isLoading: topDomainsLoading } = useQuery({
     queryKey: ['analytics', 'top-domains', filters.dateRange],
-    queryFn: () => analyticsService.getTopDomains(getHoursFromDateRange(), 20),
+    queryFn: () => analyticsService.getTopDomains('', '', 20),
   })
 
   // Client analytics
   const { data: clientData } = useQuery({
     queryKey: ['analytics', 'clients', filters.dateRange],
-    queryFn: () => analyticsService.getClientAnalytics(getHoursFromDateRange()),
+    queryFn: () => analyticsService.getClientAnalytics('', ''),
   })
 
   // Zone analytics (using query analytics for now)
   const { data: zoneData } = useQuery({
     queryKey: ['analytics', 'zones'],
-    queryFn: () => analyticsService.getQueryAnalytics(getHoursFromDateRange()),
+    queryFn: () => analyticsService.getZoneAnalytics(),
   })
 
   // Analytics insights
   const { data: insightsData, isLoading: insightsLoading } = useQuery({
     queryKey: ['analytics', 'insights', filters.dateRange],
-    queryFn: () => analyticsService.getAnomalyDetection(),
+    queryFn: () => analyticsService.getAnalyticsInsights('', ''),
   })
 
   // Chart configurations

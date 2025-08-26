@@ -54,16 +54,17 @@ class ZoneService(BaseService[Zone]):
         zone = await self.create(zone_data, track_action=True)
         
         # Emit zone creation event
-        await self._emit_zone_event(
-            event_type=EventType.DNS_ZONE_CREATED,
-            zone=zone,
-            action="create",
-            details={
+        await self.event_service.emit_dns_change(
+            event_type=EventType.ZONE_CREATED,
+            data={
+                "zone_id": zone.id,
                 "zone_name": zone.name,
                 "zone_type": zone.zone_type,
                 "serial": zone.serial,
-                "is_active": zone.is_active
-            }
+                "is_active": zone.is_active,
+                "action": "create"
+            },
+            user_id=str(zone.created_by) if zone.created_by else None
         )
         
         logger.info(f"Created zone {zone.name} with ID {zone.id} and serial {zone.serial}")
@@ -84,18 +85,19 @@ class ZoneService(BaseService[Zone]):
         
         if zone:
             # Emit zone update event
-            await self._emit_zone_event(
-                event_type=EventType.DNS_ZONE_UPDATED,
-                zone=zone,
-                action="update",
-                details={
+            await self.event_service.emit_dns_change(
+                event_type=EventType.ZONE_UPDATED,
+                data={
+                    "zone_id": zone.id,
                     "zone_name": zone.name,
                     "zone_type": zone.zone_type,
                     "serial": zone.serial,
                     "is_active": zone.is_active,
                     "updated_fields": list(zone_data.keys()),
-                    "auto_increment_serial": auto_increment_serial
-                }
+                    "auto_increment_serial": auto_increment_serial,
+                    "action": "update"
+                },
+                user_id=str(zone.updated_by) if zone.updated_by else None
             )
             logger.info(f"Updated zone {zone.name} (serial: {zone.serial})")
         else:
@@ -119,15 +121,15 @@ class ZoneService(BaseService[Zone]):
         
         if success:
             # Emit zone deletion event
-            await self._emit_zone_event(
-                event_type=EventType.DNS_ZONE_DELETED,
-                zone=None,  # Zone is deleted, so pass None
-                action="delete",
-                details={
+            await self.event_service.emit_dns_change(
+                event_type=EventType.ZONE_DELETED,
+                data={
                     "zone_id": zone_id,
                     "zone_name": zone_name,
-                    "zone_type": zone_type
-                }
+                    "zone_type": zone_type,
+                    "action": "delete"
+                },
+                user_id=str(get_current_user_id()) if get_current_user_id() else None
             )
             logger.info(f"Deleted zone {zone_name}")
         
@@ -2356,41 +2358,4 @@ class ZoneService(BaseService[Zone]):
             "errors": errors,
             "warnings": warnings,
             "records_parsed": len(records)
-        }    
-    
-async def _emit_zone_event(self, event_type: EventType, zone: Optional[Zone], action: str, details: Dict[str, Any]):
-        """Helper method to emit zone-related events"""
-        try:
-            user_id = get_current_user_id()
-            
-            # Create event data
-            event_data = {
-                "action": action,
-                "zone_id": zone.id if zone else details.get("zone_id"),
-                "zone_name": zone.name if zone else details.get("zone_name"),
-                "zone_type": zone.zone_type if zone else details.get("zone_type"),
-                **details
-            }
-            
-            # Determine event priority
-            priority = EventPriority.HIGH if action == "delete" else EventPriority.NORMAL
-            
-            # Create and emit the event
-            event = create_event(
-                event_type=event_type,
-                category=EventCategory.DNS,
-                data=event_data,
-                user_id=user_id,
-                priority=priority,
-                metadata={
-                    "service": "zone_service",
-                    "action": action,
-                    "zone_name": zone.name if zone else details.get("zone_name")
-                }
-            )
-            
-            await self.event_service.emit_event(event)
-            
-        except Exception as e:
-            logger.error(f"Failed to emit zone event: {e}")
-            # Don't raise the exception to avoid breaking the main operation
+        }

@@ -3,7 +3,8 @@
  */
 
 import React, { useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger, Card, Badge } from '../components/ui';
+import { Tabs, TabsContent, TabsList, TabsTrigger, Badge } from '../components/ui';
+import { Card, CardHeader, CardContent, CardTitle } from '../components/ui/card';
 import EventMonitor from '../components/events/EventMonitor';
 import EventReplay from '../components/events/EventReplay';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
@@ -43,16 +44,15 @@ const Events: React.FC = () => {
       </div>
 
       {/* Connection Status */}
-      <Card
-        className="mb-6"
-        title={
-          <div className="flex items-center gap-2">
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
             Connection Status
-          </div>
-        }
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {Object.entries(connectionStats).map(([type, stats]: [string, any]) => {
             if (!stats) return null;
 
@@ -73,7 +73,7 @@ const Events: React.FC = () => {
                     <WifiOff className="h-5 w-5 text-gray-400" />
                   )}
                   {stats.reconnectAttempts > 0 && (
-                    <Badge variant="outline" className="text-xs">
+                    <Badge variant="default" className="text-xs">
                       {stats.reconnectAttempts} retries
                     </Badge>
                   )}
@@ -83,23 +83,24 @@ const Events: React.FC = () => {
           })}
         </div>
 
-        <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Overall Status:</span>
-            <div className="flex items-center gap-2">
-              {connectedCount === totalConnections ? (
-                <Wifi className="h-4 w-4 text-green-500" />
-              ) : connectedCount > 0 ? (
-                <AlertTriangle className="h-4 w-4 text-yellow-500" />
-              ) : (
-                <WifiOff className="h-4 w-4 text-red-500" />
-              )}
-              <span className="text-sm">
-                {connectedCount} / {totalConnections} connections active
-              </span>
+          <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Overall Status:</span>
+              <div className="flex items-center gap-2">
+                {connectedCount === totalConnections ? (
+                  <Wifi className="h-4 w-4 text-green-500" />
+                ) : connectedCount > 0 ? (
+                  <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                ) : (
+                  <WifiOff className="h-4 w-4 text-red-500" />
+                )}
+                <span className="text-sm">
+                  {connectedCount} / {totalConnections} connections active
+                </span>
+              </div>
             </div>
           </div>
-        </div>
+        </CardContent>
       </Card>
 
       {/* Main Content */}
@@ -125,44 +126,46 @@ const Events: React.FC = () => {
       </Tabs>
 
       {/* Help Section */}
-      <Card
-        className="mt-8"
-        title="About Event Broadcasting"
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <h4 className="font-medium mb-2">Real-time Monitor</h4>
-            <ul className="text-sm text-gray-600 space-y-1">
-              <li>• View live events as they occur</li>
-              <li>• Filter by category, severity, source, and type</li>
-              <li>• Search through event data</li>
-              <li>• Export events for analysis</li>
-              <li>• Pause/resume monitoring</li>
-            </ul>
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle>About Event Broadcasting</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h4 className="font-medium mb-2">Real-time Monitor</h4>
+              <ul className="text-sm text-gray-600 space-y-1">
+                <li>• View live events as they occur</li>
+                <li>• Filter by category, severity, source, and type</li>
+                <li>• Search through event data</li>
+                <li>• Export events for analysis</li>
+                <li>• Pause/resume monitoring</li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="font-medium mb-2">Event Replay</h4>
+              <ul className="text-sm text-gray-600 space-y-1">
+                <li>• Replay historical events</li>
+                <li>• Configurable time ranges and filters</li>
+                <li>• Variable replay speeds (1x to 10x)</li>
+                <li>• Debug issues and analyze patterns</li>
+                <li>• Multiple concurrent replays</li>
+              </ul>
+            </div>
           </div>
 
-          <div>
-            <h4 className="font-medium mb-2">Event Replay</h4>
-            <ul className="text-sm text-gray-600 space-y-1">
-              <li>• Replay historical events</li>
-              <li>• Configurable time ranges and filters</li>
-              <li>• Variable replay speeds (1x to 10x)</li>
-              <li>• Debug issues and analyze patterns</li>
-              <li>• Multiple concurrent replays</li>
-            </ul>
+          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+            <h4 className="font-medium text-blue-900 mb-2">Event Categories</h4>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              <Badge variant="info">Health</Badge>
+              <Badge variant="info">DNS Management</Badge>
+              <Badge variant="info">Security</Badge>
+              <Badge variant="info">System</Badge>
+              <Badge variant="info">User Actions</Badge>
+            </div>
           </div>
-        </div>
-
-        <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-          <h4 className="font-medium text-blue-900 mb-2">Event Categories</h4>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-            <Badge variant="outline">Health</Badge>
-            <Badge variant="outline">DNS Management</Badge>
-            <Badge variant="outline">Security</Badge>
-            <Badge variant="outline">System</Badge>
-            <Badge variant="outline">User Actions</Badge>
-          </div>
-        </div>
+        </CardContent>
       </Card>
     </div >
   );

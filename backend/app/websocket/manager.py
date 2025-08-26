@@ -324,6 +324,14 @@ class WebSocketManager:
         logger.info(f"Disconnected {disconnected_count} connections for user {user_id}")
         return disconnected_count
     
+    async def broadcast_user_logout(self, logout_data: Dict[str, Any]):
+        """Broadcast user logout event to admin connections"""
+        await self.emit_event(
+            EventType.USER_LOGOUT,
+            logout_data,
+            connection_type=ConnectionType.ADMIN.value
+        )
+    
     def get_connection_stats(self) -> Dict[str, Any]:
         """Get connection statistics"""
         total_connections = sum(len(user_conns) for user_conns in self.connections.values())

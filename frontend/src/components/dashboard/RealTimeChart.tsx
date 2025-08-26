@@ -66,8 +66,12 @@ const RealTimeChart: React.FC<RealTimeChartProps> = ({
 
   // Set up WebSocket event handlers for real-time updates
   useEffect(() => {
-    subscribe('system_status', (data) => {
-      if (data.type === 'query_update') {
+    if (!isConnected) return
+
+    const handlerId = 'realtime-chart'
+    
+    registerEventHandler(handlerId, ['system_status'], (message) => {
+      if (message.data?.type === 'query_update') {
         // Add new data point to the chart
         const now = new Date()
         const currentMinute = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes())
@@ -107,7 +111,11 @@ const RealTimeChart: React.FC<RealTimeChartProps> = ({
         })
       }
     })
-  }, [subscribe, minutes])
+
+    return () => {
+      unregisterEventHandler(handlerId)
+    }
+  }, [isConnected, registerEventHandler, unregisterEventHandler, minutes])
 
   // Update data when query results change
   useEffect(() => {

@@ -195,7 +195,7 @@ const EventReplay: React.FC = () => {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant={replay.status === 'running' ? 'default' : 'secondary'}>
+                      <Badge variant={replay.status === 'running' ? 'default' : 'info'}>
                         {replay.status}
                       </Badge>
                       <Button

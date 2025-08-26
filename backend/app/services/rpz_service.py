@@ -65,7 +65,7 @@ class RPZService(BaseService[RPZRule]):
             
             # Emit RPZ rule creation event
             await self._emit_rpz_event(
-                event_type=EventType.SECURITY_RPZ_RULE_CREATED,
+                event_type=EventType.RPZ_RULE_CREATED,
                 rule=rule,
                 action="create",
                 details={

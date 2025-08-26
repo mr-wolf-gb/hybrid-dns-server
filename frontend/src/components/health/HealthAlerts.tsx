@@ -138,7 +138,7 @@ const HealthAlerts: React.FC = () => {
                       >
                         {alert.level.toUpperCase()}
                       </Badge>
-                      <Badge variant="secondary" size="sm">
+                      <Badge variant="info" size="sm">
                         {alert.type.replace('_', ' ')}
                       </Badge>
                       {alert.acknowledged && (

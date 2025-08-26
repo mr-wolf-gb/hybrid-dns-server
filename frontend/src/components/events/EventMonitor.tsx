@@ -173,11 +173,11 @@ const EventMonitor: React.FC = () => {
             <div className="flex items-center gap-2">
               <Activity className="h-5 w-5" />
               Real-time Event Monitor
-              <Badge variant="outline">
+              <Badge variant="info">
                 {filteredEvents.length} / {events.length} events
               </Badge>
               {isPaused && (
-                <Badge variant="secondary">Paused</Badge>
+                <Badge variant="default">Paused</Badge>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -382,16 +382,16 @@ const EventMonitor: React.FC = () => {
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
-                              <Badge variant="outline" className="text-xs">
+                              <Badge variant="default" className="text-xs">
                                 {event.type}
                               </Badge>
                               {event.category && (
-                                <Badge variant="secondary" className="text-xs">
+                                <Badge variant="info" className="text-xs">
                                   {event.category}
                                 </Badge>
                               )}
                               {event.source && (
-                                <Badge variant="outline" className="text-xs">
+                                <Badge variant="default" className="text-xs">
                                   {event.source}
                                 </Badge>
                               )}
@@ -410,7 +410,7 @@ const EventMonitor: React.FC = () => {
                             {event.tags && event.tags.length > 0 && (
                               <div className="flex flex-wrap gap-1 mb-2">
                                 {event.tags.map((tag, index) => (
-                                  <Badge key={index} variant="outline" className="text-xs">
+                                  <Badge key={index} variant="default" className="text-xs">
                                     {tag}
                                   </Badge>
                                 ))}

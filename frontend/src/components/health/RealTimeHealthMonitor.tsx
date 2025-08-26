@@ -86,30 +86,42 @@ const RealTimeHealthMonitor: React.FC<RealTimeHealthMonitorProps> = ({
 
   // Set up WebSocket event handlers
   useEffect(() => {
-    subscribe('health_update', (data) => {
-      setHealthSummary(data)
-      setLastUpdate(new Date().toISOString())
+    if (!isConnected) return
+
+    const handlerId = 'realtime-health-monitor'
+    
+    registerEventHandler(handlerId, ['health_update', 'health_alert', 'forwarder_status_change'], (message) => {
+      switch (message.type) {
+        case 'health_update':
+          setHealthSummary(message.data)
+          setLastUpdate(new Date().toISOString())
+          break
+        
+        case 'health_alert':
+          setRecentAlerts(prev => [message.data, ...prev.slice(0, 9)]) // Keep last 10 alerts
+          break
+        
+        case 'forwarder_status_change':
+          setHealthSummary(prev => {
+            if (!prev) return prev
+
+            return {
+              ...prev,
+              forwarder_details: (prev.forwarder_details || []).map(forwarder =>
+                forwarder.id === message.data.forwarder_id
+                  ? { ...forwarder, status: message.data.new_status }
+                  : forwarder
+              )
+            }
+          })
+          break
+      }
     })
 
-    subscribe('health_alert', (data) => {
-      setRecentAlerts(prev => [data, ...prev.slice(0, 9)]) // Keep last 10 alerts
-    })
-
-    subscribe('forwarder_status_change', (data) => {
-      setHealthSummary(prev => {
-        if (!prev) return prev
-
-        return {
-          ...prev,
-          forwarder_details: (prev.forwarder_details || []).map(forwarder =>
-            forwarder.id === data.forwarder_id
-              ? { ...forwarder, status: data.new_status }
-              : forwarder
-          )
-        }
-      })
-    })
-  }, [subscribe])
+    return () => {
+      unregisterEventHandler(handlerId)
+    }
+  }, [isConnected, registerEventHandler, unregisterEventHandler])
 
   // Update data when query results change
   useEffect(() => {

@@ -114,6 +114,24 @@ If issues occur:
 4. Ensure proper authentication token is being used
 5. Verify WebSocketProvider is properly wrapped around the app
 
+## Recent Fixes Applied
+
+### Fixed Multiple Disconnect Messages
+- **Issue**: Console showing "User logged out, disconnecting WebSocket" multiple times before login
+- **Fix**: Added guards to only disconnect when actually connected/connecting
+- **Fix**: Added initialization tracking to prevent unnecessary disconnections
+- **Fix**: Added auth loading state check to prevent premature actions
+
+### Fixed User Property Reference
+- **Issue**: TypeScript errors for `user.is_admin` property
+- **Fix**: Changed to `user.is_superuser` to match the actual User interface
+- **Location**: WebSocketContext.tsx lines with admin connection checks
+
+### Improved Connection Logic
+- **Added**: `hasInitialized` ref to track if WebSocket was ever connected
+- **Added**: `isLoading` check to wait for auth context to finish loading
+- **Added**: More specific conditions for when to connect/disconnect
+
 ## Files Modified/Created
 
 ### Modified:

@@ -89,15 +89,19 @@ const RealTimeQueryMonitor: React.FC<RealTimeQueryMonitorProps> = ({
 
   // Set up WebSocket event handlers
   useEffect(() => {
-    subscribe('system_status', (data) => {
-      if (data.type === 'query_update') {
+    if (!isConnected) return
+
+    const handlerId = 'realtime-query-monitor'
+    
+    registerEventHandler(handlerId, ['system_status'], (message) => {
+      if (message.data?.type === 'query_update') {
         // Add new query to the list
         const newQuery: QueryEvent = {
-          timestamp: data.data.timestamp,
-          client_ip: data.data.client_ip,
-          domain: data.data.query_domain,
-          type: data.data.query_type,
-          blocked: data.data.blocked,
+          timestamp: message.data.timestamp,
+          client_ip: message.data.client_ip,
+          domain: message.data.query_domain,
+          type: message.data.query_type,
+          blocked: message.data.blocked,
           response_time: 0
         }
 
@@ -108,20 +112,24 @@ const RealTimeQueryMonitor: React.FC<RealTimeQueryMonitorProps> = ({
         if (scrollRef.current) {
           scrollRef.current.scrollTop = 0
         }
-      } else if (data.type === 'system_metrics') {
+      } else if (message.data?.type === 'system_metrics') {
         // Update system metrics in live stats
         setLiveStats(prev => prev ? {
           ...prev,
           system: {
             ...prev.system,
-            cpu_usage: data.data.cpu_usage,
-            memory_usage: data.data.memory_usage,
-            disk_usage: data.data.disk_usage
+            cpu_usage: message.data.cpu_usage,
+            memory_usage: message.data.memory_usage,
+            disk_usage: message.data.disk_usage
           }
         } : null)
       }
     })
-  }, [subscribe, maxEvents])
+
+    return () => {
+      unregisterEventHandler(handlerId)
+    }
+  }, [isConnected, registerEventHandler, unregisterEventHandler, maxEvents])
 
   // Update stats when data changes
   useEffect(() => {

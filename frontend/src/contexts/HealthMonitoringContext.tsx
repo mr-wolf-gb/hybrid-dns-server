@@ -191,16 +191,16 @@ export const HealthMonitoringProvider: React.FC<HealthMonitoringProviderProps> =
       'health-monitoring-forwarder_status_change'
     ]
 
-    subscribe('health_update', (data) => {
-      dispatch({ type: 'SET_HEALTH_SUMMARY', payload: data })
+    registerEventHandler('health-monitoring-health_update', ['health_update'], (message) => {
+      dispatch({ type: 'SET_HEALTH_SUMMARY', payload: message.data })
     })
 
-    subscribe('health_alert', (data) => {
-      dispatch({ type: 'ADD_ALERT', payload: data })
+    registerEventHandler('health-monitoring-health_alert', ['health_alert'], (message) => {
+      dispatch({ type: 'ADD_ALERT', payload: message.data })
     })
 
-    subscribe('forwarder_status_change', (data) => {
-      dispatch({ type: 'UPDATE_FORWARDER_STATUS', payload: data })
+    registerEventHandler('health-monitoring-forwarder_status_change', ['forwarder_status_change'], (message) => {
+      dispatch({ type: 'UPDATE_FORWARDER_STATUS', payload: message.data })
     })
 
     // Cleanup on unmount
@@ -232,21 +232,36 @@ export const HealthMonitoringProvider: React.FC<HealthMonitoringProviderProps> =
       const healthResponse = await fetch('/api/health/summary')
       if (healthResponse.ok) {
         const healthData = await healthResponse.json()
-        dispatch({ type: 'SET_HEALTH_SUMMARY', payload: healthData })
+        // Ensure forwarder_details is always an array
+        if (healthData && typeof healthData === 'object') {
+          healthData.forwarder_details = Array.isArray(healthData.forwarder_details) 
+            ? healthData.forwarder_details 
+            : []
+          dispatch({ type: 'SET_HEALTH_SUMMARY', payload: healthData })
+        }
       }
 
       // Load performance metrics
       const performanceResponse = await fetch('/api/health/performance?hours=24')
       if (performanceResponse.ok) {
         const performanceData = await performanceResponse.json()
-        dispatch({ type: 'SET_PERFORMANCE_METRICS', payload: performanceData })
+        // Ensure forwarder_metrics is always an array
+        if (performanceData && typeof performanceData === 'object') {
+          performanceData.forwarder_metrics = Array.isArray(performanceData.forwarder_metrics) 
+            ? performanceData.forwarder_metrics 
+            : []
+          dispatch({ type: 'SET_PERFORMANCE_METRICS', payload: performanceData })
+        }
       }
 
       // Load alerts
       const alertsResponse = await fetch('/api/health/alerts')
       if (alertsResponse.ok) {
         const alertsData = await alertsResponse.json()
-        dispatch({ type: 'SET_ALERTS', payload: alertsData.alerts || [] })
+        // Ensure alerts is always an array
+        const alerts = Array.isArray(alertsData.alerts) ? alertsData.alerts : 
+                      Array.isArray(alertsData) ? alertsData : []
+        dispatch({ type: 'SET_ALERTS', payload: alerts })
       }
     } catch (error) {
       console.error('Error loading health data:', error)
