@@ -218,7 +218,7 @@ async def validate_zone(
 ):
     """Comprehensive zone configuration validation"""
     zone_service = ZoneService(db)
-    bind_service = BindService()
+    bind_service = BindService(db)
     
     zone = await zone_service.get_zone(zone_id)
     if not zone:
@@ -242,7 +242,7 @@ async def reload_zone(
 ):
     """Reload zone in BIND9"""
     zone_service = ZoneService(db)
-    bind_service = BindService()
+    bind_service = BindService(db)
     
     zone = await zone_service.get_zone(zone_id)
     if not zone:
@@ -266,7 +266,7 @@ async def toggle_zone(
 ):
     """Toggle zone active status"""
     zone_service = ZoneService(db)
-    bind_service = BindService()
+    bind_service = BindService(db)
     
     zone = await zone_service.toggle_zone_status(zone_id)
     if not zone:
@@ -618,7 +618,7 @@ async def increment_zone_serial(
 ):
     """Manually increment zone serial number"""
     zone_service = ZoneService(db)
-    bind_service = BindService()
+    bind_service = BindService(db)
     
     zone = await zone_service.increment_serial(zone_id, reason)
     if not zone:
@@ -648,7 +648,7 @@ async def reset_zone_serial(
 ):
     """Reset zone serial number to current date"""
     zone_service = ZoneService(db)
-    bind_service = BindService()
+    bind_service = BindService(db)
     
     zone = await zone_service.reset_serial_to_current_date(zone_id)
     if not zone:
@@ -679,7 +679,7 @@ async def set_zone_serial(
 ):
     """Set custom serial number for zone"""
     zone_service = ZoneService(db)
-    bind_service = BindService()
+    bind_service = BindService(db)
     
     try:
         zone = await zone_service.set_custom_serial(zone_id, serial)
@@ -877,6 +877,70 @@ async def list_zone_records(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error listing zone records: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/{zone_id}/records")
+async def create_zone_record(
+    zone_id: int,
+    record_data: dict,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a new DNS record in the specified zone"""
+    from ...services.record_service import RecordService
+    from ...services.bind_service import BindService
+    from ...core.logging_config import get_logger
+    
+    logger = get_logger(__name__)
+    logger.info(f"User {current_user.get('username')} creating record in zone {zone_id}")
+    
+    record_service = RecordService(db)
+    bind_service = BindService(db)
+    
+    try:
+        # Verify zone exists
+        zone = await record_service._get_zone(zone_id)
+        if not zone:
+            raise HTTPException(status_code=404, detail=f"Zone with ID {zone_id} not found")
+        
+        # Convert 'type' field to 'record_type' if present
+        if 'type' in record_data:
+            record_data['record_type'] = record_data.pop('type')
+        
+        # Create record in database
+        record = await record_service.create_record(zone_id, record_data)
+        
+        # Update BIND9 configuration
+        try:
+            await bind_service.update_zone_file(zone)
+            await bind_service.reload_configuration()
+        except Exception as e:
+            logger.error(f"Failed to update BIND9 configuration for zone {zone.name}: {e}")
+        
+        logger.info(f"Created DNS record {record.name} {record.record_type} in zone {zone_id}")
+        
+        # Return the created record in the expected format
+        return {
+            "id": record.id,
+            "name": record.name,
+            "type": record.record_type,
+            "value": record.value,
+            "ttl": record.ttl,
+            "priority": record.priority,
+            "weight": record.weight,
+            "port": record.port,
+            "is_active": record.is_active,
+            "zone_id": record.zone_id,
+            "created_at": record.created_at.isoformat() if record.created_at else None,
+            "updated_at": record.updated_at.isoformat() if record.updated_at else None
+        }
+        
+    except ValueError as e:
+        logger.error(f"Validation error creating record: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error creating DNS record: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

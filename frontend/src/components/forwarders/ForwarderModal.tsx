@@ -52,11 +52,17 @@ const ForwarderModal: React.FC<ForwarderModalProps> = ({
   } = useForm<ForwarderFormData>({
     defaultValues: forwarder ? {
       name: forwarder.name,
-      domain: forwarder.domain,
-      servers: forwarder.servers,
-      type: forwarder.type,
-      forward_policy: forwarder.forward_policy,
-      domains: forwarder.domains || [],
+      domain: forwarder.domains?.[0] || forwarder.domain || '',
+      servers: Array.isArray(forwarder.servers) 
+        ? forwarder.servers.map(server => 
+            typeof server === 'string' 
+              ? server 
+              : `${server.ip}${server.port && server.port !== 53 ? `:${server.port}` : ''}`
+          )
+        : [],
+      type: (forwarder.forwarder_type === 'active_directory' ? 'ad' : forwarder.forwarder_type) || forwarder.type || 'public',
+      forward_policy: forwarder.forward_policy || 'first',
+      domains: forwarder.domains?.slice(1) || [],
       health_check_enabled: forwarder.health_check_enabled ?? true,
       health_check_interval: forwarder.health_check_interval || 300,
       health_check_timeout: forwarder.health_check_timeout || 5,

@@ -2035,7 +2035,11 @@ class BindService:
             from ..models.dns import Forwarder
             
             # Get all active forwarders from database
-            forwarders = self.db.query(Forwarder).filter(Forwarder.is_active == True).all()
+            if isinstance(self.db, AsyncSession):
+                result = await self.db.execute(select(Forwarder).where(Forwarder.is_active == True))
+                forwarders = result.scalars().all()
+            else:
+                forwarders = self.db.query(Forwarder).filter(Forwarder.is_active == True).all()
             
             # Generate forwarder configuration
             success = await self.generate_forwarder_configuration(forwarders)

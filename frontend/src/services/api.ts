@@ -17,6 +17,7 @@ import {
   ZoneFormData,
   RecordFormData,
   ForwarderFormData,
+  ForwarderCreatePayload,
   ForwarderTemplate,
   RPZRuleFormData,
 } from '@/types'
@@ -145,7 +146,7 @@ export const zonesService = {
     if (params?.limit !== undefined) searchParams.append('limit', params.limit.toString())
     if (params?.zone_type) searchParams.append('zone_type', params.zone_type)
     if (params?.active_only !== undefined) searchParams.append('active_only', params.active_only.toString())
-    
+
     return api.get(`/zones?${searchParams.toString()}`)
   },
 
@@ -210,7 +211,7 @@ export const recordsService = {
     if (params?.limit !== undefined) searchParams.append('limit', params.limit.toString())
     if (params?.sort_by) searchParams.append('sort_by', params.sort_by)
     if (params?.sort_order) searchParams.append('sort_order', params.sort_order)
-    
+
     return api.get(`/zones/${zone_id}/records?${searchParams.toString()}`)
   },
 
@@ -258,11 +259,60 @@ export const forwardersService = {
   getForwarder: (id: number): Promise<AxiosResponse<Forwarder>> =>
     api.get(`/forwarders/${id}`),
 
-  createForwarder: (data: ForwarderFormData): Promise<AxiosResponse<Forwarder>> =>
-    api.post('/forwarders', data),
+  createForwarder: (data: ForwarderFormData): Promise<AxiosResponse<Forwarder>> => {
+    // Transform the form data to match the API schema
+    const payload: ForwarderCreatePayload = {
+      name: data.name,
+      domains: data.domain ? [data.domain, ...(data.domains || [])] : (data.domains || []),
+      forwarder_type: data.type === 'ad' ? 'active_directory' : data.type,
+      servers: data.servers.map(server => {
+        const [ip, port] = server.split(':')
+        return {
+          ip: ip.trim(),
+          port: port ? parseInt(port) : 53,
+          priority: 1,
+          weight: 1,
+          enabled: true
+        }
+      }),
+      description: data.description || '',
+      health_check_enabled: data.health_check_enabled ?? true,
+      priority: data.priority || 5,
+      group_priority: 5
+    }
 
-  updateForwarder: (id: number, data: Partial<ForwarderFormData>): Promise<AxiosResponse<Forwarder>> =>
-    api.put(`/forwarders/${id}`, data),
+    return api.post('/forwarders', payload)
+  },
+
+  updateForwarder: (id: number, data: Partial<ForwarderFormData>): Promise<AxiosResponse<Forwarder>> => {
+    // Transform the form data to match the API schema
+    const payload: Partial<ForwarderCreatePayload> = {}
+
+    if (data.name) payload.name = data.name
+    if (data.domain || data.domains) {
+      payload.domains = data.domain ? [data.domain, ...(data.domains || [])] : (data.domains || [])
+    }
+    if (data.type) {
+      payload.forwarder_type = data.type === 'ad' ? 'active_directory' : data.type
+    }
+    if (data.servers) {
+      payload.servers = data.servers.map(server => {
+        const [ip, port] = server.split(':')
+        return {
+          ip: ip.trim(),
+          port: port ? parseInt(port) : 53,
+          priority: 1,
+          weight: 1,
+          enabled: true
+        }
+      })
+    }
+    if (data.description !== undefined) payload.description = data.description
+    if (data.health_check_enabled !== undefined) payload.health_check_enabled = data.health_check_enabled
+    if (data.priority !== undefined) payload.priority = data.priority
+
+    return api.put(`/forwarders/${id}`, payload)
+  },
 
   deleteForwarder: (id: number): Promise<AxiosResponse<void>> =>
     api.delete(`/forwarders/${id}`),
@@ -290,16 +340,16 @@ export const forwardersService = {
 
   // Templates
   getTemplates: (): Promise<AxiosResponse<ForwarderTemplate[]>> =>
-    api.get('/forwarders/templates'),
+    api.get('/forwarder-templates'),
 
   createTemplate: (data: Omit<ForwarderTemplate, 'id'>): Promise<AxiosResponse<ForwarderTemplate>> =>
-    api.post('/forwarders/templates', data),
+    api.post('/forwarder-templates', data),
 
   updateTemplate: (id: string, data: Partial<ForwarderTemplate>): Promise<AxiosResponse<ForwarderTemplate>> =>
-    api.put(`/forwarders/templates/${id}`, data),
+    api.put(`/forwarder-templates/${id}`, data),
 
   deleteTemplate: (id: string): Promise<AxiosResponse<void>> =>
-    api.delete(`/forwarders/templates/${id}`),
+    api.delete(`/forwarder-templates/${id}`),
 }
 
 // RPZ API
@@ -543,8 +593,8 @@ export const analyticsService = {
 
   getTopDomains: (hours?: number, limit?: number, includeBlocked?: boolean): Promise<AxiosResponse<any>> =>
     api.get('/analytics/top-domains', {
-      params: { 
-        hours: hours || 24, 
+      params: {
+        hours: hours || 24,
         limit: limit || 50,
         include_blocked: includeBlocked !== false
       }
@@ -562,7 +612,7 @@ export const analyticsService = {
 
   getThreatAnalytics: (days?: number, category?: string): Promise<AxiosResponse<any>> =>
     api.get('/analytics/threat-analytics', {
-      params: { 
+      params: {
         days: days || 7,
         ...(category && { category })
       }

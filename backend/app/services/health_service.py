@@ -118,16 +118,19 @@ class HealthService:
                     for forwarder in forwarders:
                         if forwarder.health_check_enabled:
                             try:
-                                old_status = forwarder.health_status
+                                # Get current health status before check
+                                current_health = await forwarder_service.get_current_health_status(forwarder.id)
+                                old_status = current_health.get("overall_status", "unknown")
                                 await forwarder_service.perform_health_check(forwarder.id)
                                 
                                 # Check if status changed
-                                updated_forwarder = await forwarder_service.get_forwarder(forwarder.id)
-                                if updated_forwarder and updated_forwarder.health_status != old_status:
+                                updated_health = await forwarder_service.get_current_health_status(forwarder.id)
+                                new_status = updated_health.get("overall_status", "unknown")
+                                if new_status != old_status:
                                     status_changes.append({
                                         "forwarder_id": forwarder.id,
                                         "old_status": old_status,
-                                        "new_status": updated_forwarder.health_status
+                                        "new_status": new_status
                                     })
                                 
                                 health_check_count += 1

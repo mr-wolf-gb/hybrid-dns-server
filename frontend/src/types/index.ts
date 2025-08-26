@@ -79,26 +79,30 @@ export interface DNSRecord {
 export interface Forwarder {
   id: number
   name: string
-  domain: string
-  servers: string[]
-  type: 'ad' | 'intranet' | 'public'
-  forward_policy: 'first' | 'only'
+  domains: string[]
+  forwarder_type: 'active_directory' | 'intranet' | 'public'
+  servers: ForwarderServerConfig[]
   is_active: boolean
-  health_status: 'healthy' | 'unhealthy' | 'unknown'
+  health_check_enabled: boolean
+  description?: string
+  priority: number
+  group_name?: string
+  group_priority: number
+  created_at: string
+  updated_at: string
+  // Legacy fields for backward compatibility
+  domain?: string
+  type?: 'ad' | 'intranet' | 'public'
+  forward_policy?: 'first' | 'only'
+  health_status?: 'healthy' | 'unhealthy' | 'unknown'
   last_health_check?: string
   response_time?: number
   query_count?: number
   success_rate?: number
-  domains?: string[]
-  health_check_enabled?: boolean
   health_check_interval?: number
   health_check_timeout?: number
   health_check_retries?: number
-  priority?: number
   weight?: number
-  description?: string
-  created_at: string
-  updated_at: string
 }
 
 // RPZ types
@@ -244,6 +248,26 @@ export interface ForwarderFormData {
   priority?: number
   weight?: number
   description?: string
+}
+
+export interface ForwarderServerConfig {
+  ip: string
+  port?: number
+  priority?: number
+  weight?: number
+  enabled?: boolean
+}
+
+export interface ForwarderCreatePayload {
+  name: string
+  domains: string[]
+  forwarder_type: 'active_directory' | 'intranet' | 'public'
+  servers: ForwarderServerConfig[]
+  description?: string
+  health_check_enabled?: boolean
+  priority?: number
+  group_name?: string
+  group_priority?: number
 }
 
 export interface ForwarderTemplate {

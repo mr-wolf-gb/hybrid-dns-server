@@ -171,6 +171,7 @@ const Forwarders: React.FC = () => {
   const getTypeColor = (type: string) => {
     switch (type) {
       case 'ad':
+      case 'active_directory':
         return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
       case 'intranet':
         return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400'
@@ -184,6 +185,7 @@ const Forwarders: React.FC = () => {
   const getTypeLabel = (type: string) => {
     switch (type) {
       case 'ad':
+      case 'active_directory':
         return 'Active Directory'
       case 'intranet':
         return 'Intranet'
@@ -236,8 +238,8 @@ const Forwarders: React.FC = () => {
       key: 'type',
       header: 'Type',
       render: (forwarder: Forwarder) => (
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getTypeColor(forwarder.type)}`}>
-          {getTypeLabel(forwarder.type)}
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getTypeColor(forwarder.forwarder_type || forwarder.type)}`}>
+          {getTypeLabel(forwarder.forwarder_type || forwarder.type)}
         </span>
       ),
     },
@@ -248,7 +250,7 @@ const Forwarders: React.FC = () => {
         <div className="space-y-1">
           {forwarder.servers.map((server, index) => (
             <div key={index} className="text-sm font-mono text-gray-900 dark:text-gray-100">
-              {server}
+              {typeof server === 'string' ? server : `${server.ip}${server.port && server.port !== 53 ? `:${server.port}` : ''}`}
             </div>
           ))}
         </div>

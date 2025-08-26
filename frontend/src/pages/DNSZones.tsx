@@ -56,8 +56,10 @@ const DNSZones: React.FC = () => {
 
   // Fetch zones
   const { data: zonesResponse, isLoading, error } = useQuery({
-    queryKey: ['zones'],
-    queryFn: () => zonesService.getZones(),
+    queryKey: ['zones', statusFilter],
+    queryFn: () => zonesService.getZones({
+      active_only: statusFilter === 'active' ? true : statusFilter === 'inactive' ? false : false
+    }),
     retry: (failureCount, error: any) => {
       // Don't retry on authentication errors
       if (error?.response?.status === 401) {
@@ -96,11 +98,8 @@ const DNSZones: React.FC = () => {
     let filtered = safeZones.filter((zone) => {
       const matchesSearch = zone.name.toLowerCase().includes(searchTerm.toLowerCase())
       const matchesType = zoneTypeFilter === 'all' || zone.zone_type === zoneTypeFilter
-      const matchesStatus = statusFilter === 'all' ||
-        (statusFilter === 'active' && zone.is_active) ||
-        (statusFilter === 'inactive' && !zone.is_active)
-
-      return matchesSearch && matchesType && matchesStatus
+      // Status filtering is now handled by the API call
+      return matchesSearch && matchesType
     })
 
     // Sort zones
@@ -122,7 +121,7 @@ const DNSZones: React.FC = () => {
     })
 
     return filtered
-  }, [zones, searchTerm, zoneTypeFilter, statusFilter, sortField, sortDirection])
+  }, [zones, searchTerm, zoneTypeFilter, sortField, sortDirection])
 
   // Pagination
   const totalPages = Math.ceil(filteredAndSortedZones.length / itemsPerPage)
