@@ -253,8 +253,8 @@ export const recordsService = {
 
 // Forwarders API
 export const forwardersService = {
-  getForwarders: (): Promise<AxiosResponse<Forwarder[]>> =>
-    api.get('/forwarders'),
+  getForwarders: (activeOnly: boolean = false): Promise<AxiosResponse<Forwarder[]>> =>
+    api.get('/forwarders', { params: { active_only: activeOnly } }),
 
   getForwarder: (id: number): Promise<AxiosResponse<Forwarder>> =>
     api.get(`/forwarders/${id}`),
@@ -650,4 +650,13 @@ export const systemService = {
 
   getLogs: (lines?: number): Promise<AxiosResponse<ApiResponse<string[]>>> =>
     api.get(`/system/logs${lines ? `?lines=${lines}` : ''}`),
+}
+
+// User API
+export const userService = {
+  getNotificationPreferences: (): Promise<AxiosResponse<ApiResponse<any>>> =>
+    api.get('/users/notification-preferences'),
+
+  updateNotificationPreferences: (preferences: any): Promise<AxiosResponse<ApiResponse<any>>> =>
+    api.put('/users/notification-preferences', preferences),
 }

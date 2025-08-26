@@ -679,6 +679,15 @@ configure_bind9() {
     chmod 664 /etc/bind/zones/db.* 2>/dev/null || true
     chmod 664 /etc/bind/rpz/db.* 2>/dev/null || true
     
+    # Create forwarders.conf with proper permissions for backend service
+    silent_exec "touch /etc/bind/forwarders.conf" "Create forwarders.conf"
+    silent_exec "chown root:bind /etc/bind/forwarders.conf" "Set forwarders.conf ownership"
+    silent_exec "chmod 664 /etc/bind/forwarders.conf" "Set forwarders.conf permissions"
+    
+    # Ensure backend service user can write to BIND config files
+    silent_exec "chmod g+w /etc/bind" "Enable group write on /etc/bind"
+    silent_exec "find /etc/bind -type d -exec chmod g+s {} \\;" "Set setgid on BIND directories"
+    
     # Fix AppArmor profile if it exists (Ubuntu 24.04 specific)
     if [[ -f /etc/apparmor.d/usr.sbin.named ]]; then
         log "Updating AppArmor profile for BIND9..."

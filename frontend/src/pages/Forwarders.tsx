@@ -31,13 +31,14 @@ const Forwarders: React.FC = () => {
   const [testForwarder, setTestForwarder] = useState<Forwarder | null>(null)
   const [viewMode, setViewMode] = useState<'table' | 'grouped' | 'statistics'>('table')
   const [selectedForwarders, setSelectedForwarders] = useState<Set<number>>(new Set())
+  const [showActiveOnly, setShowActiveOnly] = useState(false)
 
   const queryClient = useQueryClient()
 
   // Fetch forwarders
   const { data: forwarders, isLoading } = useQuery({
-    queryKey: ['forwarders'],
-    queryFn: () => forwardersService.getForwarders(),
+    queryKey: ['forwarders', showActiveOnly],
+    queryFn: () => forwardersService.getForwarders(showActiveOnly),
   })
 
   // Delete forwarder mutation
@@ -387,6 +388,19 @@ const Forwarders: React.FC = () => {
               >
                 <ChartBarIcon className="h-4 w-4" />
               </Button>
+            </div>
+
+            {/* Active/All Filter Toggle */}
+            <div className="flex items-center space-x-2">
+              <label className="flex items-center space-x-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={showActiveOnly}
+                  onChange={(e) => setShowActiveOnly(e.target.checked)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-gray-700 dark:text-gray-300">Active only</span>
+              </label>
             </div>
 
             {/* Bulk Actions */}

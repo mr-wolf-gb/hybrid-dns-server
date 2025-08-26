@@ -1250,7 +1250,7 @@ class DNSRecord(DNSRecordBase):
 
     class Config:
         from_attributes = True
-        allow_population_by_field_name = True
+        populate_by_name = True
         json_encoders = {
             datetime: lambda v: v.isoformat()
         }
@@ -1950,7 +1950,7 @@ class ZoneValidationResult(BaseModel):
     
     class Config:
         from_attributes = True
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "valid": False,
                 "errors": ["Invalid IPv4 address format", "Record name too long"],
@@ -1969,7 +1969,7 @@ class RecordStatistics(BaseModel):
     
     class Config:
         from_attributes = True
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "total_records": 25,
                 "active_records": 23,

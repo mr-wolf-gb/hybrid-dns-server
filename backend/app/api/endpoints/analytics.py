@@ -215,7 +215,7 @@ async def get_client_analytics(
                 MIN(timestamp) as first_seen,
                 MAX(timestamp) as last_seen,
                 COUNT(DISTINCT query_type) as query_types_used,
-                ROUND((COUNT(*) FILTER (WHERE blocked = true)::float / COUNT(*)) * 100, 2) as block_rate_percent
+                ROUND(CAST((COUNT(*) FILTER (WHERE blocked = true)::float / COUNT(*)) * 100 AS NUMERIC), 2) as block_rate_percent
             FROM dns_logs 
             WHERE timestamp >= :since
             GROUP BY client_ip

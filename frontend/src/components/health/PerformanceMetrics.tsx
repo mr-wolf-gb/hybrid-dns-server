@@ -267,13 +267,13 @@ const PerformanceMetrics: React.FC = () => {
       </Card>
 
       {/* Per-Forwarder Performance */}
-      {metrics.forwarder_metrics && metrics.forwarder_metrics.length > 0 && (
+      {Array.isArray(metrics.forwarder_metrics) && metrics.forwarder_metrics.length > 0 && (
         <Card className="p-6">
           <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
             Forwarder Performance
           </h4>
           <div className="space-y-3 max-h-64 overflow-y-auto">
-            {(metrics.forwarder_metrics || [])
+            {(Array.isArray(metrics.forwarder_metrics) ? metrics.forwarder_metrics : [])
               .sort((a, b) => (b.success_rate || 0) - (a.success_rate || 0))
               .map((forwarder) => (
                 <div

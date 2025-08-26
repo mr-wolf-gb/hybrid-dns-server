@@ -10,6 +10,7 @@ import {
   CheckCircleIcon,
   ServerIcon,
   ArrowUturnLeftIcon,
+  BellIcon,
 } from '@heroicons/react/24/outline'
 import { authService, systemService } from '@/services/api'
 import { useAuth } from '@/contexts/AuthContext'
@@ -18,6 +19,7 @@ import { formatDateTime } from '@/utils'
 import { toast } from 'react-toastify'
 import Setup2FA from '@/components/auth/Setup2FA'
 import RollbackManager from '@/components/system/RollbackManager'
+import NotificationSettings from '@/components/settings/NotificationSettings'
 
 interface PasswordChangeForm {
   old_password: string
@@ -29,7 +31,11 @@ const Settings: React.FC = () => {
   const { user, updateUser } = useAuth()
   const [is2FAModalOpen, setIs2FAModalOpen] = useState(false)
   const [systemActionLoading, setSystemActionLoading] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState('account')
+  
+  // Check URL params for initial tab
+  const urlParams = new URLSearchParams(window.location.search)
+  const initialTab = urlParams.get('tab') || 'account'
+  const [activeTab, setActiveTab] = useState(initialTab)
 
   // Fetch system status
   const { data: systemStatus } = useQuery({
@@ -124,6 +130,7 @@ const Settings: React.FC = () => {
 
   const tabs = [
     { id: 'account', name: 'Account', icon: UserIcon },
+    { id: 'notifications', name: 'Notifications', icon: BellIcon },
     { id: 'system', name: 'System', icon: ServerIcon },
     ...(user.is_superuser ? [{ id: 'rollback', name: 'Rollback', icon: ArrowUturnLeftIcon }] : []),
   ]
@@ -438,6 +445,11 @@ const Settings: React.FC = () => {
             </Card>
           )}
         </div>
+      )}
+
+      {/* Notifications Tab */}
+      {activeTab === 'notifications' && (
+        <NotificationSettings />
       )}
 
       {/* System Tab */}

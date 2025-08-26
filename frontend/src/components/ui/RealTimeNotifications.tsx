@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useRealTimeEvents } from '@/contexts/RealTimeEventContext'
+import { useNotificationPreferences } from '@/hooks/useNotificationPreferences'
 import {
   BellIcon,
   CheckIcon,
@@ -7,7 +8,8 @@ import {
   ExclamationTriangleIcon,
   InformationCircleIcon,
   CheckCircleIcon,
-  XCircleIcon
+  XCircleIcon,
+  AdjustmentsHorizontalIcon
 } from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 import clsx from 'clsx'
@@ -19,9 +21,16 @@ interface NotificationPanelProps {
 
 const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, onClose }) => {
   const { events, unreadCount, acknowledgeEvent, clearEvents } = useRealTimeEvents()
+  const { preferences, shouldShowNotification } = useNotificationPreferences()
   const [filter, setFilter] = useState<'all' | 'unread' | 'dns' | 'security' | 'health' | 'system'>('all')
 
   const filteredEvents = events.filter(event => {
+    // First apply preference filtering
+    if (!shouldShowNotification(event)) {
+      return false
+    }
+    
+    // Then apply UI filter
     if (filter === 'unread') return !event.acknowledged
     if (filter === 'dns') return event.type.includes('zone') || event.type.includes('record')
     if (filter === 'security') return event.type.includes('security') || event.type.includes('threat') || event.type.includes('rpz')
@@ -105,18 +114,31 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, onClose }
             <div className="flex items-center space-x-2">
               <BellIcon className="h-5 w-5 text-gray-500" />
               <h2 className="text-lg font-medium text-gray-900">Notifications</h2>
-              {unreadCount > 0 && (
+              {filteredUnreadCount > 0 && (
                 <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">
-                  {unreadCount}
+                  {filteredUnreadCount}
                 </span>
               )}
             </div>
-            <button
-              onClick={onClose}
-              className="rounded-md p-1 text-gray-400 hover:text-gray-500"
-            >
-              <XMarkIcon className="h-5 w-5" />
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => {
+                  onClose()
+                  // Navigate to settings
+                  window.location.href = '/settings?tab=notifications'
+                }}
+                className="rounded-md p-1 text-gray-400 hover:text-gray-500"
+                title="Notification Settings"
+              >
+                <AdjustmentsHorizontalIcon className="h-4 w-4" />
+              </button>
+              <button
+                onClick={onClose}
+                className="rounded-md p-1 text-gray-400 hover:text-gray-500"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
           {/* Filters */}
@@ -145,6 +167,23 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, onClose }
               ))}
             </div>
           </div>
+
+          {/* Filtering Info */}
+          {(preferences.enabled_severities.length < 5 || preferences.enabled_categories.length < 4) && (
+            <div className="border-b border-gray-200 px-4 py-2 bg-blue-50 dark:bg-blue-900/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <InformationCircleIcon className="h-4 w-4 text-blue-500" />
+                  <span className="text-xs text-blue-700 dark:text-blue-300">
+                    Filtering: {preferences.enabled_severities.join(', ')} severity
+                  </span>
+                </div>
+                <span className="text-xs text-blue-600 dark:text-blue-400">
+                  {preferences.enabled_categories.length}/4 categories
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="border-b border-gray-200 px-4 py-2">
@@ -240,7 +279,13 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, onClose }
 
 export const RealTimeNotifications: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false)
-  const { unreadCount, isConnected } = useRealTimeEvents()
+  const { events, unreadCount } = useRealTimeEvents()
+  const { shouldShowNotification } = useNotificationPreferences()
+  
+  // Calculate filtered unread count based on preferences
+  const filteredUnreadCount = events.filter(event => 
+    !event.acknowledged && shouldShowNotification(event)
+  ).length
 
   return (
     <>
@@ -251,16 +296,10 @@ export const RealTimeNotifications: React.FC = () => {
       >
         <BellIcon className="h-6 w-6" />
 
-        {/* Connection indicator */}
-        <div className={clsx(
-          'absolute -top-1 -right-1 h-3 w-3 rounded-full',
-          isConnected ? 'bg-green-400' : 'bg-red-400'
-        )} />
-
         {/* Unread count badge */}
-        {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-xs font-bold leading-none text-white">
-            {unreadCount > 99 ? '99+' : unreadCount}
+        {filteredUnreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-xs font-bold leading-none text-white min-w-[1.25rem] h-5">
+            {filteredUnreadCount > 99 ? '99+' : filteredUnreadCount}
           </span>
         )}
       </button>

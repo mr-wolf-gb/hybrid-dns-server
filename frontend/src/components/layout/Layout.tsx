@@ -20,6 +20,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
 import { RealTimeNotifications } from '@/components/ui/RealTimeNotifications'
 import { ConnectionStatus } from '@/components/ui/ConnectionStatus'
+import Footer from './Footer'
 import { cn } from '@/utils'
 
 const navigation = [
@@ -51,7 +52,7 @@ const Layout: React.FC = () => {
   }
 
   return (
-    <div className="h-full">
+    <div className="min-h-screen flex">
       {/* Mobile sidebar */}
       <div className={cn(
         'relative z-50 lg:hidden',
@@ -135,7 +136,7 @@ const Layout: React.FC = () => {
       </div>
 
       {/* Main content */}
-      <div className="lg:pl-64 flex flex-col flex-1">
+      <div className="lg:pl-64 flex flex-col flex-1 min-h-screen">
         {/* Top navigation */}
         <div className="relative z-10 flex-shrink-0 flex h-16 bg-white dark:bg-gray-800 shadow border-b border-gray-200 dark:border-gray-700">
           <button
@@ -195,12 +196,15 @@ const Layout: React.FC = () => {
 
         {/* Page content */}
         <main className="flex-1 relative overflow-y-auto focus:outline-none bg-gray-50 dark:bg-gray-900">
-          <div className="py-6">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="py-6 flex-1 flex flex-col">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 flex-1">
               <Outlet />
             </div>
           </div>
         </main>
+
+        {/* Footer */}
+        <Footer />
       </div>
     </div>
   )

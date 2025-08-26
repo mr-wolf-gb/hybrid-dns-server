@@ -82,8 +82,32 @@ type HealthMonitoringAction =
   | { type: 'UPDATE_FORWARDER_STATUS'; payload: { forwarder_id: number; old_status: string; new_status: string } }
 
 const initialState: HealthMonitoringState = {
-  healthSummary: null,
-  performanceMetrics: null,
+  healthSummary: {
+    total_forwarders: 0,
+    active_forwarders: 0,
+    health_check_enabled: 0,
+    healthy_forwarders: 0,
+    unhealthy_forwarders: 0,
+    degraded_forwarders: 0,
+    unknown_forwarders: 0,
+    last_updated: new Date().toISOString(),
+    forwarder_details: []
+  },
+  performanceMetrics: {
+    period_hours: 24,
+    overall_metrics: {
+      total_checks: 0,
+      successful_checks: 0,
+      success_rate: 0,
+      failure_rate: 0,
+      avg_response_time: null,
+      min_response_time: null,
+      max_response_time: null
+    },
+    forwarder_metrics: [],
+    performance_grade: 'unknown',
+    generated_at: new Date().toISOString()
+  },
   alerts: [],
   isConnected: false,
   connectionStatus: 'disconnected',
@@ -192,15 +216,28 @@ export const HealthMonitoringProvider: React.FC<HealthMonitoringProviderProps> =
     ]
 
     registerEventHandler('health-monitoring-health_update', ['health_update'], (message) => {
-      dispatch({ type: 'SET_HEALTH_SUMMARY', payload: message.data })
+      if (message.data && typeof message.data === 'object') {
+        // Ensure forwarder_details is always an array
+        const healthData = {
+          ...message.data,
+          forwarder_details: Array.isArray(message.data.forwarder_details) 
+            ? message.data.forwarder_details 
+            : []
+        }
+        dispatch({ type: 'SET_HEALTH_SUMMARY', payload: healthData })
+      }
     })
 
     registerEventHandler('health-monitoring-health_alert', ['health_alert'], (message) => {
-      dispatch({ type: 'ADD_ALERT', payload: message.data })
+      if (message.data && typeof message.data === 'object') {
+        dispatch({ type: 'ADD_ALERT', payload: message.data })
+      }
     })
 
     registerEventHandler('health-monitoring-forwarder_status_change', ['forwarder_status_change'], (message) => {
-      dispatch({ type: 'UPDATE_FORWARDER_STATUS', payload: message.data })
+      if (message.data && typeof message.data === 'object' && message.data.forwarder_id) {
+        dispatch({ type: 'UPDATE_FORWARDER_STATUS', payload: message.data })
+      }
     })
 
     // Cleanup on unmount
@@ -239,19 +276,61 @@ export const HealthMonitoringProvider: React.FC<HealthMonitoringProviderProps> =
             : []
           dispatch({ type: 'SET_HEALTH_SUMMARY', payload: healthData })
         }
+      } else {
+        // Set empty health summary on error
+        dispatch({ type: 'SET_HEALTH_SUMMARY', payload: {
+          total_forwarders: 0,
+          active_forwarders: 0,
+          health_check_enabled: 0,
+          healthy_forwarders: 0,
+          unhealthy_forwarders: 0,
+          degraded_forwarders: 0,
+          unknown_forwarders: 0,
+          last_updated: new Date().toISOString(),
+          forwarder_details: []
+        }})
       }
 
       // Load performance metrics
       const performanceResponse = await fetch('/api/health/performance?hours=24')
       if (performanceResponse.ok) {
         const performanceData = await performanceResponse.json()
-        // Ensure forwarder_metrics is always an array
+        // Ensure forwarder_metrics is always an array and overall_metrics exists
         if (performanceData && typeof performanceData === 'object') {
           performanceData.forwarder_metrics = Array.isArray(performanceData.forwarder_metrics) 
             ? performanceData.forwarder_metrics 
             : []
+          // Ensure overall_metrics exists
+          if (!performanceData.overall_metrics) {
+            performanceData.overall_metrics = {
+              total_checks: 0,
+              successful_checks: 0,
+              success_rate: 0,
+              failure_rate: 0,
+              avg_response_time: null,
+              min_response_time: null,
+              max_response_time: null
+            }
+          }
           dispatch({ type: 'SET_PERFORMANCE_METRICS', payload: performanceData })
         }
+      } else {
+        // Set empty performance metrics on error
+        dispatch({ type: 'SET_PERFORMANCE_METRICS', payload: {
+          period_hours: 24,
+          overall_metrics: {
+            total_checks: 0,
+            successful_checks: 0,
+            success_rate: 0,
+            failure_rate: 0,
+            avg_response_time: null,
+            min_response_time: null,
+            max_response_time: null
+          },
+          forwarder_metrics: [],
+          performance_grade: 'unknown',
+          generated_at: new Date().toISOString()
+        }})
       }
 
       // Load alerts
@@ -262,9 +341,25 @@ export const HealthMonitoringProvider: React.FC<HealthMonitoringProviderProps> =
         const alerts = Array.isArray(alertsData.alerts) ? alertsData.alerts : 
                       Array.isArray(alertsData) ? alertsData : []
         dispatch({ type: 'SET_ALERTS', payload: alerts })
+      } else {
+        // Set empty alerts on error
+        dispatch({ type: 'SET_ALERTS', payload: [] })
       }
     } catch (error) {
       console.error('Error loading health data:', error)
+      // Set safe defaults on error
+      dispatch({ type: 'SET_HEALTH_SUMMARY', payload: {
+        total_forwarders: 0,
+        active_forwarders: 0,
+        health_check_enabled: 0,
+        healthy_forwarders: 0,
+        unhealthy_forwarders: 0,
+        degraded_forwarders: 0,
+        unknown_forwarders: 0,
+        last_updated: new Date().toISOString(),
+        forwarder_details: []
+      }})
+      dispatch({ type: 'SET_ALERTS', payload: [] })
     }
   }
 

@@ -18,7 +18,7 @@ from jinja2 import Template, Environment, FileSystemLoader
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 
-from app.core.database import get_database_session
+from app.core.database import get_database_session, get_db
 from app.models.dns import Zone, DNSRecord
 from app.models.security import RPZRule, ThreatFeed
 from app.models.system import SystemConfig

@@ -3,7 +3,8 @@
 @tailwind utilities;
 
 @layer base {
-  html {
+  html, body, #root {
+    height: 100%;
     font-family: 'Inter', system-ui, sans-serif;
   }
   

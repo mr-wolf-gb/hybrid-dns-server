@@ -38,6 +38,7 @@ async def list_report_templates(
                 "template_id": t.template_id,
                 "name": t.name,
                 "description": t.description,
+                "template_content": t.template_content,
                 "parameters": t.parameters,
                 "created_at": t.created_at,
                 "updated_at": t.updated_at

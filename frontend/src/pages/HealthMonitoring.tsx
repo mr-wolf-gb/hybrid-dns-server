@@ -94,7 +94,7 @@ const HealthMonitoringContent: React.FC = () => {
               onValueChange={(value) => setSelectedForwarder(value ? parseInt(value) : undefined)}
             >
               <option value="">All Forwarders</option>
-              {(healthSummary?.forwarder_details || []).map((forwarder) => (
+              {Array.isArray(healthSummary?.forwarder_details) && healthSummary.forwarder_details.map((forwarder) => (
                 <option key={forwarder.id} value={forwarder.id.toString()}>
                   {forwarder.name}
                 </option>
@@ -107,16 +107,16 @@ const HealthMonitoringContent: React.FC = () => {
           <HealthHistoryChart
             forwarderId={selectedForwarder}
             forwarderName={
-              selectedForwarder
-                ? (healthSummary?.forwarder_details || []).find(f => f.id === selectedForwarder)?.name
+              selectedForwarder && Array.isArray(healthSummary?.forwarder_details)
+                ? healthSummary.forwarder_details.find(f => f.id === selectedForwarder)?.name
                 : undefined
             }
           />
           <HealthHistoryChart
             forwarderId={selectedForwarder}
             forwarderName={
-              selectedForwarder
-                ? (healthSummary?.forwarder_details || []).find(f => f.id === selectedForwarder)?.name
+              selectedForwarder && Array.isArray(healthSummary?.forwarder_details)
+                ? healthSummary.forwarder_details.find(f => f.id === selectedForwarder)?.name
                 : undefined
             }
           />

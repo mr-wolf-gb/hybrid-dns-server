@@ -44,18 +44,68 @@ export interface WebSocketActions {
 
 // Notification throttling to prevent spam
 const notificationThrottle = new Map<string, number>();
-const THROTTLE_DURATION = 5000; // 5 seconds
+let notificationPreferences: any = null;
 
-const shouldShowNotification = (type: string): boolean => {
+// Load notification preferences
+const loadNotificationPreferences = () => {
+  // Listen for preference updates
+  window.addEventListener('notificationPreferencesUpdated', (event: any) => {
+    notificationPreferences = event.detail;
+  });
+};
+
+const shouldShowNotification = (type: string, event?: any): boolean => {
   const now = Date.now();
+  
+  // Use dynamic throttle duration from preferences
+  const throttleDuration = notificationPreferences?.throttle_duration || 5000;
   const lastShown = notificationThrottle.get(type) || 0;
 
-  if (now - lastShown > THROTTLE_DURATION) {
+  if (now - lastShown > throttleDuration) {
+    // Check if notification should be shown based on preferences
+    if (notificationPreferences && event) {
+      // Check severity filter
+      const severity = event.severity || 'info';
+      if (!notificationPreferences.enabled_severities.includes(severity)) {
+        return false;
+      }
+      
+      // Check category filter
+      const category = getEventCategory(event.type || type);
+      if (!notificationPreferences.enabled_categories.includes(category)) {
+        return false;
+      }
+      
+      // Special handling for health updates
+      if (category === 'health' && !notificationPreferences.show_health_updates) {
+        return false;
+      }
+    }
+    
     notificationThrottle.set(type, now);
     return true;
   }
   return false;
 };
+
+const getEventCategory = (eventType: string): string => {
+  if (eventType.includes('health') || eventType.includes('forwarder')) {
+    return 'health';
+  }
+  if (eventType.includes('zone') || eventType.includes('record') || eventType.includes('dns')) {
+    return 'dns';
+  }
+  if (eventType.includes('security') || eventType.includes('threat') || eventType.includes('rpz')) {
+    return 'security';
+  }
+  if (eventType.includes('system') || eventType.includes('bind') || eventType.includes('config')) {
+    return 'system';
+  }
+  return 'system';
+};
+
+// Initialize preference loading
+loadNotificationPreferences();
 
 interface EventHandler {
   id: string;
@@ -122,19 +172,19 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
     // Handle global events with notification throttling
     if (message.type === 'health_alert' && message.severity === 'critical') {
-      if (shouldShowNotification('health_alert_critical')) {
+      if (shouldShowNotification('health_alert_critical', message)) {
         toast.error(`Health Alert: ${message.data?.message || 'Critical system issue detected'}`);
       }
     } else if (message.type === 'security_alert') {
-      if (shouldShowNotification('security_alert')) {
+      if (shouldShowNotification('security_alert', message)) {
         toast.error(`Security Alert: ${message.data?.message || 'Security threat detected'}`);
       }
     } else if (message.type === 'bind_reload') {
-      if (shouldShowNotification('bind_reload')) {
+      if (shouldShowNotification('bind_reload', message)) {
         toast.success('DNS configuration reloaded successfully');
       }
     } else if (message.type === 'system_status' && message.data?.bind9_running === false) {
-      if (shouldShowNotification('bind9_down')) {
+      if (shouldShowNotification('bind9_down', message)) {
         toast.error('BIND9 service is not running');
       }
     }
@@ -156,7 +206,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     setIsConnected(true);
     setIsConnecting(false);
     setError(null);
-    if (shouldShowNotification('connection_established')) {
+    if (shouldShowNotification('connection_established', { type: 'system', severity: 'info' })) {
       toast.success('Real-time connection established');
     }
   }, []);
@@ -164,7 +214,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   const handleDisconnect = useCallback(() => {
     setIsConnected(false);
     setIsConnecting(false);
-    if (shouldShowNotification('connection_lost')) {
+    if (shouldShowNotification('connection_lost', { type: 'system', severity: 'warning' })) {
       toast.error('Real-time connection lost');
     }
   }, []);

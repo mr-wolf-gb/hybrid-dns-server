@@ -147,6 +147,75 @@ async def delete_forwarder(
     
     return {"message": "Forwarder deleted successfully"}
 
+@router.post("/bulk/test")
+async def test_multiple_forwarders(
+    request_data: dict,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Test connectivity for multiple forwarders"""
+    forwarder_service = ForwarderService(db)
+    
+    forwarder_ids = request_data.get("forwarder_ids", [])
+    test_domains = request_data.get("test_domains")
+    
+    if not forwarder_ids:
+        raise HTTPException(status_code=400, detail="No forwarder IDs provided")
+    
+    results = []
+    for forwarder_id in forwarder_ids:
+        try:
+            forwarder = await forwarder_service.get_forwarder(forwarder_id)
+            if not forwarder:
+                results.append({
+                    "id": forwarder_id,
+                    "status": "error",
+                    "response_time": 0,
+                    "error": "Forwarder not found"
+                })
+                continue
+            
+            test_results = await forwarder_service.test_forwarder(forwarder, test_domains)
+            
+            # Calculate overall status and response time
+            overall_status = "success"
+            total_response_time = 0
+            total_queries = 0
+            
+            for result in test_results:
+                if result.get("success_rate", 0) < 100:
+                    overall_status = "degraded" if result.get("success_rate", 0) > 0 else "failed"
+                total_response_time += result.get("avg_response_time", 0)
+                total_queries += 1
+            
+            avg_response_time = total_response_time / total_queries if total_queries > 0 else 0
+            
+            results.append({
+                "id": forwarder_id,
+                "status": overall_status,
+                "response_time": round(avg_response_time, 2),
+                "error": None
+            })
+        except Exception as e:
+            results.append({
+                "id": forwarder_id,
+                "status": "error",
+                "response_time": 0,
+                "error": str(e)
+            })
+    
+    successful_tests = len([r for r in results if r["status"] == "success"])
+    
+    return {
+        "data": results,
+        "message": f"Bulk test completed: {successful_tests}/{len(forwarder_ids)} forwarders healthy",
+        "details": {
+            "tested_forwarders": len(forwarder_ids),
+            "successful_tests": successful_tests,
+            "failed_tests": len(forwarder_ids) - successful_tests
+        }
+    }
+
 @router.post("/{forwarder_id}/test")
 async def test_forwarder(
     forwarder_id: int,
@@ -162,7 +231,32 @@ async def test_forwarder(
         raise HTTPException(status_code=404, detail="Forwarder not found")
     
     test_results = await forwarder_service.test_forwarder(forwarder, test_domains)
-    return {"forwarder_id": forwarder_id, "results": test_results}
+    
+    # Calculate overall status and response time for frontend compatibility
+    overall_status = "success"
+    total_response_time = 0
+    total_queries = 0
+    
+    for result in test_results:
+        if result.get("success_rate", 0) < 100:
+            overall_status = "degraded" if result.get("success_rate", 0) > 0 else "failed"
+        total_response_time += result.get("avg_response_time", 0)
+        total_queries += 1
+    
+    avg_response_time = total_response_time / total_queries if total_queries > 0 else 0
+    
+    # Return in the format expected by frontend
+    return {
+        "data": {
+            "status": overall_status,
+            "response_time": round(avg_response_time, 2)
+        },
+        "message": f"Forwarder test completed with {overall_status} status",
+        "details": {
+            "forwarder_id": forwarder_id,
+            "results": test_results
+        }
+    }
 
 @router.get("/{forwarder_id}/health")
 async def get_forwarder_health(
@@ -290,6 +384,39 @@ async def toggle_health_check(
         raise HTTPException(status_code=404, detail="Forwarder not found")
     
     return forwarder
+
+@router.post("/health/refresh")
+async def refresh_all_forwarders_health(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Refresh health status for all forwarders with health checking enabled"""
+    forwarder_service = ForwarderService(db)
+    
+    # Get all active forwarders with health checking enabled
+    result = await forwarder_service.get_forwarders(active_only=True, limit=1000)
+    forwarders = result["items"]
+    
+    health_enabled_forwarders = [f for f in forwarders if f.health_check_enabled]
+    
+    if not health_enabled_forwarders:
+        return {
+            "message": "No forwarders with health checking enabled found",
+            "refreshed_count": 0,
+            "total_forwarders": len(forwarders)
+        }
+    
+    # Trigger health checks for all enabled forwarders in background
+    for forwarder in health_enabled_forwarders:
+        background_tasks.add_task(forwarder_service.perform_health_check, forwarder.id)
+    
+    return {
+        "message": f"Health check refresh initiated for {len(health_enabled_forwarders)} forwarders",
+        "refreshed_count": len(health_enabled_forwarders),
+        "total_forwarders": len(forwarders),
+        "forwarder_ids": [f.id for f in health_enabled_forwarders]
+    }
 
 @router.get("/health/summary")
 async def get_all_forwarders_health_summary(

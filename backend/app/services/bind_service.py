@@ -33,6 +33,12 @@ class BindService:
         self.db = db
         self.is_async = isinstance(db, AsyncSession) if db else False
         
+        # Cache for command availability
+        self._command_cache = {}
+        
+        # Initialize system capabilities
+        self._init_system_capabilities()
+        
         # Initialize Jinja2 environment for template rendering
         template_dir = Path(__file__).parent.parent / "templates"
         self.jinja_env = Environment(
@@ -67,6 +73,76 @@ class BindService:
         self.jinja_env.globals['get_zone_type_description'] = self._get_zone_type_description
         self.jinja_env.globals['get_record_type_description'] = self._get_record_type_description
     
+    def _init_system_capabilities(self):
+        """Initialize system capabilities and command availability"""
+        self.system_capabilities = {
+            'has_systemctl': False,
+            'has_named_checkconf': False,
+            'has_named_checkzone': False,
+            'has_rndc': False,
+            'has_lsof': False,
+            'bind_service_available': False
+        }
+    
+    async def _check_command_availability(self, command_name: str) -> bool:
+        """Check if a command is available on the system"""
+        if command_name in self._command_cache:
+            return self._command_cache[command_name]
+        
+        # Try different locations for the command
+        locations = [
+            command_name,  # Let system find it
+            f"/usr/bin/{command_name}",
+            f"/usr/sbin/{command_name}",
+            f"/bin/{command_name}",
+            f"/sbin/{command_name}"
+        ]
+        
+        for location in locations:
+            try:
+                if location == command_name:
+                    # Use 'which' to check if command exists in PATH
+                    result = await self._run_command_simple(["which", command_name])
+                    if result["returncode"] == 0:
+                        self._command_cache[command_name] = True
+                        return True
+                else:
+                    # Check if file exists
+                    if os.path.exists(location) and os.access(location, os.X_OK):
+                        self._command_cache[command_name] = True
+                        return True
+            except:
+                continue
+        
+        self._command_cache[command_name] = False
+        return False
+    
+    async def _run_command_simple(self, command: List[str], timeout: int = 10) -> Dict:
+        """Simple command runner without path resolution for basic checks"""
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=timeout
+            )
+            
+            return {
+                "returncode": process.returncode,
+                "stdout": stdout.decode(),
+                "stderr": stderr.decode()
+            }
+        except:
+            return {
+                "returncode": 127,
+                "stdout": "",
+                "stderr": "Command not found"
+            }
+    
     async def _execute_query(self, query):
         """Helper method to execute queries for both sync and async sessions"""
         if not self.db:
@@ -78,24 +154,74 @@ class BindService:
         else:
             return query
     
+    async def _check_bind_port(self) -> Dict:
+        """Check if BIND is listening on port 53 as a fallback when systemctl is not available"""
+        try:
+            # Try to check if port 53 is in use
+            has_lsof = await self._check_command_availability("lsof")
+            has_netstat = await self._check_command_availability("netstat")
+            has_ss = await self._check_command_availability("ss")
+            
+            if has_lsof:
+                result = await self._run_command(["lsof", "-i", ":53"])
+                listening = result["returncode"] == 0 and "named" in result["stdout"]
+            elif has_ss:
+                result = await self._run_command(["ss", "-tulpn", "sport", "=", ":53"])
+                listening = result["returncode"] == 0 and len(result["stdout"].strip()) > 0
+            elif has_netstat:
+                result = await self._run_command(["netstat", "-tulpn"])
+                listening = result["returncode"] == 0 and ":53 " in result["stdout"]
+            else:
+                # Try a simple socket test
+                import socket
+                try:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    sock.settimeout(1)
+                    sock.bind(('127.0.0.1', 53))
+                    sock.close()
+                    listening = False  # Port is free, so BIND is not running
+                except OSError:
+                    listening = True  # Port is in use, likely by BIND
+            
+            return {
+                "listening": listening,
+                "method": "lsof" if has_lsof else "ss" if has_ss else "netstat" if has_netstat else "socket"
+            }
+            
+        except Exception as e:
+            logger = get_bind_logger()
+            logger.warning(f"Failed to check BIND port status: {e}")
+            return {"listening": False, "method": "failed"}
+    
     async def get_service_status(self) -> Dict:
         """Get BIND9 service status"""
         try:
+            # Check system capabilities first
+            has_systemctl = await self._check_command_availability("systemctl")
+            
             # Check if service is running
-            result = await self._run_command(["systemctl", "is-active", self.service_name])
-            is_active = result["stdout"].strip() == "active"
-            
-            # Get uptime if running
+            is_active = False
             uptime = "unknown"
-            if is_active:
-                uptime_result = await self._run_command([
-                    "systemctl", "show", "-p", "ActiveEnterTimestamp", self.service_name
-                ])
-                if uptime_result["returncode"] == 0:
-                    # Parse uptime from systemd output
-                    uptime = uptime_result["stdout"].strip()
             
-            # Check configuration validity
+            if has_systemctl:
+                result = await self._run_command(["systemctl", "is-active", self.service_name])
+                is_active = result["stdout"].strip() == "active"
+                
+                # Get uptime if running
+                if is_active:
+                    uptime_result = await self._run_command([
+                        "systemctl", "show", "-p", "ActiveEnterTimestamp", self.service_name
+                    ])
+                    if uptime_result["returncode"] == 0:
+                        # Parse uptime from systemd output
+                        uptime = uptime_result["stdout"].strip()
+            else:
+                # Fallback: check if BIND is listening on port 53
+                port_check = await self._check_bind_port()
+                is_active = port_check["listening"]
+                uptime = "systemctl not available"
+            
+            # Check configuration validity (with graceful degradation)
             config_valid = await self.validate_configuration()
             
             return {
@@ -104,7 +230,11 @@ class BindService:
                 "version": await self._get_bind_version(),
                 "config_valid": config_valid,
                 "zones_loaded": await self._get_zones_loaded_count(),
-                "cache_size": await self._get_cache_size()
+                "cache_size": await self._get_cache_size(),
+                "system_capabilities": {
+                    "systemctl_available": has_systemctl,
+                    "bind_tools_available": await self._check_command_availability("named-checkconf")
+                }
             }
             
         except Exception as e:
@@ -116,7 +246,11 @@ class BindService:
                 "version": "unknown",
                 "config_valid": False,
                 "zones_loaded": 0,
-                "cache_size": 0
+                "cache_size": 0,
+                "system_capabilities": {
+                    "systemctl_available": False,
+                    "bind_tools_available": False
+                }
             }
     
     async def start_service(self) -> bool:
@@ -1549,6 +1683,24 @@ class BindService:
     async def _run_command(self, command: List[str], timeout: int = 30) -> Dict:
         """Run system command asynchronously, handling missing binaries gracefully"""
         try:
+            # Try to find the command in common locations if it's a full path that doesn't exist
+            if len(command) > 0 and command[0].startswith('/'):
+                command_name = os.path.basename(command[0])
+                if not os.path.exists(command[0]):
+                    # Try common locations for the command
+                    common_paths = [
+                        f"/usr/bin/{command_name}",
+                        f"/usr/sbin/{command_name}",
+                        f"/bin/{command_name}",
+                        f"/sbin/{command_name}",
+                        command_name  # Try without path (let system find it)
+                    ]
+                    
+                    for alt_path in common_paths:
+                        if alt_path == command_name or os.path.exists(alt_path):
+                            command[0] = alt_path
+                            break
+            
             process = await asyncio.create_subprocess_exec(
                 *command,
                 stdout=asyncio.subprocess.PIPE,
@@ -1577,7 +1729,7 @@ class BindService:
         except FileNotFoundError as e:
             # Binary missing (e.g., named-checkconf, named-checkzone, rndc, systemctl) → don't spam stack traces
             logger = get_bind_logger()
-            logger.error(f"Command not found: {' '.join(command)}")
+            logger.warning(f"Command not found: {' '.join(command)}")
             return {
                 "returncode": 127,
                 "stdout": "",

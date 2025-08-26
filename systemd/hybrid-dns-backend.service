@@ -24,6 +24,8 @@ ProtectSystem=strict
 ProtectHome=yes
 ReadWritePaths=/opt/hybrid-dns-server/backend/logs
 ReadWritePaths=/var/log/hybrid-dns
+ReadWritePaths=/etc/bind
+SupplementaryGroups=bind
 
 # Resource limits
 LimitNOFILE=65536

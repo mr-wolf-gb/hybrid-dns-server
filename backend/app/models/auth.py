@@ -3,6 +3,7 @@ Authentication and user management SQLAlchemy models
 """
 
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Index, CheckConstraint
+from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -24,6 +25,7 @@ class User(Base):
     failed_login_attempts = Column(Integer, default=0, nullable=False)
     locked_until = Column(DateTime, nullable=True)
     last_login = Column(DateTime, nullable=True)
+    metadata = Column(JSON, nullable=True)  # For storing user preferences and settings
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
     
