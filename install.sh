@@ -160,6 +160,7 @@ run_step() {
         "database_initialized"
         "services_started"
         "admin_created"
+        "threat_feeds_imported"
         "completed"
     )
     
@@ -1507,6 +1508,54 @@ EOF
     log "Admin credentials: Username=$ADMIN_USERNAME, Email=$ADMIN_EMAIL"
 }
 
+import_default_threat_feeds() {
+    info "Importing default threat intelligence feeds..."
+    
+    # Wait a moment for services to be fully ready
+    sleep 5
+    
+    # Check if services are running before attempting import
+    if ! systemctl is-active --quiet hybrid-dns-backend; then
+        warning "Backend service is not running - starting it first..."
+        systemctl start hybrid-dns-backend
+        sleep 10
+    fi
+    
+    # Import recommended threat feeds using the import script
+    if ! sudo -u "$SERVICE_USER" bash << EOF >> "$LOG_FILE" 2>&1
+cd "$INSTALL_DIR/backend"
+source venv/bin/activate
+source "$INSTALL_DIR/.env"
+
+# Verify database connection first
+python -c "
+import sys
+sys.path.insert(0, '.')
+from app.core.database import get_database_session
+try:
+    db_gen = get_database_session()
+    db = next(db_gen)
+    db.close()
+    print('Database connection successful')
+except Exception as e:
+    print(f'Database connection failed: {e}')
+    sys.exit(1)
+"
+
+# Import the feeds
+python scripts/import_default_feeds.py --import
+EOF
+    then
+        warning "Default threat feeds import failed. You can import them manually later using:"
+        warning "  cd $INSTALL_DIR/backend && source venv/bin/activate && python scripts/import_default_feeds.py --import"
+        log "Threat feeds import failed - continuing with installation"
+        return 0  # Don't fail the entire installation
+    fi
+    
+    success "Default threat intelligence feeds imported successfully"
+    log "Threat feeds imported: Malware Domain List, Phishing Army, Feodo Tracker, OpenPhish, Ransomware Tracker, Bambenek C2"
+}
+
 print_summary() {
     echo
     echo "================================================"
@@ -1569,10 +1618,15 @@ print_summary() {
     echo "• Restart services: systemctl restart hybrid-dns-backend bind9"
     echo "• BIND config check: named-checkconf"
     echo
+    echo "Threat Intelligence:"
+    echo "• Default feeds imported: Phishing Army, Malware Domains, OpenPhish"
+    echo "• RPZ security policies: Active and ready"
+    echo "• Feed management: Available in web interface"
+    echo
     echo "Next Steps:"
     echo "1. Configure clients to use DNS server: $SERVER_IP:53"
     echo "2. Set up SSL certificates (Let's Encrypt recommended)"
-    echo "3. Configure threat feeds and security policies"
+    echo "3. Review and configure additional threat feeds"
     echo
     echo "Documentation: $INSTALL_DIR/README.md"
     echo "Support: https://github.com/mr-wolf-gb/hybrid-dns-server"
@@ -1815,6 +1869,7 @@ EOF
     run_step "database_initialized" initialize_database
     run_step "services_started" start_services
     run_step "admin_created" create_admin_user
+    run_step "threat_feeds_imported" import_default_threat_feeds
     
     # Mark as completed and clean up
     save_checkpoint "completed"

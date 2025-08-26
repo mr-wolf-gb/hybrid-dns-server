@@ -520,6 +520,105 @@ async def get_threat_feed_health(
     return health_status
 
 
+# Default Threat Feeds Management Endpoints
+
+@router.get("/threat-feeds/defaults/available")
+async def get_available_default_feeds(
+    db: Session = Depends(get_database_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Get list of available default threat feeds with their import status"""
+    try:
+        threat_feed_service = ThreatFeedService(db)
+        result = await threat_feed_service.get_available_default_feeds()
+        
+        if not result["success"]:
+            raise HTTPException(
+                status_code=500,
+                detail=result.get("message", "Failed to load default feeds")
+            )
+        
+        return {
+            "feeds": result["feeds"],
+            "categories": result["categories"],
+            "metadata": result["metadata"],
+            "summary": result["summary"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get available default feeds: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to load default feeds: {str(e)}")
+
+
+@router.post("/threat-feeds/defaults/import")
+async def import_default_feeds(
+    selected_feeds: List[str] = Body(None, description="List of feed names to import (empty for all recommended)"),
+    activate_feeds: bool = Body(True, description="Whether to activate imported feeds"),
+    db: Session = Depends(get_database_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Import selected default threat feeds"""
+    try:
+        threat_feed_service = ThreatFeedService(db)
+        
+        # If no specific feeds selected, import only the recommended active ones
+        if not selected_feeds:
+            available_result = await threat_feed_service.get_available_default_feeds()
+            if available_result["success"]:
+                selected_feeds = [
+                    feed["name"] for feed in available_result["feeds"] 
+                    if feed["recommended_active"] and not feed["is_imported"]
+                ]
+        
+        result = await threat_feed_service.import_default_feeds(
+            selected_feeds=selected_feeds,
+            activate_feeds=activate_feeds
+        )
+        
+        if not result["success"]:
+            raise HTTPException(
+                status_code=400,
+                detail=result.get("message", "Failed to import default feeds")
+            )
+        
+        return {
+            "message": f"Successfully imported {result['imported']} threat feeds",
+            "imported": result["imported"],
+            "skipped": result["skipped"],
+            "errors": result.get("errors", []),
+            "feeds": result.get("feeds", []),
+            "categories": result.get("categories", {})
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to import default feeds: {e}")
+        raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
+
+
+@router.get("/threat-feeds/defaults/categories")
+async def get_default_feed_categories(
+    db: Session = Depends(get_database_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Get available threat feed categories with descriptions"""
+    try:
+        threat_feed_service = ThreatFeedService(db)
+        default_data = await threat_feed_service.load_default_feeds()
+        
+        return {
+            "categories": default_data.get("categories", {}),
+            "metadata": default_data.get("metadata", {})
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get default feed categories: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to load categories: {str(e)}")
+
+
 # Custom Threat List Management Endpoints
 
 @router.get("/custom-lists", response_model=List[ThreatFeedSchema])

@@ -22,6 +22,7 @@ class FormatType(str, Enum):
     """Feed format types"""
     HOSTS = "hosts"
     DOMAINS = "domains"
+    URLS = "urls"
     RPZ = "rpz"
     JSON = "json"
 
@@ -60,6 +61,11 @@ class ThreatFeedBase(BaseModel):
             raise ValueError('Update frequency must be at most 86400 seconds (24 hours)')
         return v
 
+    @field_serializer('url')
+    def serialize_url(self, url: HttpUrl) -> str:
+        """Convert HttpUrl to string for database storage"""
+        return str(url)
+
 
 class ThreatFeedCreate(ThreatFeedBase):
     """Schema for creating a new threat feed"""
@@ -85,6 +91,11 @@ class ThreatFeedUpdate(BaseModel):
             if v > 86400:  # 24 hours maximum
                 raise ValueError('Update frequency must be at most 86400 seconds (24 hours)')
         return v
+
+    @field_serializer('url')
+    def serialize_url(self, url: Optional[HttpUrl]) -> Optional[str]:
+        """Convert HttpUrl to string for database storage"""
+        return str(url) if url else None
 
 
 class ThreatFeed(ThreatFeedBase):

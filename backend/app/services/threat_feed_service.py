@@ -50,6 +50,10 @@ class ThreatFeedService(BaseService[ThreatFeed]):
         if not feed_data.get('format_type'):
             raise ValidationException("Format type is required")
         
+        # Convert URL to string if it's a Pydantic URL object
+        if hasattr(feed_data.get('url'), '__str__'):
+            feed_data['url'] = str(feed_data['url'])
+        
         # Set default values
         feed_data.setdefault('is_active', True)
         feed_data.setdefault('update_frequency', 3600)  # 1 hour default
@@ -97,6 +101,10 @@ class ThreatFeedService(BaseService[ThreatFeed]):
             return None
         
         try:
+            # Convert URL to string if it's a Pydantic URL object
+            if 'url' in feed_data and hasattr(feed_data.get('url'), '__str__'):
+                feed_data['url'] = str(feed_data['url'])
+            
             # Check for duplicate name if name is being changed
             if 'name' in feed_data and feed_data['name'] != existing_feed.name:
                 duplicate_feed = await self.get_feed_by_name(feed_data['name'])
@@ -308,26 +316,22 @@ class ThreatFeedService(BaseService[ThreatFeed]):
         domains = []
         
         try:
+            # Pre-process content to handle different encodings and line endings
+            content = content.replace('\r\n', '\n').replace('\r', '\n')
+            
             if format_type == FormatType.HOSTS:
                 # Parse hosts file format (127.0.0.1 domain.com or 0.0.0.0 domain.com)
-                for line in content.split('\n'):
-                    line = line.strip()
-                    if line and not line.startswith('#'):
-                        parts = line.split()
-                        if len(parts) >= 2:
-                            # Extract domain (second part in hosts format)
-                            domain = parts[1].strip().lower()
-                            if self.is_valid_domain(domain):
-                                domains.append(domain)
+                domains = self._parse_hosts_format(content)
                                 
             elif format_type == FormatType.DOMAINS:
                 # Parse plain domain list format (one domain per line)
-                for line in content.split('\n'):
-                    line = line.strip().lower()
-                    if line and not line.startswith('#'):
-                        if self.is_valid_domain(line):
-                            domains.append(line)
-                            
+                domains = self._parse_domains_format(content)
+            elif format_type == FormatType.URLS:
+                # Parse URL list format (extract domains from URLs)
+                domains = self._parse_urls_format(content)
+            elif format_type == FormatType.JSON:
+                # Parse JSON format (extract domains from JSON structure)
+                domains = self._parse_json_format(content)
             elif format_type == FormatType.RPZ:
                 # Parse RPZ format (domain CNAME .)
                 for line in content.split('\n'):
@@ -353,6 +357,211 @@ class ThreatFeedService(BaseService[ThreatFeed]):
         
         return unique_domains
     
+    def _parse_hosts_format(self, content: str) -> List[str]:
+        """Parse hosts file format (127.0.0.1 domain.com or 0.0.0.0 domain.com)"""
+        domains = []
+        for line in content.split('\n'):
+            line = self._clean_line(line)
+            if not line:
+                continue
+                
+            parts = line.split()
+            if len(parts) >= 2:
+                # Extract domain (second part in hosts format)
+                item = parts[1].strip().lower()
+                domain = self._extract_domain_from_item(item)
+                if domain and self.is_valid_domain(domain):
+                    domains.append(domain)
+        return domains
+    
+    def _parse_domains_format(self, content: str) -> List[str]:
+        """Parse plain domain list format (one domain per line or URLs)"""
+        domains = []
+        for line in content.split('\n'):
+            line = self._clean_line(line)
+            if not line:
+                continue
+                
+            # Handle multiple domains/URLs per line (space or tab separated)
+            potential_items = re.split(r'\s+', line)
+            for item in potential_items:
+                item = item.strip().lower()
+                if not item:
+                    continue
+                
+                # Check if it's a URL and extract domain
+                domain = self._extract_domain_from_item(item)
+                if domain and self.is_valid_domain(domain):
+                    domains.append(domain)
+        return domains
+    
+    def _parse_urls_format(self, content: str) -> List[str]:
+        """Parse URL list format (extract domains from URLs)"""
+        domains = []
+        for line in content.split('\n'):
+            line = self._clean_line(line)
+            if not line:
+                continue
+                
+            # Handle multiple URLs per line (space or tab separated)
+            potential_urls = re.split(r'\s+', line)
+            for url in potential_urls:
+                url = url.strip()
+                if not url:
+                    continue
+                
+                # Extract domain from URL
+                domain = self._extract_domain_from_item(url)
+                if domain and self.is_valid_domain(domain):
+                    domains.append(domain)
+        return domains
+    
+    def _parse_json_format(self, content: str) -> List[str]:
+        """Parse JSON format (extract domains from JSON structure)"""
+        domains = []
+        try:
+            import json
+            data = json.loads(content)
+            
+            # Handle different JSON structures
+            if isinstance(data, list):
+                # Array of domains/URLs
+                for item in data:
+                    if isinstance(item, str):
+                        domain = self._extract_domain_from_item(item)
+                        if domain and self.is_valid_domain(domain):
+                            domains.append(domain)
+                    elif isinstance(item, dict):
+                        # Look for common domain/URL fields
+                        for key in ['domain', 'url', 'host', 'hostname', 'site']:
+                            if key in item and isinstance(item[key], str):
+                                domain = self._extract_domain_from_item(item[key])
+                                if domain and self.is_valid_domain(domain):
+                                    domains.append(domain)
+                                    break
+            elif isinstance(data, dict):
+                # Look for arrays of domains in the JSON object
+                for key, value in data.items():
+                    if isinstance(value, list):
+                        for item in value:
+                            if isinstance(item, str):
+                                domain = self._extract_domain_from_item(item)
+                                if domain and self.is_valid_domain(domain):
+                                    domains.append(domain)
+                            elif isinstance(item, dict):
+                                # Look for common domain/URL fields
+                                for field in ['domain', 'url', 'host', 'hostname', 'site']:
+                                    if field in item and isinstance(item[field], str):
+                                        domain = self._extract_domain_from_item(item[field])
+                                        if domain and self.is_valid_domain(domain):
+                                            domains.append(domain)
+                                            break
+                    elif isinstance(value, str):
+                        domain = self._extract_domain_from_item(value)
+                        if domain and self.is_valid_domain(domain):
+                            domains.append(domain)
+                            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON content: {e}")
+        except Exception as e:
+            logger.error(f"Error processing JSON feed content: {e}")
+            
+        return domains
+    
+    def _parse_rpz_format(self, content: str) -> List[str]:
+        """Parse RPZ format (domain CNAME .)"""
+        domains = []
+        for line in content.split('\n'):
+            line = self._clean_line(line, comment_chars=[';', '#'])
+            if not line:
+                continue
+                
+            parts = line.split()
+            if len(parts) >= 3 and parts[1].upper() == 'CNAME':
+                domain = parts[0].strip().lower()
+                if domain.endswith('.'):
+                    domain = domain[:-1]  # Remove trailing dot
+                if self.is_valid_domain(domain):
+                    domains.append(domain)
+        return domains
+    
+    def _clean_line(self, line: str, comment_chars: List[str] = None) -> str:
+        """Clean and normalize a line from feed content"""
+        if comment_chars is None:
+            comment_chars = ['#', '//', ';']
+        
+        # Strip whitespace
+        line = line.strip()
+        
+        # Skip empty lines
+        if not line:
+            return ""
+        
+        # Remove comments (handle inline comments)
+        for comment_char in comment_chars:
+            if comment_char in line:
+                # Find the first occurrence of comment character
+                comment_pos = line.find(comment_char)
+                # Only treat as comment if it's at start or preceded by whitespace
+                if comment_pos == 0 or line[comment_pos - 1].isspace():
+                    line = line[:comment_pos].strip()
+                    break
+        
+        # Skip lines that are now empty after comment removal
+        if not line:
+            return ""
+        
+        # Skip common header patterns
+        header_patterns = [
+            r'^#.*',  # Lines starting with #
+            r'^!.*',  # AdBlock style comments
+            r'^\[.*\]$',  # Section headers like [Adblock Plus 2.0]
+            r'^Last Update:.*',  # Update timestamps
+            r'^Project website:.*',  # Project info
+            r'^Support.*:.*',  # Support info
+            r'^This work is licensed.*',  # License info
+            r'^={3,}.*',  # Separator lines with equals
+            r'^-{3,}.*',  # Separator lines with dashes
+            r'^\s*$',  # Empty or whitespace-only lines
+        ]
+        
+        for pattern in header_patterns:
+            if re.match(pattern, line, re.IGNORECASE):
+                return ""
+        
+        return line
+    
+    def _extract_domain_from_item(self, item: str) -> str:
+        """Extract domain from either a plain domain or a URL"""
+        item = item.strip().lower()
+        
+        # If it looks like a URL, extract the domain
+        if item.startswith(('http://', 'https://', 'ftp://', 'ftps://')):
+            try:
+                # Remove protocol
+                if item.startswith('http://'):
+                    item = item[7:]
+                elif item.startswith('https://'):
+                    item = item[8:]
+                elif item.startswith('ftp://'):
+                    item = item[6:]
+                elif item.startswith('ftps://'):
+                    item = item[7:]
+                
+                # Extract domain part (everything before first slash, colon, or query)
+                domain = item.split('/')[0].split(':')[0].split('?')[0].split('#')[0]
+                
+                # Remove any remaining unwanted characters
+                domain = domain.strip()
+                
+                return domain
+            except Exception as e:
+                logger.debug(f"Failed to extract domain from URL '{item}': {e}")
+                return ""
+        
+        # If it's already a plain domain, return as-is
+        return item
+    
     def is_valid_domain(self, domain: str) -> bool:
         """Validate if a string is a valid domain name"""
         if not domain or len(domain) > 253:
@@ -364,6 +573,156 @@ class ThreatFeedService(BaseService[ThreatFeed]):
         )
         
         return bool(domain_pattern.match(domain))
+    
+    async def load_default_feeds(self) -> Dict[str, Any]:
+        """Load default threat feed configurations from JSON file"""
+        try:
+            import json
+            from pathlib import Path
+            
+            # Get the path to the default feeds file
+            current_dir = Path(__file__).parent.parent
+            feeds_file = current_dir / "data" / "default_threat_feeds.json"
+            
+            if not feeds_file.exists():
+                logger.warning(f"Default feeds file not found: {feeds_file}")
+                return {"default_feeds": [], "categories": {}, "metadata": {}}
+            
+            with open(feeds_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            logger.info(f"Loaded {len(data.get('default_feeds', []))} default threat feeds")
+            return data
+            
+        except Exception as e:
+            logger.error(f"Failed to load default threat feeds: {e}")
+            return {"default_feeds": [], "categories": {}, "metadata": {}}
+    
+    async def import_default_feeds(self, selected_feeds: List[str] = None, activate_feeds: bool = True) -> Dict[str, Any]:
+        """Import selected default threat feeds into the database"""
+        try:
+            default_data = await self.load_default_feeds()
+            default_feeds = default_data.get("default_feeds", [])
+            
+            if not default_feeds:
+                return {"success": False, "message": "No default feeds available", "imported": 0}
+            
+            imported_count = 0
+            skipped_count = 0
+            errors = []
+            imported_feeds = []
+            
+            for feed_config in default_feeds:
+                feed_name = feed_config.get("name")
+                
+                # Skip if specific feeds were requested and this isn't one of them
+                if selected_feeds and feed_name not in selected_feeds:
+                    continue
+                
+                # Check if feed already exists
+                existing_feed = await self.get_feed_by_name(feed_name)
+                if existing_feed:
+                    logger.info(f"Skipping existing feed: {feed_name}")
+                    skipped_count += 1
+                    continue
+                
+                try:
+                    # Prepare feed data for creation
+                    feed_data = {
+                        "name": feed_config["name"],
+                        "url": feed_config["url"],
+                        "feed_type": feed_config["feed_type"],
+                        "format_type": feed_config["format_type"],
+                        "description": feed_config.get("description", ""),
+                        "update_frequency": feed_config.get("update_frequency", 3600),
+                        "is_active": feed_config.get("is_active", True) if activate_feeds else False
+                    }
+                    
+                    # Create the feed
+                    new_feed = await self.create_feed(feed_data)
+                    imported_count += 1
+                    imported_feeds.append({
+                        "id": new_feed.id,
+                        "name": new_feed.name,
+                        "category": feed_config.get("category", "unknown"),
+                        "is_active": new_feed.is_active
+                    })
+                    
+                    logger.info(f"Imported default feed: {feed_name}")
+                    
+                except Exception as e:
+                    error_msg = f"Failed to import feed '{feed_name}': {str(e)}"
+                    logger.error(error_msg)
+                    errors.append(error_msg)
+            
+            return {
+                "success": True,
+                "imported": imported_count,
+                "skipped": skipped_count,
+                "errors": errors,
+                "feeds": imported_feeds,
+                "categories": default_data.get("categories", {}),
+                "metadata": default_data.get("metadata", {})
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to import default feeds: {e}")
+            return {
+                "success": False,
+                "message": f"Import failed: {str(e)}",
+                "imported": 0,
+                "errors": [str(e)]
+            }
+    
+    async def get_available_default_feeds(self) -> Dict[str, Any]:
+        """Get list of available default feeds with their status"""
+        try:
+            default_data = await self.load_default_feeds()
+            default_feeds = default_data.get("default_feeds", [])
+            
+            # Check which feeds are already imported
+            feeds_with_status = []
+            for feed_config in default_feeds:
+                existing_feed = await self.get_feed_by_name(feed_config["name"])
+                
+                feed_info = {
+                    "name": feed_config["name"],
+                    "url": feed_config["url"],
+                    "feed_type": feed_config["feed_type"],
+                    "format_type": feed_config["format_type"],
+                    "description": feed_config.get("description", ""),
+                    "category": feed_config.get("category", "unknown"),
+                    "update_frequency": feed_config.get("update_frequency", 3600),
+                    "recommended_active": feed_config.get("is_active", True),
+                    "is_imported": existing_feed is not None,
+                    "current_status": {
+                        "id": existing_feed.id if existing_feed else None,
+                        "is_active": existing_feed.is_active if existing_feed else False,
+                        "last_updated": existing_feed.last_updated.isoformat() if existing_feed and existing_feed.last_updated else None,
+                        "rules_count": existing_feed.rules_count if existing_feed else 0
+                    } if existing_feed else None
+                }
+                feeds_with_status.append(feed_info)
+            
+            return {
+                "success": True,
+                "feeds": feeds_with_status,
+                "categories": default_data.get("categories", {}),
+                "metadata": default_data.get("metadata", {}),
+                "summary": {
+                    "total_available": len(feeds_with_status),
+                    "already_imported": sum(1 for f in feeds_with_status if f["is_imported"]),
+                    "recommended_active": sum(1 for f in feeds_with_status if f["recommended_active"])
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get available default feeds: {e}")
+            return {
+                "success": False,
+                "message": f"Failed to load default feeds: {str(e)}",
+                "feeds": []
+            }
     
     async def update_feed_from_source(self, feed: ThreatFeed) -> ThreatFeedUpdateResult:
         """Update a single threat feed from its source"""
