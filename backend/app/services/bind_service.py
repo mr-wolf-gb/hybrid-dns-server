@@ -312,7 +312,7 @@ response-policy {
             result = await self.db.execute(select(Zone).filter(Zone.name == zone_name))
             return result.scalar_one_or_none()
         else:
-            return await self._get_zone_by_name(zone_name)
+            return self.db.query(Zone).filter(Zone.name == zone_name).first()
     
     async def _get_zone_by_id(self, zone_id: int):
         """Helper to get zone by ID with proper async/sync handling"""
@@ -325,7 +325,7 @@ response-policy {
             result = await self.db.execute(select(Zone).filter(Zone.id == zone_id))
             return result.scalar_one_or_none()
         else:
-            return await self._get_zone_by_id(zone_id)
+            return self.db.query(Zone).filter(Zone.id == zone_id).first()
     
     async def _get_active_zones(self):
         """Helper to get active zones with proper async/sync handling"""
@@ -338,7 +338,7 @@ response-policy {
             result = await self.db.execute(select(Zone).filter(Zone.is_active == True))
             return result.scalars().all()
         else:
-            return await self._get_active_zones()
+            return self.db.query(Zone).filter(Zone.is_active == True).all()
     
     async def _get_active_forwarders(self):
         """Helper to get active forwarders with proper async/sync handling"""
@@ -351,7 +351,7 @@ response-policy {
             result = await self.db.execute(select(Forwarder).filter(Forwarder.is_active == True))
             return result.scalars().all()
         else:
-            return await self._get_active_forwarders()
+            return self.db.query(Forwarder).filter(Forwarder.is_active == True).all()
     
     async def _get_active_rpz_rules(self, rpz_zone: str = None):
         """Helper to get active RPZ rules with proper async/sync handling"""
@@ -4171,23 +4171,9 @@ $ORIGIN {rpz_zone}.rpz.
                 }
             }
             
-            # Add dynamic categories from database if available
-            if self.db:
-                try:
-                    # Get all distinct categories from database
-                    db_categories = await self._get_rpz_categories()
-                    
-                    for category in db_categories:
-                        if category not in rpz_policies:
-                            rpz_policies[category] = {
-                                'zone_name': f'{category}.rpz',
-                                'policy': 'GIVEN',
-                                'priority': 20,
-                                'description': f'Custom category: {category}'
-                            }
-                            
-                except Exception as e:
-                    logger.warning(f"Failed to get dynamic RPZ categories from database: {e}")
+            # Note: Dynamic categories from database would need to be handled
+            # in an async context. For now, we'll use the static configuration.
+            # This can be extended later with proper async handling if needed.
             
             return {
                 'enabled': True,
