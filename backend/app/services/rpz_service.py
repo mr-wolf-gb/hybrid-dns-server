@@ -43,6 +43,11 @@ class RPZService(BaseService[RPZRule]):
         # Normalize domain
         rule_data['domain'] = rule_data['domain'].strip().lower()
         
+        # Normalize RPZ zone name (remove 'rpz.' prefix if present)
+        rpz_zone = rule_data['rpz_zone']
+        if rpz_zone.startswith('rpz.'):
+            rule_data['rpz_zone'] = rpz_zone[4:]  # Remove 'rpz.' prefix
+        
         # Validate action and redirect target
         if rule_data['action'] == RPZAction.REDIRECT and not rule_data.get('redirect_target'):
             raise ValidationException("Redirect target is required for redirect action")
@@ -98,6 +103,12 @@ class RPZService(BaseService[RPZRule]):
         # Normalize domain if provided
         if 'domain' in rule_data and rule_data['domain']:
             rule_data['domain'] = rule_data['domain'].strip().lower()
+        
+        # Normalize RPZ zone name if provided (remove 'rpz.' prefix if present)
+        if 'rpz_zone' in rule_data and rule_data['rpz_zone']:
+            rpz_zone = rule_data['rpz_zone']
+            if rpz_zone.startswith('rpz.'):
+                rule_data['rpz_zone'] = rpz_zone[4:]  # Remove 'rpz.' prefix
         
         # Validate action and redirect target
         action = rule_data.get('action', existing_rule.action)
@@ -450,7 +461,12 @@ class RPZService(BaseService[RPZRule]):
                 source_query = source_query.filter(and_(*base_filters))
             source_query = source_query.group_by(RPZRule.source)
             source_result = await self.db.execute(source_query)
-            rules_by_source = dict(source_result.fetchall())
+            rules_by_source_raw = dict(source_result.fetchall())
+            # Fix null source values
+            rules_by_source = {}
+            for source, count in rules_by_source_raw.items():
+                source_key = source if source is not None else "manual"
+                rules_by_source[source_key] = count
             
             # Rules by category (rpz_zone)
             category_query = select(RPZRule.rpz_zone, func.count(RPZRule.id))
@@ -485,7 +501,12 @@ class RPZService(BaseService[RPZRule]):
             if base_filters:
                 source_query = source_query.filter(and_(*base_filters))
             source_query = source_query.group_by(RPZRule.source)
-            rules_by_source = dict(source_query.all())
+            rules_by_source_raw = dict(source_query.all())
+            # Fix null source values
+            rules_by_source = {}
+            for source, count in rules_by_source_raw.items():
+                source_key = source if source is not None else "manual"
+                rules_by_source[source_key] = count
             
             # Rules by category (rpz_zone)
             category_query = self.db.query(RPZRule.rpz_zone, func.count(RPZRule.id))
@@ -1295,8 +1316,8 @@ class RPZService(BaseService[RPZRule]):
     def _determine_threat_level(self, rule: RPZRule) -> str:
         """Determine threat level based on rule characteristics"""
         # Determine threat level based on domain, source, and action
-        domain = rule.domain.lower()
-        source = rule.source.lower()
+        domain = rule.domain.lower() if rule.domain else ""
+        source = rule.source.lower() if rule.source else "manual"
         action = rule.action
         
         # Critical threats

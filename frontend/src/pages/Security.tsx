@@ -26,11 +26,19 @@ import RPZRuleModal from '@/components/security/RPZRuleModal'
 import ThreatFeedManager from '@/components/security/ThreatFeedManager'
 import SecurityStats from '@/components/security/SecurityStats'
 import BulkRuleActions from '@/components/security/BulkRuleActions'
+import ThreatIntelligenceDashboard from '@/components/security/ThreatIntelligenceDashboard'
+import CustomThreatListManager from '@/components/security/CustomThreatListManager'
+import SecurityAnalytics from '@/components/security/SecurityAnalytics'
+import SecurityTestPanel from '@/components/security/SecurityTestPanel'
 
 const Security: React.FC = () => {
   const [selectedRule, setSelectedRule] = useState<RPZRule | null>(null)
   const [isRuleModalOpen, setIsRuleModalOpen] = useState(false)
   const [isThreatFeedManagerOpen, setIsThreatFeedManagerOpen] = useState(false)
+  const [isThreatIntelDashboardOpen, setIsThreatIntelDashboardOpen] = useState(false)
+  const [isCustomListManagerOpen, setIsCustomListManagerOpen] = useState(false)
+  const [isSecurityAnalyticsOpen, setIsSecurityAnalyticsOpen] = useState(false)
+  const [isTestPanelOpen, setIsTestPanelOpen] = useState(false)
   const [selectedRules, setSelectedRules] = useState<number[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
@@ -42,21 +50,34 @@ const Security: React.FC = () => {
 
   // Fetch RPZ rules
   const { data: rules, isLoading } = useQuery({
-    queryKey: ['rpz-rules'],
-    queryFn: () => rpzService.getRules(),
+    queryKey: ['rpz-rules', categoryFilter, actionFilter, statusFilter, searchTerm],
+    queryFn: () => rpzService.getRules({
+      category: categoryFilter !== 'all' ? categoryFilter : undefined,
+      action: actionFilter !== 'all' ? actionFilter : undefined,
+      search: searchTerm || undefined,
+      active_only: statusFilter === 'active' ? true : statusFilter === 'inactive' ? false : undefined,
+      limit: 1000
+    }),
   })
 
   // Fetch security statistics
   const { data: securityStats } = useQuery({
     queryKey: ['security-stats'],
-    queryFn: () => rpzService.getStatistics(),
+    queryFn: () => rpzService.getStatistics({ include_trends: true }),
     refetchInterval: 30000, // Refresh every 30 seconds
+  })
+
+  // Fetch threat intelligence statistics
+  const { data: threatIntelStats } = useQuery({
+    queryKey: ['threat-intel-stats'],
+    queryFn: () => rpzService.getThreatIntelligenceStatistics(),
+    refetchInterval: 60000, // Refresh every minute
   })
 
   // Fetch blocked queries for the last 24 hours
   const { data: blockedQueries } = useQuery({
     queryKey: ['blocked-queries'],
-    queryFn: () => dashboardService.getQueryLogs(1, 100, 'blocked:true'),
+    queryFn: () => rpzService.getBlockedQueries({ hours: 24, limit: 100 }),
     refetchInterval: 60000, // Refresh every minute
   })
 
@@ -86,11 +107,12 @@ const Security: React.FC = () => {
 
   // Update threat feeds mutation
   const updateThreatFeedsMutation = useMutation({
-    mutationFn: rpzService.updateThreatFeeds,
+    mutationFn: () => rpzService.updateAllThreatFeeds(false),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['rpz-rules'] })
       queryClient.invalidateQueries({ queryKey: ['security-stats'] })
-      toast.success(`Threat feeds updated successfully. ${response.data.data.updated} rules updated.`)
+      queryClient.invalidateQueries({ queryKey: ['threat-intel-stats'] })
+      toast.success(`Threat feeds updated successfully. ${response.data.successful_updates} feeds updated.`)
     },
     onError: () => {
       toast.error('Failed to update threat feeds')
@@ -99,12 +121,15 @@ const Security: React.FC = () => {
 
   // Bulk operations mutations
   const bulkDeleteMutation = useMutation({
-    mutationFn: (ruleIds: number[]) => rpzService.bulkDeleteRules(ruleIds),
-    onSuccess: (_, ruleIds) => {
+    mutationFn: (ruleIds: number[]) => rpzService.bulkDeleteRules({ rule_ids: ruleIds }),
+    onSuccess: (response, ruleIds) => {
       queryClient.invalidateQueries({ queryKey: ['rpz-rules'] })
       queryClient.invalidateQueries({ queryKey: ['security-stats'] })
       setSelectedRules([])
-      toast.success(`Successfully deleted ${ruleIds.length} rules`)
+      toast.success(`Successfully deleted ${response.data.deleted_count} rules`)
+      if (response.data.error_count > 0) {
+        toast.warning(`${response.data.error_count} rules failed to delete`)
+      }
     },
     onError: () => {
       toast.error('Failed to delete selected rules')
@@ -112,7 +137,7 @@ const Security: React.FC = () => {
   })
 
   const bulkToggleMutation = useMutation({
-    mutationFn: ({ ruleIds, isActive }: { ruleIds: number[]; isActive: boolean }) => 
+    mutationFn: ({ ruleIds, isActive }: { ruleIds: number[]; isActive: boolean }) =>
       rpzService.bulkToggleRules(ruleIds, isActive),
     onSuccess: (_, { ruleIds, isActive }) => {
       queryClient.invalidateQueries({ queryKey: ['rpz-rules'] })
@@ -151,7 +176,7 @@ const Security: React.FC = () => {
 
   const handleBulkDelete = () => {
     if (selectedRules.length === 0) return
-    
+
     if (window.confirm(`Are you sure you want to delete ${selectedRules.length} selected rules?`)) {
       bulkDeleteMutation.mutate(selectedRules)
     }
@@ -159,7 +184,7 @@ const Security: React.FC = () => {
 
   const handleBulkToggle = (isActive: boolean) => {
     if (selectedRules.length === 0) return
-    
+
     bulkToggleMutation.mutate({ ruleIds: selectedRules, isActive })
   }
 
@@ -195,18 +220,18 @@ const Security: React.FC = () => {
   // Filter and search rules
   const filteredRules = useMemo(() => {
     if (!rules?.data) return []
-    
+
     return rules.data.filter(rule => {
-      const matchesSearch = searchTerm === '' || 
+      const matchesSearch = searchTerm === '' ||
         rule.domain.toLowerCase().includes(searchTerm.toLowerCase()) ||
         rule.rpz_zone.toLowerCase().includes(searchTerm.toLowerCase())
-      
+
       const matchesCategory = categoryFilter === 'all' || rule.category === categoryFilter
       const matchesAction = actionFilter === 'all' || rule.action === actionFilter
-      const matchesStatus = statusFilter === 'all' || 
+      const matchesStatus = statusFilter === 'all' ||
         (statusFilter === 'active' && rule.is_active) ||
         (statusFilter === 'inactive' && !rule.is_active)
-      
+
       return matchesSearch && matchesCategory && matchesAction && matchesStatus
     })
   }, [rules?.data, searchTerm, categoryFilter, actionFilter, statusFilter])
@@ -354,15 +379,36 @@ const Security: React.FC = () => {
             </p>
           </div>
           <div className="flex space-x-2">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
+              onClick={() => setIsSecurityAnalyticsOpen(true)}
+            >
+              <ChartBarIcon className="h-4 w-4 mr-2" />
+              Analytics
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setIsThreatIntelDashboardOpen(true)}
+            >
+              <ShieldCheckIcon className="h-4 w-4 mr-2" />
+              Intelligence
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setIsCustomListManagerOpen(true)}
+            >
+              <DocumentArrowDownIcon className="h-4 w-4 mr-2" />
+              Custom Lists
+            </Button>
+            <Button
+              variant="outline"
               onClick={() => setIsThreatFeedManagerOpen(true)}
             >
               <Cog6ToothIcon className="h-4 w-4 mr-2" />
               Manage Feeds
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={handleUpdateThreatFeeds}
               loading={updateThreatFeedsMutation.isPending}
             >
@@ -373,6 +419,15 @@ const Security: React.FC = () => {
               <PlusIcon className="h-4 w-4 mr-2" />
               Add Rule
             </Button>
+            {process.env.NODE_ENV === 'development' && (
+              <Button
+                variant="outline"
+                onClick={() => setIsTestPanelOpen(true)}
+                className="border-dashed"
+              >
+                🧪 Test Panel
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -424,7 +479,7 @@ const Security: React.FC = () => {
             </div>
             <div className="ml-4">
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {formatNumber(securityStats?.data?.blocked_today || 0)}
+                {formatNumber(blockedQueries?.data?.summary?.total_blocked || 0)}
               </div>
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
                 Blocked Today
@@ -460,10 +515,10 @@ const Security: React.FC = () => {
             </div>
             <div className="ml-4">
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {securityStats?.data?.last_update ? formatRelativeTime(securityStats.data.last_update) : 'Never'}
+                {threatIntelStats?.data?.update_health?.feeds_up_to_date || 0}
               </div>
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                Last Update
+                Feeds Updated
               </p>
             </div>
           </div>
@@ -471,10 +526,11 @@ const Security: React.FC = () => {
       </div>
 
       {/* Security Statistics */}
-      <SecurityStats 
+      <SecurityStats
         categoryStats={categoryStats}
         securityStats={securityStats?.data}
-        blockedQueries={blockedQueries?.data?.items || []}
+        blockedQueries={blockedQueries?.data?.query_results || []}
+        threatIntelStats={threatIntelStats?.data}
       />
 
       {/* Filters and Search */}
@@ -493,7 +549,7 @@ const Security: React.FC = () => {
                 />
               </div>
             </div>
-            
+
             <div className="flex space-x-2">
               <Select
                 value={categoryFilter}
@@ -623,7 +679,7 @@ const Security: React.FC = () => {
             </div>
           </div>
         </div>
-        
+
         <Table
           data={filteredRules}
           columns={columns}
@@ -658,7 +714,46 @@ const Security: React.FC = () => {
             setIsThreatFeedManagerOpen(false)
             queryClient.invalidateQueries({ queryKey: ['rpz-rules'] })
             queryClient.invalidateQueries({ queryKey: ['security-stats'] })
+            queryClient.invalidateQueries({ queryKey: ['threat-intel-stats'] })
           }}
+        />
+      )}
+
+      {/* Threat intelligence dashboard */}
+      {isThreatIntelDashboardOpen && (
+        <ThreatIntelligenceDashboard
+          isOpen={isThreatIntelDashboardOpen}
+          onClose={() => setIsThreatIntelDashboardOpen(false)}
+        />
+      )}
+
+      {/* Custom threat list manager */}
+      {isCustomListManagerOpen && (
+        <CustomThreatListManager
+          isOpen={isCustomListManagerOpen}
+          onClose={() => setIsCustomListManagerOpen(false)}
+          onSuccess={() => {
+            setIsCustomListManagerOpen(false)
+            queryClient.invalidateQueries({ queryKey: ['rpz-rules'] })
+            queryClient.invalidateQueries({ queryKey: ['security-stats'] })
+            queryClient.invalidateQueries({ queryKey: ['threat-intel-stats'] })
+          }}
+        />
+      )}
+
+      {/* Security analytics */}
+      {isSecurityAnalyticsOpen && (
+        <SecurityAnalytics
+          isOpen={isSecurityAnalyticsOpen}
+          onClose={() => setIsSecurityAnalyticsOpen(false)}
+        />
+      )}
+
+      {/* Test panel (development only) */}
+      {process.env.NODE_ENV === 'development' && isTestPanelOpen && (
+        <SecurityTestPanel
+          isOpen={isTestPanelOpen}
+          onClose={() => setIsTestPanelOpen(false)}
         />
       )}
     </div>

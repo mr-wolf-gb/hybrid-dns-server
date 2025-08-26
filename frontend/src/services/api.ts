@@ -20,6 +20,24 @@ import {
   ForwarderCreatePayload,
   ForwarderTemplate,
   RPZRuleFormData,
+  ThreatFeed,
+  ThreatFeedFormData,
+  ThreatFeedStatus,
+  ThreatFeedUpdateResult,
+  BulkThreatFeedUpdateResult,
+  RPZStatistics,
+  BlockedQueryReport,
+  ThreatDetectionReport,
+  RPZBulkUpdateRequest,
+  RPZBulkUpdateResult,
+  RPZBulkDeleteRequest,
+  RPZBulkDeleteResult,
+  RPZBulkCategorizeRequest,
+  RPZBulkCategorizeResult,
+  RPZCategoryStatus,
+  RPZCategoryToggleResult,
+  RPZRuleTemplate,
+  ThreatIntelligenceStats,
 } from '@/types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -354,8 +372,16 @@ export const forwardersService = {
 
 // RPZ API
 export const rpzService = {
-  getRules: (): Promise<AxiosResponse<RPZRule[]>> =>
-    api.get('/rpz/rules'),
+  // RPZ Rules
+  getRules: (params?: {
+    category?: string
+    action?: string
+    search?: string
+    active_only?: boolean
+    skip?: number
+    limit?: number
+  }): Promise<AxiosResponse<RPZRule[]>> =>
+    api.get('/rpz/rules', { params }),
 
   getRule: (id: number): Promise<AxiosResponse<RPZRule>> =>
     api.get(`/rpz/rules/${id}`),
@@ -373,11 +399,70 @@ export const rpzService = {
     api.post(`/rpz/rules/${id}/toggle`),
 
   // Bulk operations
-  bulkDeleteRules: (ruleIds: number[]): Promise<AxiosResponse<void>> =>
-    api.delete('/rpz/rules/bulk', { data: { rule_ids: ruleIds } }),
+  bulkDeleteRules: (data: RPZBulkDeleteRequest): Promise<AxiosResponse<RPZBulkDeleteResult>> =>
+    api.delete('/rpz/rules/bulk', { data }),
+
+  bulkUpdateRules: (data: RPZBulkUpdateRequest): Promise<AxiosResponse<RPZBulkUpdateResult>> =>
+    api.put('/rpz/rules/bulk', data),
+
+  bulkCategorizeRules: (data: RPZBulkCategorizeRequest): Promise<AxiosResponse<RPZBulkCategorizeResult>> =>
+    api.post('/rpz/rules/bulk/categorize', data),
 
   bulkToggleRules: (ruleIds: number[], isActive: boolean): Promise<AxiosResponse<RPZRule[]>> =>
     api.post('/rpz/rules/bulk/toggle', { rule_ids: ruleIds, is_active: isActive }),
+
+  // Statistics and Reports
+  getStatistics: (params?: {
+    category?: string
+    include_trends?: boolean
+  }): Promise<AxiosResponse<RPZStatistics>> =>
+    api.get('/rpz/statistics', { params }),
+
+  getBlockedQueries: (params?: {
+    hours?: number
+    category?: string
+    client_ip?: string
+    domain?: string
+    limit?: number
+    skip?: number
+  }): Promise<AxiosResponse<BlockedQueryReport>> =>
+    api.get('/rpz/blocked-queries', { params }),
+
+  getThreatDetectionReport: (params?: {
+    days?: number
+    include_details?: boolean
+    format?: 'json' | 'csv'
+  }): Promise<AxiosResponse<ThreatDetectionReport>> =>
+    api.get('/rpz/threat-detection-report', { params }),
+
+  getCategoryStatistics: (params?: {
+    include_inactive?: boolean
+    time_period?: number
+  }): Promise<AxiosResponse<any>> =>
+    api.get('/rpz/category-statistics', { params }),
+
+  // Category Management
+  getCategoryStatus: (category: string): Promise<AxiosResponse<RPZCategoryStatus>> =>
+    api.get(`/rpz/categories/${category}/status`),
+
+  toggleCategory: (category: string, enabled: boolean): Promise<AxiosResponse<RPZCategoryToggleResult>> =>
+    api.post(`/rpz/categories/${category}/toggle`, { enabled }),
+
+  // Templates
+  getTemplates: (category?: string): Promise<AxiosResponse<RPZRuleTemplate[]>> =>
+    api.get('/rpz/templates', { params: { category } }),
+
+  createTemplate: (data: any): Promise<AxiosResponse<RPZRuleTemplate>> =>
+    api.post('/rpz/templates', data),
+
+  getTemplate: (id: string): Promise<AxiosResponse<RPZRuleTemplate>> =>
+    api.get(`/rpz/templates/${id}`),
+
+  updateTemplate: (id: string, data: any): Promise<AxiosResponse<RPZRuleTemplate>> =>
+    api.put(`/rpz/templates/${id}`, data),
+
+  deleteTemplate: (id: string): Promise<AxiosResponse<void>> =>
+    api.delete(`/rpz/templates/${id}`),
 
   // Import/Export
   importRules: (category: string, url: string): Promise<AxiosResponse<ApiResponse<{ imported: number }>>> =>
@@ -386,72 +471,99 @@ export const rpzService = {
   exportRules: (ruleIds?: number[]): Promise<AxiosResponse<string>> =>
     api.post('/rpz/export', { rule_ids: ruleIds }),
 
-  // Threat feeds
-  updateThreatFeeds: (): Promise<AxiosResponse<ApiResponse<{ updated: number }>>> =>
-    api.post('/rpz/update-feeds'),
+  exportStatisticsReport: (reportType: string, format?: string): Promise<AxiosResponse<any>> =>
+    api.get('/rpz/export-statistics', { params: { report_type: reportType, format } }),
 
-  getThreatFeeds: (): Promise<AxiosResponse<any[]>> =>
-    api.get('/rpz/threat-feeds'),
+  // Threat Feeds
+  getThreatFeeds: (params?: {
+    skip?: number
+    limit?: number
+    feed_type?: string
+    active_only?: boolean
+    sort_by?: string
+    sort_order?: string
+  }): Promise<AxiosResponse<ThreatFeed[]>> =>
+    api.get('/rpz/threat-feeds', { params }),
 
-  createThreatFeed: (data: any): Promise<AxiosResponse<any>> =>
+  getThreatFeed: (id: number): Promise<AxiosResponse<ThreatFeed>> =>
+    api.get(`/rpz/threat-feeds/${id}`),
+
+  createThreatFeed: (data: ThreatFeedFormData): Promise<AxiosResponse<ThreatFeed>> =>
     api.post('/rpz/threat-feeds', data),
 
-  updateThreatFeed: (id: number, data: any): Promise<AxiosResponse<any>> =>
+  updateThreatFeed: (id: number, data: Partial<ThreatFeedFormData>): Promise<AxiosResponse<ThreatFeed>> =>
     api.put(`/rpz/threat-feeds/${id}`, data),
 
-  deleteThreatFeed: (id: number): Promise<AxiosResponse<void>> =>
-    api.delete(`/rpz/threat-feeds/${id}`),
+  deleteThreatFeed: (id: number, removeRules?: boolean): Promise<AxiosResponse<void>> =>
+    api.delete(`/rpz/threat-feeds/${id}`, { params: { remove_rules: removeRules } }),
 
-  updateSingleThreatFeed: (id: number): Promise<AxiosResponse<ApiResponse<{ imported: number }>>> =>
+  testThreatFeed: (id: number): Promise<AxiosResponse<any>> =>
+    api.post(`/rpz/threat-feeds/${id}/test`),
+
+  toggleThreatFeed: (id: number): Promise<AxiosResponse<ThreatFeed>> =>
+    api.post(`/rpz/threat-feeds/${id}/toggle`),
+
+  getThreatFeedStatus: (id: number): Promise<AxiosResponse<ThreatFeedStatus>> =>
+    api.get(`/rpz/threat-feeds/${id}/status`),
+
+  updateSingleThreatFeed: (id: number): Promise<AxiosResponse<ThreatFeedUpdateResult>> =>
     api.post(`/rpz/threat-feeds/${id}/update`),
 
-  toggleThreatFeed: (id: number, enabled: boolean): Promise<AxiosResponse<any>> =>
-    api.post(`/rpz/threat-feeds/${id}/toggle`, { enabled }),
+  updateAllThreatFeeds: (forceUpdate?: boolean): Promise<AxiosResponse<BulkThreatFeedUpdateResult>> =>
+    api.post('/rpz/threat-feeds/update', { force_update: forceUpdate }),
 
-  // Enhanced threat feed methods
+  getThreatFeedHealth: (id: number): Promise<AxiosResponse<any>> =>
+    api.get(`/rpz/threat-feeds/${id}/health`),
+
   getThreatFeedStatistics: (feedId?: number): Promise<AxiosResponse<any>> =>
     api.get('/rpz/threat-feeds/statistics', { params: feedId ? { feed_id: feedId } : {} }),
 
   getThreatFeedSchedule: (): Promise<AxiosResponse<any>> =>
     api.get('/rpz/threat-feeds/schedule'),
 
-  scheduleThreatFeedUpdates: (): Promise<AxiosResponse<any>> =>
+  scheduleThreatFeedUpdates: (): Promise<AxiosResponse<BulkThreatFeedUpdateResult>> =>
     api.post('/rpz/threat-feeds/schedule-updates'),
 
-  createCustomThreatList: (data: {
-    name: string
-    domains: string[]
-    category: string
-    description?: string
-  }): Promise<AxiosResponse<any>> =>
-    api.post('/rpz/threat-feeds/custom', data),
+  // Custom Threat Lists
+  getCustomLists: (params?: {
+    skip?: number
+    limit?: number
+    active_only?: boolean
+  }): Promise<AxiosResponse<ThreatFeed[]>> =>
+    api.get('/rpz/custom-lists', { params }),
 
-  updateCustomThreatList: (feedId: number, domains: string[]): Promise<AxiosResponse<any>> =>
+  createCustomList: (name: string, description?: string): Promise<AxiosResponse<ThreatFeed>> =>
+    api.post('/rpz/custom-lists', { name, description }),
+
+  addDomainsToCustomList: (listId: number, domains: string[], action?: string, redirectTarget?: string): Promise<AxiosResponse<any>> =>
+    api.post(`/rpz/custom-lists/${listId}/domains`, { domains, action, redirect_target: redirectTarget }),
+
+  removeDomainsFromCustomList: (listId: number, domains: string[]): Promise<AxiosResponse<any>> =>
+    api.delete(`/rpz/custom-lists/${listId}/domains`, { data: { domains } }),
+
+  getCustomListDomains: (listId: number, params?: {
+    skip?: number
+    limit?: number
+    search?: string
+    active_only?: boolean
+  }): Promise<AxiosResponse<RPZRule[]>> =>
+    api.get(`/rpz/custom-lists/${listId}/domains`, { params }),
+
+  createCustomThreatList: (name: string, domains: string[], category?: string, description?: string): Promise<AxiosResponse<ThreatFeed>> =>
+    api.post('/rpz/threat-feeds/custom', { name, domains, category, description }),
+
+  updateCustomThreatList: (feedId: number, domains: string[]): Promise<AxiosResponse<ThreatFeedUpdateResult>> =>
     api.put(`/rpz/threat-feeds/${feedId}/custom`, { domains }),
 
-  // Statistics
-  getStatistics: (): Promise<AxiosResponse<ApiResponse<{
-    blocked_today: number
-    blocked_this_week: number
-    blocked_this_month: number
-    top_blocked_domains: Array<{ domain: string; count: number; category: string }>
-    blocks_by_hour: Array<{ hour: string; count: number }>
-    threat_feed_stats: Array<{ feed: string; rules: number; last_update: string }>
-  }>>> =>
-    api.get('/rpz/statistics'),
+  // Threat Intelligence
+  getThreatIntelligenceStatistics: (): Promise<AxiosResponse<ThreatIntelligenceStats>> =>
+    api.get('/rpz/intelligence/statistics'),
 
-  // Rule templates
-  getRuleTemplates: (): Promise<AxiosResponse<any[]>> =>
-    api.get('/rpz/templates'),
+  getThreatCoverageReport: (): Promise<AxiosResponse<any>> =>
+    api.get('/rpz/intelligence/coverage-report'),
 
-  createRuleTemplate: (data: any): Promise<AxiosResponse<any>> =>
-    api.post('/rpz/templates', data),
-
-  updateRuleTemplate: (id: string, data: any): Promise<AxiosResponse<any>> =>
-    api.put(`/rpz/templates/${id}`, data),
-
-  deleteRuleTemplate: (id: string): Promise<AxiosResponse<void>> =>
-    api.delete(`/rpz/templates/${id}`),
+  getFeedPerformanceMetrics: (days?: number): Promise<AxiosResponse<any>> =>
+    api.get('/rpz/intelligence/feed-performance', { params: { days } }),
 
   // Bulk import
   bulkImportRules: (data: {

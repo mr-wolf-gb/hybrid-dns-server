@@ -9,10 +9,10 @@ export const WEBSOCKET_CONFIG = {
   MAX_RECONNECT_ATTEMPTS: 5,
   PING_INTERVAL: 30000, // 30 seconds
   CONNECTION_TIMEOUT: 10000, // 10 seconds
-  
+
   // Event throttling
   NOTIFICATION_THROTTLE_DURATION: 5000, // 5 seconds
-  
+
   // Connection types
   CONNECTION_TYPES: {
     HEALTH: 'health',
@@ -21,7 +21,7 @@ export const WEBSOCKET_CONFIG = {
     SYSTEM: 'system',
     ADMIN: 'admin'
   } as const,
-  
+
   // Event types
   EVENT_TYPES: {
     // Health monitoring events
@@ -40,7 +40,12 @@ export const WEBSOCKET_CONFIG = {
     // Security events
     SECURITY_ALERT: 'security_alert',
     RPZ_UPDATE: 'rpz_update',
+    RPZ_RULE_CREATED: 'rpz_rule_created',
+    RPZ_RULE_UPDATED: 'rpz_rule_updated',
+    RPZ_RULE_DELETED: 'rpz_rule_deleted',
     THREAT_DETECTED: 'threat_detected',
+    THREAT_FEED_UPDATED: 'threat_feed_updated',
+    THREAT_FEED_ERROR: 'threat_feed_error',
 
     // System events
     SYSTEM_STATUS: 'system_status',
@@ -56,14 +61,14 @@ export const WEBSOCKET_CONFIG = {
     CONNECTION_ESTABLISHED: 'connection_established',
     SUBSCRIPTION_UPDATED: 'subscription_updated'
   } as const,
-  
+
   // WebSocket URL construction
   getWebSocketUrl: (connectionType: string, token: string): string => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
     return `${protocol}//${host}/api/websocket/ws/${connectionType}?token=${encodeURIComponent(token)}`;
   },
-  
+
   // Default event subscriptions by connection type
   DEFAULT_SUBSCRIPTIONS: {
     health: [
@@ -85,7 +90,12 @@ export const WEBSOCKET_CONFIG = {
     security: [
       'security_alert',
       'rpz_update',
+      'rpz_rule_created',
+      'rpz_rule_updated',
+      'rpz_rule_deleted',
       'threat_detected',
+      'threat_feed_updated',
+      'threat_feed_error',
       'system_status'
     ],
     system: [

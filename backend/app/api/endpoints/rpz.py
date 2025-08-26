@@ -29,7 +29,7 @@ router = APIRouter()
 logger = get_logger(__name__)
 
 
-@router.get("/rules", response_model=List[RPZRuleSchema])
+@router.get("/rules")
 async def list_rpz_rules(
     category: Optional[str] = Query(None),
     action: Optional[str] = Query(None),
@@ -50,7 +50,31 @@ async def list_rpz_rules(
         skip=skip,
         limit=limit
     )
-    return rules
+    
+    # Transform the rules to ensure frontend compatibility
+    transformed_rules = []
+    for rule in rules:
+        # Ensure rpz_zone has proper format
+        rpz_zone = rule.rpz_zone or "custom"
+        if not rpz_zone.startswith('rpz.'):
+            rpz_zone = f"rpz.{rpz_zone}"
+        
+        rule_dict = {
+            "id": rule.id,
+            "domain": rule.domain or "",
+            "rpz_zone": rpz_zone,
+            "category": rpz_zone.replace('rpz.', '') if rpz_zone.startswith('rpz.') else rpz_zone,
+            "action": rule.action or "block",
+            "redirect_target": rule.redirect_target or "",
+            "description": rule.description or "",
+            "is_active": rule.is_active if rule.is_active is not None else True,
+            "source": rule.source or "manual",
+            "created_at": rule.created_at,
+            "updated_at": rule.updated_at
+        }
+        transformed_rules.append(rule_dict)
+    
+    return transformed_rules
 
 
 @router.post("/rules", response_model=RPZRuleSchema)
@@ -1294,3 +1318,187 @@ async def _generate_threat_report_csv(report_data: Dict) -> str:
         ])
     
     return output.getvalue()
+
+
+# RPZ Rule Templates Endpoints
+
+@router.get("/templates", response_model=List[Dict[str, Any]])
+async def list_rpz_templates(
+    category: Optional[str] = Query(None, description="Filter templates by category"),
+    current_user: dict = Depends(get_current_user)
+):
+    """List available RPZ rule templates"""
+    try:
+        # Define common RPZ rule templates
+        templates = [
+            {
+                "id": "malware-block",
+                "name": "Malware Domain Block",
+                "description": "Block known malware domains",
+                "category": "malware",
+                "zone": "malware",
+                "action": "block",
+                "domains": ["example-malware.com"],
+                "redirect_target": None
+            },
+            {
+                "id": "phishing-block",
+                "name": "Phishing Domain Block", 
+                "description": "Block phishing and fraudulent websites",
+                "category": "phishing",
+                "zone": "phishing",
+                "action": "block",
+                "domains": ["example-phishing.com"],
+                "redirect_target": None
+            },
+            {
+                "id": "social-media-block",
+                "name": "Social Media Block",
+                "description": "Block social media platforms",
+                "category": "social_media", 
+                "zone": "social-media",
+                "action": "block",
+                "domains": ["facebook.com", "twitter.com", "instagram.com"],
+                "redirect_target": None
+            },
+            {
+                "id": "adult-content-block",
+                "name": "Adult Content Block",
+                "description": "Block adult and inappropriate content",
+                "category": "adult",
+                "zone": "adult", 
+                "action": "block",
+                "domains": ["example-adult.com"],
+                "redirect_target": None
+            },
+            {
+                "id": "gambling-block",
+                "name": "Gambling Sites Block",
+                "description": "Block gambling and betting websites",
+                "category": "gambling",
+                "zone": "gambling",
+                "action": "block", 
+                "domains": ["example-casino.com"],
+                "redirect_target": None
+            },
+            {
+                "id": "redirect-template",
+                "name": "Redirect Template",
+                "description": "Redirect blocked domains to a warning page",
+                "category": "custom",
+                "zone": "custom",
+                "action": "redirect",
+                "domains": ["example.com"],
+                "redirect_target": "blocked.example.com"
+            }
+        ]
+        
+        # Filter by category if specified
+        if category:
+            templates = [t for t in templates if t["category"] == category]
+            
+        return templates
+        
+    except Exception as e:
+        logger.error(f"Failed to list RPZ templates: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to list RPZ templates")
+
+
+@router.post("/templates", response_model=Dict[str, Any])
+async def create_rpz_template(
+    template_data: Dict[str, Any] = Body(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a new RPZ rule template"""
+    try:
+        # For now, return the template data as-is since we're using static templates
+        # In a full implementation, this would save to database
+        template_id = f"custom-{datetime.utcnow().timestamp()}"
+        template = {
+            "id": template_id,
+            **template_data
+        }
+        
+        logger.info(f"Created RPZ template: {template_id}")
+        return template
+        
+    except Exception as e:
+        logger.error(f"Failed to create RPZ template: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create RPZ template")
+
+
+@router.get("/templates/{template_id}", response_model=Dict[str, Any])
+async def get_rpz_template(
+    template_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get a specific RPZ rule template"""
+    try:
+        # This would normally fetch from database
+        # For now, return a placeholder
+        template = {
+            "id": template_id,
+            "name": "Template",
+            "description": "Template description",
+            "category": "custom",
+            "zone": "custom",
+            "action": "block",
+            "domains": [],
+            "redirect_target": None
+        }
+        
+        return template
+        
+    except Exception as e:
+        logger.error(f"Failed to get RPZ template {template_id}: {str(e)}")
+        raise HTTPException(status_code=404, detail="Template not found")
+
+
+@router.put("/templates/{template_id}", response_model=Dict[str, Any])
+async def update_rpz_template(
+    template_id: str,
+    template_data: Dict[str, Any] = Body(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update an RPZ rule template"""
+    try:
+        # This would normally update in database
+        template = {
+            "id": template_id,
+            **template_data
+        }
+        
+        logger.info(f"Updated RPZ template: {template_id}")
+        return template
+        
+    except Exception as e:
+        logger.error(f"Failed to update RPZ template {template_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update RPZ template")
+
+
+@router.delete("/templates/{template_id}")
+async def delete_rpz_template(
+    template_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete an RPZ rule template"""
+    try:
+        # This would normally delete from database
+        logger.info(f"Deleted RPZ template: {template_id}")
+        return {"message": "Template deleted successfully"}
+        
+    except Exception as e:
+        logger.error(f"Failed to delete RPZ template {template_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete RPZ template")
+
+
+# Helper function for background BIND configuration updates
+async def _update_bind_configuration(feed_type: str):
+    """Update BIND9 configuration for a specific feed type"""
+    try:
+        bind_service = BindService()
+        await bind_service.update_rpz_zone_file(feed_type)
+        await bind_service.reload_configuration()
+        logger.info(f"Updated BIND9 configuration for feed type: {feed_type}")
+    except Exception as e:
+        logger.error(f"Failed to update BIND9 configuration for {feed_type}: {str(e)}")

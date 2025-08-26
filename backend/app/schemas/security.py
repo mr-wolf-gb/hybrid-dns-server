@@ -2,7 +2,7 @@
 Security-related Pydantic schemas for the Hybrid DNS Server
 """
 
-from pydantic import BaseModel, Field, validator, model_validator, HttpUrl
+from pydantic import BaseModel, Field, validator, model_validator, field_serializer, HttpUrl
 from typing import Optional
 from datetime import datetime
 from enum import Enum
@@ -232,6 +232,28 @@ class RPZRule(RPZRuleBase):
 
     class Config:
         from_attributes = True
+    
+    @field_serializer('source')
+    def serialize_source(self, value):
+        """Ensure source has a default value"""
+        return value if value is not None else "manual"
+    
+    @field_serializer('description')
+    def serialize_description(self, value):
+        """Ensure description has a default value"""
+        return value if value is not None else ""
+    
+    @field_serializer('redirect_target')
+    def serialize_redirect_target(self, value):
+        """Ensure redirect_target has a default value"""
+        return value if value is not None else ""
+    
+    @field_serializer('rpz_zone')
+    def serialize_rpz_zone(self, value):
+        """Ensure rpz_zone has the full zone name format for frontend compatibility"""
+        if value and not value.startswith('rpz.'):
+            return f"rpz.{value}"
+        return value
 
 
 class RPZRuleImportResult(BaseModel):

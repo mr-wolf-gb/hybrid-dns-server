@@ -114,6 +114,8 @@ export interface RPZRule {
   category: 'malware' | 'phishing' | 'social_media' | 'adult' | 'gambling' | 'custom'
   redirect_target?: string
   is_active: boolean
+  source: string
+  description?: string
   created_at: string
   updated_at: string
 }
@@ -299,15 +301,15 @@ export interface ThreatFeed {
   id: number
   name: string
   url: string
-  category: string
-  enabled: boolean
-  auto_update: boolean
-  update_interval: number
-  last_update?: string
-  last_success?: string
-  rule_count: number
-  status: 'active' | 'error' | 'updating' | 'disabled'
-  error_message?: string
+  feed_type: string
+  format_type: string
+  update_frequency: number
+  description?: string
+  is_active: boolean
+  last_updated?: string
+  last_update_status?: 'success' | 'failed' | 'pending' | 'never'
+  last_update_error?: string
+  rules_count: number
   created_at: string
   updated_at: string
 }
@@ -315,10 +317,11 @@ export interface ThreatFeed {
 export interface ThreatFeedFormData {
   name: string
   url: string
-  category: string
-  enabled: boolean
-  auto_update: boolean
-  update_interval: number
+  feed_type: string
+  format_type: string
+  update_frequency: number
+  description?: string
+  is_active: boolean
 }
 
 export interface SecurityStatistics {
@@ -384,4 +387,192 @@ export interface ApiError {
   message: string
   details?: string[]
   code?: string
+}// Enhanced 
+RPZ and Threat Feed types
+export interface ThreatFeedStatus {
+  id: number
+  name: string
+  is_active: boolean
+  last_updated?: string
+  last_update_status?: 'success' | 'failed' | 'pending' | 'never'
+  last_update_error?: string
+  rules_count: number
+  next_update?: string
+}
+
+export interface ThreatFeedUpdateResult {
+  feed_id: number
+  status: 'success' | 'failed' | 'pending'
+  message: string
+  rules_added: number
+  rules_updated: number
+  rules_removed: number
+  error?: string
+}
+
+export interface BulkThreatFeedUpdateResult {
+  successful_updates: number
+  failed_updates: number
+  feed_results: ThreatFeedUpdateResult[]
+}
+
+export interface RPZStatistics {
+  total_rules: number
+  active_rules: number
+  inactive_rules: number
+  rules_by_action: Record<string, number>
+  rules_by_source: Record<string, number>
+  rules_by_category: Record<string, number>
+  zone?: string
+}
+
+export interface BlockedQueryReport {
+  query_results: BlockedQuery[]
+  summary: {
+    total_blocked: number
+    unique_domains: number
+    unique_clients: number
+    time_period: string
+  }
+  hourly_breakdown: Array<{
+    hour: string
+    blocked_count: number
+  }>
+  filters_applied: {
+    hours: number
+    category?: string
+    client_ip?: string
+    domain?: string
+  }
+}
+
+export interface BlockedQuery {
+  id: number
+  timestamp: string
+  client_ip: string
+  domain: string
+  category: string
+  action: string
+  rpz_zone: string
+}
+
+export interface ThreatDetectionReport {
+  report_period: {
+    days: number
+    start_date: string
+    end_date: string
+  }
+  executive_summary: {
+    total_threats_blocked: number
+    unique_threat_domains: number
+    threat_sources_identified: number
+    most_active_threat_category: string
+    average_daily_blocks: number
+    threat_detection_rate: number
+  }
+  threat_categories: Record<string, {
+    blocked_count: number
+    unique_domains: number
+    percentage: number
+  }>
+  feed_effectiveness: Array<{
+    feed_name: string
+    rules_count: number
+    blocks_generated: number
+    effectiveness_score: number
+  }>
+  threat_timeline: Array<{
+    date: string
+    blocked_count: number
+    categories: Record<string, number>
+  }>
+  top_threat_sources: Array<{
+    domain: string
+    block_count: number
+    category: string
+    first_seen: string
+    last_seen: string
+  }>
+}
+
+export interface RPZBulkUpdateRequest {
+  rule_ids: number[]
+  update_data: Partial<RPZRuleFormData>
+}
+
+export interface RPZBulkUpdateResult {
+  updated_count: number
+  error_count: number
+  errors: string[]
+}
+
+export interface RPZBulkDeleteRequest {
+  rule_ids: number[]
+}
+
+export interface RPZBulkDeleteResult {
+  deleted_count: number
+  error_count: number
+  errors: string[]
+}
+
+export interface RPZBulkCategorizeRequest {
+  rule_ids: number[]
+  new_category: string
+}
+
+export interface RPZBulkCategorizeResult {
+  updated_count: number
+  error_count: number
+  errors: string[]
+}
+
+export interface RPZCategoryStatus {
+  category: string
+  status: 'enabled' | 'disabled' | 'mixed' | 'empty'
+  total_rules: number
+  active_rules: number
+  inactive_rules: number
+  enabled_percentage: number
+}
+
+export interface RPZCategoryToggleResult {
+  category: string
+  updated_count: number
+  errors: string[]
+}
+
+export interface CustomThreatList {
+  id: number
+  name: string
+  description?: string
+  domains_count: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ThreatIntelligenceStats {
+  threat_feeds: {
+    total_feeds: number
+    active_feeds: number
+    feeds_by_type: Record<string, number>
+    total_rules_from_feeds: number
+    update_status_counts: Record<string, number>
+    feeds_due_for_update: number
+  }
+  rpz_rules: RPZStatistics
+  protection_coverage: {
+    total_domains_protected: number
+    active_threat_feeds: number
+    custom_lists: number
+    external_feeds: number
+  }
+  update_health: {
+    feeds_up_to_date: number
+    feeds_with_errors: number
+    feeds_never_updated: number
+    feeds_due_for_update: number
+  }
+  generated_at: string
 }

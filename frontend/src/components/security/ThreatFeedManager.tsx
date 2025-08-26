@@ -11,10 +11,15 @@ import {
   ExclamationTriangleIcon,
   CheckCircleIcon,
   XCircleIcon,
+  PlayIcon,
+  PauseIcon,
+  BeakerIcon,
+  ChartBarIcon,
 } from '@heroicons/react/24/outline'
 import { rpzService } from '@/services/api'
 import { Modal, Button, Input, Select, Card, Badge, Table } from '@/components/ui'
 import { formatDateTime, formatRelativeTime } from '@/utils'
+import { ThreatFeed, ThreatFeedFormData } from '@/types'
 import { toast } from 'react-toastify'
 
 interface ThreatFeedManagerProps {
@@ -23,29 +28,14 @@ interface ThreatFeedManagerProps {
   onSuccess: () => void
 }
 
-interface ThreatFeed {
-  id: number
-  name: string
-  url: string
-  category: string
-  enabled: boolean
-  auto_update: boolean
-  update_interval: number
-  last_update?: string
-  last_success?: string
-  rule_count: number
-  status: 'active' | 'error' | 'updating' | 'disabled'
-  error_message?: string
-  created_at: string
-}
-
 interface FeedFormData {
   name: string
   url: string
-  category: string
-  enabled: boolean
-  auto_update: boolean
-  update_interval: number
+  feed_type: string
+  format_type: string
+  update_frequency: number
+  description?: string
+  is_active: boolean
 }
 
 interface CustomListFormData {
@@ -99,10 +89,11 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
     defaultValues: {
       name: '',
       url: '',
-      category: 'malware',
-      enabled: true,
-      auto_update: true,
-      update_interval: 24,
+      feed_type: 'malware',
+      format_type: 'domains',
+      update_frequency: 86400, // 24 hours in seconds
+      description: '',
+      is_active: true,
     },
   })
 
@@ -200,14 +191,24 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
 
   // Toggle feed mutation
   const toggleFeedMutation = useMutation({
-    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) =>
-      rpzService.toggleThreatFeed(id, enabled),
+    mutationFn: (id: number) => rpzService.toggleThreatFeed(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threat-feeds'] })
       toast.success('Threat feed status updated')
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.detail || 'Failed to update threat feed status')
+    },
+  })
+
+  // Test feed mutation
+  const testFeedMutation = useMutation({
+    mutationFn: rpzService.testThreatFeed,
+    onSuccess: (response) => {
+      toast.success('Feed test successful')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Feed test failed')
     },
   })
 
@@ -247,10 +248,11 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
     setSelectedFeed(feed)
     setValue('name', feed.name)
     setValue('url', feed.url)
-    setValue('category', feed.category)
-    setValue('enabled', feed.enabled)
-    setValue('auto_update', feed.auto_update)
-    setValue('update_interval', feed.update_interval)
+    setValue('feed_type', feed.feed_type)
+    setValue('format_type', feed.format_type)
+    setValue('update_frequency', feed.update_frequency)
+    setValue('description', feed.description || '')
+    setValue('is_active', feed.is_active)
     setIsFormOpen(true)
   }
 
@@ -265,7 +267,7 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
   }
 
   const handleToggleFeed = (feed: ThreatFeed) => {
-    toggleFeedMutation.mutate({ id: feed.id, enabled: !feed.enabled })
+    toggleFeedMutation.mutate(feed.id)
   }
 
   const onSubmit = (data: FeedFormData) => {
@@ -374,11 +376,11 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
       ),
     },
     {
-      key: 'category',
-      header: 'Category',
+      key: 'feed_type',
+      header: 'Type',
       render: (feed: ThreatFeed) => (
         <Badge variant="info">
-          {feed.category.replace('_', ' ')}
+          {feed.feed_type.replace('_', ' ')}
         </Badge>
       ),
     },
@@ -387,15 +389,15 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
       header: 'Status',
       render: (feed: ThreatFeed) => (
         <div className="flex items-center space-x-2">
-          <Badge variant={getStatusColor(feed.status)}>
+          <Badge variant={getStatusColor(feed.last_update_status || 'never')}>
             <div className="flex items-center space-x-1">
-              {getStatusIcon(feed.status)}
-              <span>{feed.status}</span>
+              {getStatusIcon(feed.last_update_status || 'never')}
+              <span>{feed.last_update_status || 'never'}</span>
             </div>
           </Badge>
-          {feed.enabled && (
+          {feed.is_active && (
             <Badge variant="success" size="sm">
-              Enabled
+              Active
             </Badge>
           )}
         </div>
