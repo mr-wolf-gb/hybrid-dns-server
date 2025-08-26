@@ -197,7 +197,7 @@ const Layout: React.FC = () => {
         {/* Page content */}
         <main className="flex-1 relative overflow-y-auto focus:outline-none bg-gray-50 dark:bg-gray-900">
           <div className="py-6 flex-1 flex flex-col">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 flex-1">
+            <div className="px-4 sm:px-6 md:px-8 flex-1">
               <Outlet />
             </div>
           </div>

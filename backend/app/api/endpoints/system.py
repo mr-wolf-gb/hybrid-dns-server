@@ -62,6 +62,22 @@ async def get_bind_service_status(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get BIND status: {str(e)}")
 
+@router.get("/bind/installation")
+async def check_bind9_installation(
+    db: Session = Depends(get_database_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """Check BIND9 installation status and provide guidance"""
+    try:
+        bind_service = BindService(db)
+        installation_status = await bind_service.check_bind9_installation()
+        return {
+            "data": installation_status,
+            "success": True
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to check BIND9 installation: {str(e)}")
+
 @router.post("/bind/reload")
 async def reload_bind_configuration(
     db: Session = Depends(get_database_session),

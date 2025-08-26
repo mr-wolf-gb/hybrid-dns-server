@@ -3,6 +3,7 @@ FastAPI dependencies for authentication and user context
 """
 
 from typing import Dict, Any, Optional
+from datetime import datetime
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +13,7 @@ from .database import get_database_session
 from .security import verify_token, get_client_ip
 from .auth_context import set_current_user, clear_current_user
 from ..models.auth import User
+from ..schemas.auth import UserInfo
 
 security = HTTPBearer()
 
@@ -85,6 +87,56 @@ async def get_current_user(
 ) -> Dict[str, Any]:
     """Get current user (main dependency to use in endpoints)"""
     return user_context
+
+
+async def get_current_user_object(
+    payload: Dict[str, Any] = Depends(get_current_user_payload),
+    db: AsyncSession = Depends(get_database_session)
+) -> User:
+    """Get current user as User model object from database"""
+    username = payload.get("sub")
+    user_id = payload.get("user_id")
+    
+    if not username or not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload"
+        )
+    
+    # Get user from database (async)
+    result = await db.execute(
+        select(User).where(User.username == username, User.id == user_id)
+    )
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is disabled"
+        )
+    
+    return user
+
+
+async def get_current_user_info(
+    user: User = Depends(get_current_user_object)
+) -> UserInfo:
+    """Get current user as UserInfo schema object"""
+    return UserInfo(
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        is_active=user.is_active,
+        is_superuser=user.is_superuser,
+        two_factor_enabled=user.two_factor_enabled,
+        last_login=user.last_login,
+        created_at=user.created_at
+    )
 
 
 async def get_current_superuser(

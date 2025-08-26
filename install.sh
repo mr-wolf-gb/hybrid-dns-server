@@ -332,6 +332,21 @@ install_dependencies() {
     # BIND9 and DNS tools
     silent_exec "apt-get install -y -qq bind9 bind9utils bind9-doc dnsutils" "BIND9 installation"
     
+    # Verify BIND9 installation
+    if ! command -v named &> /dev/null; then
+        error "BIND9 named daemon installation failed"
+    fi
+    if ! command -v rndc &> /dev/null; then
+        error "BIND9 rndc tool installation failed"
+    fi
+    if ! command -v named-checkconf &> /dev/null; then
+        error "BIND9 named-checkconf tool installation failed"
+    fi
+    if ! command -v named-checkzone &> /dev/null; then
+        error "BIND9 named-checkzone tool installation failed"
+    fi
+    log "BIND9 version: $(named -v 2>&1 | head -1)"
+    
     # PostgreSQL
     silent_exec "apt-get install -y -qq postgresql postgresql-contrib postgresql-client libpq-dev postgresql-server-dev-all" "PostgreSQL installation"
     
@@ -661,10 +676,10 @@ configure_bind9() {
     silent_exec "find /etc/bind/rpz -name 'db.*' -exec sh -c 'echo \"\" >> \"\$1\"' _ {} \\;" "RPZ files newline fix"
     
     # Set comprehensive permissions
-    silent_exec "chown -R root:bind /etc/bind/" "BIND9 root ownership"
-    silent_exec "chown -R bind:bind /etc/bind/zones" "Zone files ownership"
-    silent_exec "chown -R bind:bind /etc/bind/rpz" "RPZ files ownership"
-    silent_exec "chown -R bind:bind /var/log/bind" "BIND9 log ownership"
+    silent_exec "chown -R '$SERVICE_USER:bind' /etc/bind/" "BIND9 root ownership"
+    silent_exec "chown -R '$SERVICE_USER:bind' /etc/bind/zones" "Zone files ownership"
+    silent_exec "chown -R '$SERVICE_USER:bind' /etc/bind/rpz" "RPZ files ownership"
+    silent_exec "chown -R '$SERVICE_USER:bind' /var/log/bind" "BIND9 log ownership"
     silent_exec "chown -R '$SERVICE_USER:bind' /etc/bind/backups" "BIND9 backup ownership"
     
     # Set directory permissions
@@ -777,6 +792,15 @@ EOF
         echo 'include "/etc/bind/zones.conf";' >> /etc/bind/named.conf
     fi
     
+    # Create symlinks for BIND9 binaries to ensure they're in PATH
+    log "Creating BIND9 binary symlinks..."
+    for binary in named rndc named-checkconf named-checkzone; do
+        if [[ -f /usr/sbin/$binary ]] && [[ ! -f /usr/bin/$binary ]]; then
+            ln -sf /usr/sbin/$binary /usr/bin/$binary
+            log "Created symlink for $binary"
+        fi
+    done
+    
     # Test configuration
     if named-checkconf >> "$LOG_FILE" 2>&1; then
         success "BIND9 configuration is valid"
@@ -849,6 +873,28 @@ EOF
         journalctl -u $BIND_SERVICE --no-pager -n 10 >> "$LOG_FILE" 2>&1
         error "BIND9 failed to start - check $LOG_FILE for details"
     fi
+    
+    # Create RPZ policy configuration file
+    info "Creating RPZ policy configuration..."
+    cat > /etc/bind/rpz-policy.conf << 'EOF'
+// Response Policy Zone (RPZ) Configuration
+// Generated automatically by Hybrid DNS Server Installation
+// This file will be managed by the web interface
+
+response-policy {
+    // RPZ zones will be added here by the web interface
+    // Default empty configuration
+} qname-wait-recurse no;
+
+// RPZ Configuration Summary:
+// Enabled: false (will be enabled when policies are configured)
+// Break DNSSEC: false
+// Max Policy TTL: 300
+// QName Wait Recurse: false
+EOF
+    
+    silent_exec "chown root:bind /etc/bind/rpz-policy.conf" "RPZ policy file ownership"
+    silent_exec "chmod 664 /etc/bind/rpz-policy.conf" "RPZ policy file permissions"
     
     # Test DNS resolution
     log "Testing DNS resolution..."

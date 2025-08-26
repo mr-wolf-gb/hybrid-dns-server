@@ -51,6 +51,99 @@ def check_api_docs(base_url: str) -> bool:
     except Exception:
         return False
 
+def check_bind9_installation() -> dict:
+    """Check BIND9 installation and configuration"""
+    results = {
+        "bind9_service": False,
+        "bind9_commands": {},
+        "config_files": {},
+        "rpz_policy_file": False,
+        "dns_resolution": False
+    }
+    
+    # Check BIND9 service
+    results["bind9_service"] = check_service_status("bind9")
+    
+    # Check BIND9 commands
+    commands = ["named", "rndc", "named-checkconf", "named-checkzone"]
+    for cmd in commands:
+        try:
+            result = subprocess.run(["which", cmd], capture_output=True, text=True)
+            results["bind9_commands"][cmd] = result.returncode == 0
+        except Exception:
+            results["bind9_commands"][cmd] = False
+    
+    # Check configuration files
+    config_files = [
+        "/etc/bind/named.conf",
+        "/etc/bind/named.conf.options",
+        "/etc/bind/named.conf.local",
+        "/etc/bind/rpz-policy.conf"
+    ]
+    
+    for config_file in config_files:
+        results["config_files"][config_file] = Path(config_file).exists()
+    
+    # Check RPZ policy file specifically
+    results["rpz_policy_file"] = Path("/etc/bind/rpz-policy.conf").exists()
+    
+    # Test DNS resolution
+    try:
+        result = subprocess.run(
+            ["dig", "@localhost", "google.com", "+short"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        results["dns_resolution"] = result.returncode == 0 and result.stdout.strip()
+    except Exception:
+        results["dns_resolution"] = False
+    
+    return results
+
+def print_bind9_status(bind9_results: dict):
+    """Print BIND9 status in a readable format"""
+    print("\n=== BIND9 Status ===")
+    
+    # Service status
+    status = "✓ Running" if bind9_results["bind9_service"] else "✗ Not running"
+    print(f"BIND9 Service: {status}")
+    
+    # Commands
+    print("\nBIND9 Commands:")
+    for cmd, available in bind9_results["bind9_commands"].items():
+        status = "✓" if available else "✗"
+        print(f"  {status} {cmd}")
+    
+    # Configuration files
+    print("\nConfiguration Files:")
+    for config_file, exists in bind9_results["config_files"].items():
+        status = "✓" if exists else "✗"
+        print(f"  {status} {config_file}")
+    
+    # DNS resolution test
+    dns_status = "✓ Working" if bind9_results["dns_resolution"] else "✗ Failed"
+    print(f"\nDNS Resolution Test: {dns_status}")
+    
+    # Overall assessment
+    missing_commands = sum(1 for available in bind9_results["bind9_commands"].values() if not available)
+    missing_configs = sum(1 for exists in bind9_results["config_files"].values() if not exists)
+    
+    if missing_commands > 0 or missing_configs > 0 or not bind9_results["bind9_service"]:
+        print(f"\n⚠ BIND9 Issues Detected:")
+        if missing_commands > 0:
+            print(f"  - {missing_commands} BIND9 commands missing")
+        if missing_configs > 0:
+            print(f"  - {missing_configs} configuration files missing")
+        if not bind9_results["bind9_service"]:
+            print("  - BIND9 service not running")
+        print("\n  Run: sudo apt install bind9 bind9utils bind9-doc dnsutils")
+        print("  Then: sudo systemctl enable bind9 && sudo systemctl start bind9")
+    else:
+        print("\n✓ BIND9 is properly installed and configured")
+    except Exception:
+        return False
+
 def check_bind9_config() -> bool:
     """Check BIND9 configuration"""
     try:
@@ -103,6 +196,10 @@ def main():
         status = check_port_listening(port)
         icon = "✅" if status else "❌"
         print(f"  {icon} Port {port} ({description}): {'Listening' if status else 'Not listening'}")
+    
+    # Check BIND9 installation
+    bind9_results = check_bind9_installation()
+    print_bind9_status(bind9_results)
     
     # Check API health
     print("\n🏥 API Health:")

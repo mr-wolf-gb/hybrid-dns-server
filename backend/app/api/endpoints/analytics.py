@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_database_session
-from ...core.dependencies import get_current_user
+from ...core.dependencies import get_current_user, get_current_user_info
 from ...schemas.auth import UserInfo
 from ...services.monitoring_service import MonitoringService
 from ...core.logging_config import get_logger
@@ -420,7 +420,7 @@ async def get_threat_analytics(
 
 @router.post("/cache/clear")
 async def clear_analytics_cache(
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user_info)
 ):
     """Clear analytics cache to force refresh"""
     try:
@@ -447,7 +447,7 @@ async def export_analytics_data(
     hours: int = Query(24, ge=1, le=168, description="Hours of data to export"),
     format: str = Query("json", regex="^(json|csv)$", description="Export format"),
     include_raw_logs: bool = Query(False, description="Include raw DNS logs"),
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user_info)
 ):
     """Export analytics data in various formats"""
     try:

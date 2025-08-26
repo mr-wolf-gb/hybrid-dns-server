@@ -516,6 +516,38 @@ tail -f /tmp/hybrid-dns-install.log
 sudo -u dns-server bash -c "cd /opt/hybrid-dns-server/backend && source venv/bin/activate && python -c 'from app.core.database import check_database_health; import asyncio; print(asyncio.run(check_database_health()))'"
 ```
 
+**Settings Page Errors (BIND9 Commands Not Found)**
+```bash
+# Check if BIND9 is properly installed
+sudo apt update
+sudo apt install -y bind9 bind9utils bind9-doc dnsutils
+
+# Verify BIND9 commands are available
+which named rndc named-checkconf named-checkzone
+
+# Check if RPZ policy file exists
+ls -la /etc/bind/rpz-policy.conf
+
+# Create missing RPZ policy file if needed
+sudo tee /etc/bind/rpz-policy.conf << 'EOF'
+// Response Policy Zone (RPZ) Configuration
+response-policy {
+    // Empty configuration - will be populated by web interface
+} qname-wait-recurse no;
+EOF
+
+# Set proper permissions
+sudo chown root:bind /etc/bind/rpz-policy.conf
+sudo chmod 644 /etc/bind/rpz-policy.conf
+
+# Restart services
+sudo systemctl restart bind9
+sudo systemctl restart hybrid-dns-backend
+
+# Verify installation
+python3 tools/verify_installation.py
+```
+
 **Web Interface Not Accessible**
 ```bash
 # Check backend service

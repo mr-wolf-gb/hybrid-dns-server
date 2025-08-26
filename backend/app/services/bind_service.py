@@ -80,9 +80,125 @@ class BindService:
             'has_named_checkconf': False,
             'has_named_checkzone': False,
             'has_rndc': False,
+            'has_named': False,
             'has_lsof': False,
             'bind_service_available': False
         }
+        
+        # Cache for binary paths
+        self._binary_paths = {}
+    
+    async def check_bind9_installation(self) -> Dict:
+        """Check if BIND9 is properly installed and provide installation guidance"""
+        logger = get_bind_logger()
+        
+        required_commands = {
+            'named': 'BIND9 DNS server daemon',
+            'rndc': 'BIND9 remote name daemon control utility',
+            'named-checkconf': 'BIND9 configuration file syntax checker',
+            'named-checkzone': 'BIND9 zone file syntax checker'
+        }
+        
+        missing_commands = []
+        available_commands = []
+        
+        for command, description in required_commands.items():
+            if await self._check_command_availability(command):
+                available_commands.append(f"{command}: {description}")
+            else:
+                missing_commands.append(f"{command}: {description}")
+        
+        # Check if RPZ policy file exists
+        rpz_policy_path = self.config_dir / "rpz-policy.conf"
+        rpz_policy_exists = rpz_policy_path.exists()
+        
+        # Check if BIND9 service is registered
+        has_systemctl = await self._check_command_availability("systemctl")
+        service_registered = False
+        if has_systemctl:
+            result = await self._run_command(["systemctl", "list-unit-files", self.service_name])
+            service_registered = result["returncode"] == 0 and self.service_name in result["stdout"]
+        
+        installation_status = {
+            "is_fully_installed": len(missing_commands) == 0 and rpz_policy_exists,
+            "missing_commands": missing_commands,
+            "available_commands": available_commands,
+            "rpz_policy_exists": rpz_policy_exists,
+            "service_registered": service_registered,
+            "installation_instructions": self._get_installation_instructions(missing_commands, rpz_policy_exists)
+        }
+        
+        if missing_commands:
+            logger.warning(f"BIND9 installation incomplete. Missing: {', '.join([cmd.split(':')[0] for cmd in missing_commands])}")
+        
+        return installation_status
+    
+    def _get_installation_instructions(self, missing_commands: List[str], rpz_policy_exists: bool) -> Dict:
+        """Generate installation instructions based on what's missing"""
+        instructions = {
+            "summary": "BIND9 installation is complete" if not missing_commands and rpz_policy_exists else "BIND9 installation needs attention",
+            "steps": []
+        }
+        
+        if missing_commands:
+            instructions["steps"].extend([
+                "Update package list: sudo apt update",
+                "Install BIND9 packages: sudo apt install -y bind9 bind9utils bind9-doc dnsutils",
+                "Enable BIND9 service: sudo systemctl enable bind9",
+                "Start BIND9 service: sudo systemctl start bind9"
+            ])
+        
+        if not rpz_policy_exists:
+            instructions["steps"].append("Create RPZ policy file: The system will create this automatically when you configure security policies")
+        
+        if missing_commands or not rpz_policy_exists:
+            instructions["steps"].append("Restart backend service: sudo systemctl restart hybrid-dns-backend")
+        
+        return instructions
+    
+    async def _ensure_rpz_policy_file_exists(self) -> bool:
+        """Ensure RPZ policy configuration file exists, create if missing"""
+        logger = get_bind_logger()
+        
+        rpz_policy_path = self.config_dir / "rpz-policy.conf"
+        
+        if not rpz_policy_path.exists():
+            logger.info("RPZ policy file missing, creating default configuration")
+            try:
+                # Create the config directory if it doesn't exist
+                self.config_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Create default RPZ policy configuration
+                default_config = """// Response Policy Zone (RPZ) Configuration
+// Generated automatically by Hybrid DNS Server
+// This file will be managed by the web interface
+
+response-policy {
+    // RPZ zones will be added here by the web interface
+    // Default empty configuration
+} qname-wait-recurse no;
+
+// RPZ Configuration Summary:
+// Enabled: false (will be enabled when policies are configured)
+// Break DNSSEC: false
+// Max Policy TTL: 300
+// QName Wait Recurse: false
+"""
+                
+                rpz_policy_path.write_text(default_config, encoding='utf-8')
+                
+                # Set proper permissions
+                import stat
+                rpz_policy_path.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH)
+                
+                logger.info(f"Created default RPZ policy file: {rpz_policy_path}")
+                return True
+                
+            except Exception as e:
+                logger.error(f"Failed to create RPZ policy file: {e}")
+                return False
+        
+        return True
     
     async def _check_command_availability(self, command_name: str) -> bool:
         """Check if a command is available on the system"""
@@ -116,6 +232,37 @@ class BindService:
         
         self._command_cache[command_name] = False
         return False
+    
+    async def _find_binary_path(self, binary_name: str) -> Optional[str]:
+        """Find the full path to a binary, caching the result"""
+        if binary_name in self._binary_paths:
+            return self._binary_paths[binary_name]
+        
+        # Common locations for BIND9 binaries
+        locations = [
+            f"/usr/sbin/{binary_name}",
+            f"/usr/bin/{binary_name}",
+            f"/sbin/{binary_name}",
+            f"/bin/{binary_name}",
+            binary_name  # Let system find it
+        ]
+        
+        for location in locations:
+            if location == binary_name:
+                # Use 'which' to check if command exists in PATH
+                result = await self._run_command_simple(["which", binary_name])
+                if result["returncode"] == 0:
+                    path = result["stdout"].strip()
+                    self._binary_paths[binary_name] = path
+                    return path
+            else:
+                # Check if file exists
+                if os.path.exists(location) and os.access(location, os.X_OK):
+                    self._binary_paths[binary_name] = location
+                    return location
+        
+        self._binary_paths[binary_name] = None
+        return None
     
     async def _run_command_simple(self, command: List[str], timeout: int = 10) -> Dict:
         """Simple command runner without path resolution for basic checks"""
@@ -201,7 +348,7 @@ class BindService:
             
             # Check if service is running
             is_active = False
-            uptime = "unknown"
+            uptime = 0
             
             if has_systemctl:
                 result = await self._run_command(["systemctl", "is-active", self.service_name])
@@ -214,15 +361,31 @@ class BindService:
                     ])
                     if uptime_result["returncode"] == 0:
                         # Parse uptime from systemd output
-                        uptime = uptime_result["stdout"].strip()
+                        timestamp_line = uptime_result["stdout"].strip()
+                        if "ActiveEnterTimestamp=" in timestamp_line:
+                            try:
+                                # Extract timestamp and calculate uptime in seconds
+                                timestamp_str = timestamp_line.split("=", 1)[1]
+                                if timestamp_str and timestamp_str != "n/a":
+                                    from datetime import datetime
+                                    # Parse systemd timestamp format
+                                    start_time = datetime.strptime(timestamp_str.split()[0] + " " + timestamp_str.split()[1], "%Y-%m-%d %H:%M:%S")
+                                    uptime = int((datetime.now() - start_time).total_seconds())
+                            except Exception as e:
+                                logger = get_bind_logger()
+                                logger.debug(f"Failed to parse uptime: {e}")
+                                uptime = 0
             else:
                 # Fallback: check if BIND is listening on port 53
                 port_check = await self._check_bind_port()
                 is_active = port_check["listening"]
-                uptime = "systemctl not available"
+                uptime = 0
             
             # Check configuration validity (with graceful degradation)
             config_valid = await self.validate_configuration()
+            
+            # Auto-create RPZ policy file if missing
+            await self._ensure_rpz_policy_file_exists()
             
             return {
                 "status": "active" if is_active else "inactive",
@@ -242,7 +405,7 @@ class BindService:
             logger.error(f"Failed to get BIND service status: {e}")
             return {
                 "status": "unknown",
-                "uptime": "unknown",
+                "uptime": 0,
                 "version": "unknown",
                 "config_valid": False,
                 "zones_loaded": 0,
@@ -293,20 +456,26 @@ class BindService:
         """Reload BIND9 configuration"""
         logger = get_bind_logger()
         try:
-            # First try rndc reload with full path
-            result = await self._run_command(["/usr/sbin/rndc", "reload"])
+            # Find rndc binary
+            rndc_path = await self._find_binary_path("rndc")
             
-            if result["returncode"] == 127:  # Command not found
-                logger.warning("rndc command not found, trying systemctl restart")
-                # Fallback to systemctl restart
-                result = await self._run_command(["systemctl", "restart", self.service_name])
+            if rndc_path:
+                result = await self._run_command([rndc_path, "reload"])
+                if result["returncode"] == 0:
+                    logger.info("BIND9 configuration reloaded successfully")
+                    return True
+                else:
+                    logger.error(f"rndc reload failed: {result['stderr']}")
             
+            # Fallback to systemctl restart
+            logger.warning("rndc command not found or failed, trying systemctl restart")
+            result = await self._run_command(["systemctl", "restart", self.service_name])
             success = result["returncode"] == 0
             
             if success:
-                logger.info("BIND9 configuration reloaded successfully")
+                logger.info("BIND9 service restarted successfully as fallback")
             else:
-                logger.error(f"Failed to reload BIND9 configuration: {result['stderr']}")
+                logger.error(f"Failed to restart BIND9 service: {result['stderr']}")
             
             return success
             
@@ -1666,15 +1835,20 @@ class BindService:
         """Flush DNS cache"""
         logger = get_bind_logger()
         try:
-            result = await self._run_command(["/usr/sbin/rndc", "flush"])
-            success = result["returncode"] == 0
+            # Find rndc binary
+            rndc_path = await self._find_binary_path("rndc")
             
-            if success:
-                logger.info("DNS cache flushed successfully")
+            if rndc_path:
+                result = await self._run_command([rndc_path, "flush"])
+                if result["returncode"] == 0:
+                    logger.info("DNS cache flushed successfully")
+                    return True
+                else:
+                    logger.error(f"Failed to flush DNS cache: {result['stderr']}")
             else:
-                logger.error(f"Failed to flush DNS cache: {result['stderr']}")
+                logger.warning("rndc command not found - cannot flush cache")
             
-            return success
+            return False
             
         except Exception as e:
             logger.error(f"Failed to flush DNS cache: {e}")
@@ -1747,11 +1921,15 @@ class BindService:
     async def _get_bind_version(self) -> str:
         """Get BIND9 version"""
         try:
-            result = await self._run_command(["named", "-v"])
-            if result["returncode"] == 0:
-                # Parse version from output
-                version_line = result["stdout"].strip()
-                return version_line
+            # Find named binary
+            named_path = await self._find_binary_path("named")
+            
+            if named_path:
+                result = await self._run_command([named_path, "-v"])
+                if result["returncode"] == 0:
+                    # Parse version from output
+                    version_line = result["stdout"].strip()
+                    return version_line
             
             return "unknown"
             

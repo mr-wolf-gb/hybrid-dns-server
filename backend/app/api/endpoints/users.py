@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional
 import json
 
 from ...core.database import get_database_session
-from ...core.dependencies import get_current_user
+from ...core.dependencies import get_current_user, get_current_user_object
 from ...models.auth import User
 from ...schemas.auth import UserInfo
 from ...core.logging_config import get_logger
@@ -34,7 +34,7 @@ async def list_users():
 
 @router.get("/notification-preferences")
 async def get_notification_preferences(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_object),
     db: AsyncSession = Depends(get_database_session)
 ):
     """Get user's notification preferences"""
@@ -57,7 +57,7 @@ async def get_notification_preferences(
 @router.put("/notification-preferences")
 async def update_notification_preferences(
     preferences: Dict[str, Any],
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_object),
     db: AsyncSession = Depends(get_database_session)
 ):
     """Update user's notification preferences"""
@@ -100,7 +100,7 @@ async def update_notification_preferences(
         
         # Mark the metadata as modified for SQLAlchemy
         from sqlalchemy.orm.attributes import flag_modified
-        flag_modified(current_user, "metadata")
+        flag_modified(current_user, "user_metadata")
         
         await db.commit()
         await db.refresh(current_user)

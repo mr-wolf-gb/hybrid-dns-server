@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
 from ...core.database import get_database_session
-from ...core.dependencies import get_current_user
+from ...core.dependencies import get_current_user, get_current_user_info
 from ...services.event_service import get_event_service
 from ...models.events import Event, EventSubscription, EventReplay
 from ...schemas.auth import UserInfo
@@ -135,7 +135,7 @@ class EventStatistics(BaseModel):
 @router.post("/emit", response_model=EventResponse)
 async def emit_event(
     event_data: EventCreate,
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user_info)
 ):
     """Emit a new event"""
     event_service = get_event_service()
@@ -171,7 +171,7 @@ async def get_events(
     end_time: Optional[datetime] = Query(None, description="End time filter"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of events to return"),
     offset: int = Query(0, ge=0, description="Number of events to skip"),
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user_info)
 ):
     """Get events with filtering"""
     event_service = get_event_service()
@@ -199,7 +199,7 @@ async def get_events(
 @router.post("/subscriptions", response_model=SubscriptionResponse)
 async def create_subscription(
     subscription_data: SubscriptionCreate,
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user_info)
 ):
     """Create a new event subscription"""
     event_service = get_event_service()
@@ -240,7 +240,7 @@ async def create_subscription(
 
 @router.get("/subscriptions", response_model=List[SubscriptionResponse])
 async def get_user_subscriptions(
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user_info)
 ):
     """Get all subscriptions for the current user"""
     event_service = get_event_service()
@@ -276,7 +276,7 @@ async def get_user_subscriptions(
 async def update_subscription(
     subscription_id: str,
     subscription_data: SubscriptionUpdate,
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user_info)
 ):
     """Update an event subscription"""
     event_service = get_event_service()
@@ -322,7 +322,7 @@ async def update_subscription(
 @router.delete("/subscriptions/{subscription_id}")
 async def delete_subscription(
     subscription_id: str,
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user_info)
 ):
     """Delete an event subscription"""
     event_service = get_event_service()
@@ -350,7 +350,7 @@ async def delete_subscription(
 @router.post("/filters")
 async def create_event_filter(
     filter_data: EventFilterCreate,
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user_info)
 ):
     """Create a reusable event filter"""
     event_service = get_event_service()
@@ -382,7 +382,7 @@ async def create_event_filter(
 @router.post("/replay", response_model=EventReplayResponse)
 async def start_event_replay(
     replay_data: EventReplayCreate,
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user_info)
 ):
     """Start an event replay session"""
     event_service = get_event_service()
@@ -436,7 +436,7 @@ async def start_event_replay(
 @router.get("/replay/{replay_id}", response_model=EventReplayResponse)
 async def get_replay_status(
     replay_id: str,
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user_info)
 ):
     """Get the status of an event replay"""
     event_service = get_event_service()
@@ -480,7 +480,7 @@ async def get_replay_status(
 @router.post("/replay/{replay_id}/stop")
 async def stop_event_replay(
     replay_id: str,
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user_info)
 ):
     """Stop an active event replay"""
     event_service = get_event_service()
@@ -507,7 +507,7 @@ async def stop_event_replay(
 
 @router.get("/statistics", response_model=EventStatistics)
 async def get_event_statistics(
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user_info)
 ):
     """Get event broadcasting statistics"""
     if not current_user.is_superuser:
@@ -525,7 +525,7 @@ async def get_event_statistics(
 
 @router.post("/service/start")
 async def start_event_service(
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user_info)
 ):
     """Start the event broadcasting service"""
     if not current_user.is_superuser:
@@ -543,7 +543,7 @@ async def start_event_service(
 
 @router.post("/service/stop")
 async def stop_event_service(
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user_info)
 ):
     """Stop the event broadcasting service"""
     if not current_user.is_superuser:
