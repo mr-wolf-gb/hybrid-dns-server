@@ -58,7 +58,7 @@ class ThreatFeedService(BaseService[ThreatFeed]):
         feed_data.setdefault('is_active', True)
         feed_data.setdefault('update_frequency', 3600)  # 1 hour default
         feed_data.setdefault('rules_count', 0)
-        feed_data.setdefault('last_update_status', UpdateStatus.NEVER)
+        feed_data.setdefault('last_update_status', None)  # NULL for new feeds
         
         try:
             # Check for duplicate name
@@ -66,8 +66,11 @@ class ThreatFeedService(BaseService[ThreatFeed]):
             if existing_feed:
                 raise ThreatFeedException(f"Threat feed with name '{feed_data['name']}' already exists")
             
+            # Remove fields that are not part of the model
+            model_data = {k: v for k, v in feed_data.items() if k not in ['category']}
+            
             # Create the feed
-            feed = await self.create(feed_data, track_action=True)
+            feed = await self.create(model_data, track_action=True)
             
             # Emit threat feed creation event
             await self._emit_threat_feed_event(
@@ -581,7 +584,7 @@ class ThreatFeedService(BaseService[ThreatFeed]):
             from pathlib import Path
             
             # Get the path to the default feeds file
-            current_dir = Path(__file__).parent.parent
+            current_dir = Path(__file__).parent.parent.parent
             feeds_file = current_dir / "data" / "default_threat_feeds.json"
             
             if not feeds_file.exists():

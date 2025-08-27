@@ -1,254 +1,253 @@
 {
-    "default_feeds": [
-      {
-        "name": "Phishing Army Extended",
-        "url": "https://phishing.army/download/phishing_army_blocklist_extended.txt",
-        "feed_type": "phishing",
-        "format_type": "domains",
-        "description": "Extended phishing domain blocklist from Phishing Army",
-        "update_frequency": 43200,
-        "category": "phishing",
-        "is_active": true
-      },
-      {
-        "name": "URLVoid Malicious URLs",
-        "url": "https://www.urlvoid.com/download/malicious-urls.txt",
-        "feed_type": "malware",
-        "format_type": "urls",
-        "description": "Malicious URLs detected by URLVoid scanning engines",
-        "update_frequency": 21600,
-        "category": "malware",
-        "is_active": false
-      },
-      {
-        "name": "Abuse.ch Feodo Tracker",
-        "url": "https://feodotracker.abuse.ch/downloads/ipblocklist.txt",
-        "feed_type": "malware",
-        "format_type": "domains",
-        "description": "Feodo Tracker botnet C2 domains from abuse.ch",
-        "update_frequency": 3600,
-        "category": "botnet",
-        "is_active": true
-      },
-      {
-        "name": "Spam404 Scam Domains",
-        "url": "https://raw.githubusercontent.com/Spam404/lists/master/main-blacklist.txt",
-        "feed_type": "spam",
-        "format_type": "domains",
-        "description": "Scam and spam domains from Spam404 project",
-        "update_frequency": 86400,
-        "category": "spam",
-        "is_active": true
-      },
-      {
-        "name": "OpenPhish Feed",
-        "url": "https://openphish.com/feed.txt",
-        "feed_type": "phishing",
-        "format_type": "urls",
-        "description": "Real-time phishing URL feed from OpenPhish",
-        "update_frequency": 3600,
-        "category": "phishing",
-        "is_active": true
-      },
-      {
-        "name": "Abuse.ch ThreatFox",
-        "url": "https://threatfox.abuse.ch/downloads/ipblocklist_recommended.txt",
-        "feed_type": "malware",
-        "format_type": "ips",
-        "description": "Recommended malware IP blocklist from ThreatFox (abuse.ch)",
-        "update_frequency": 3600,
-        "category": "malware",
-        "is_active": false
-      },
-      {
-        "name": "Abuse.ch URLHaus",
-        "url": "https://urlhaus.abuse.ch/downloads/text/",
-        "feed_type": "malware",
-        "format_type": "urls",
-        "description": "Live malware distribution URLs from URLHaus (abuse.ch)",
-        "update_frequency": 3600,
-        "category": "malware",
-        "is_active": true
-      },
-      {
-        "name": "StevenBlack Unified Hosts",
-        "url": "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts",
-        "feed_type": "malware",
-        "format_type": "hosts",
-        "description": "Unified hosts list from Steven Black (adware, malware, spyware)",
-        "update_frequency": 86400,
-        "category": "malware",
-        "is_active": true
-      },
-      {
-        "name": "Cybercrime Tracker",
-        "url": "http://cybercrime-tracker.net/all.php",
-        "feed_type": "malware",
-        "format_type": "urls",
-        "description": "Cybercrime tracker malicious URLs",
-        "update_frequency": 21600,
-        "category": "cybercrime",
-        "is_active": false
-      },
-      {
-        "name": "Blocklist.de SSH",
-        "url": "https://lists.blocklist.de/lists/ssh.txt",
-        "feed_type": "attack",
-        "format_type": "domains",
-        "description": "SSH attack sources from blocklist.de",
-        "update_frequency": 3600,
-        "category": "ssh_attacks",
-        "is_active": false
-      },
-      {
-        "name": "Emerging Threats Compromised",
-        "url": "https://rules.emergingthreats.net/fwrules/emerging-Block-IPs.txt",
-        "feed_type": "malware",
-        "format_type": "domains",
-        "description": "Compromised hosts from Emerging Threats",
-        "update_frequency": 3600,
-        "category": "compromised",
-        "is_active": false
-      },
-      {
-        "name": "Malc0de Blacklist",
-        "url": "http://malc0de.com/bl/BOOT",
-        "feed_type": "malware",
-        "format_type": "domains",
-        "description": "Malc0de malware blacklist",
-        "update_frequency": 86400,
-        "category": "malware",
-        "is_active": false
-      },
-      {
-        "name": "Clean MX Virus",
-        "url": "http://support.clean-mx.de/clean-mx/xmlviruses.php?response=alive&format=text&domain=1",
-        "feed_type": "malware",
-        "format_type": "domains",
-        "description": "Clean MX virus domain list",
-        "update_frequency": 21600,
-        "category": "virus",
-        "is_active": false
-      },
-      {
-        "name": "Bambenek C2 Domains",
-        "url": "http://osint.bambenekconsulting.com/feeds/c2-dommasterlist.txt",
-        "feed_type": "malware",
-        "format_type": "domains",
-        "description": "Command and Control domains from Bambenek Consulting",
-        "update_frequency": 3600,
-        "category": "c2",
-        "is_active": true
-      },
-      {
-        "name": "PhishTank Verified",
-        "url": "http://data.phishtank.com/data/online-valid.csv",
-        "feed_type": "phishing",
-        "format_type": "csv",
-        "description": "Verified phishing URLs from PhishTank",
-        "update_frequency": 3600,
-        "category": "phishing",
-        "is_active": true
-      },
-      {
-        "name": "FireHOL Level 1",
-        "url": "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset",
-        "feed_type": "malware",
-        "format_type": "ips",
-        "description": "FireHOL consolidated IP reputation blocklist level 1",
-        "update_frequency": 86400,
-        "category": "malware",
-        "is_active": true
-      },
-      {
-        "name": "StopForumSpam Toxic Domains",
-        "url": "https://www.stopforumspam.com/downloads/toxic_domains_whole.txt",
-        "feed_type": "spam",
-        "format_type": "domains",
-        "description": "Spam and scam domains from StopForumSpam",
-        "update_frequency": 86400,
-        "category": "spam",
-        "is_active": false
-      },
-      {
-        "name": "AlienVault OTX Public Pulses",
-        "url": "https://otx.alienvault.com/api/v1/indicators/export",
-        "feed_type": "threat_intel",
-        "format_type": "json",
-        "description": "AlienVault OTX community threat intelligence pulses (requires free API key)",
-        "update_frequency": 3600,
-        "category": "threat_intel",
-        "is_active": false
-      }
-    ],
-    "categories": {
-      "malware": {
-        "name": "Malware",
-        "description": "General malware domains, IPs and URLs",
-        "color": "#dc2626"
-      },
-      "phishing": {
-        "name": "Phishing",
-        "description": "Phishing and credential theft sites",
-        "color": "#ea580c"
-      },
-      "spam": {
-        "name": "Spam",
-        "description": "Spam and unwanted content",
-        "color": "#ca8a04"
-      },
-      "botnet": {
-        "name": "Botnet",
-        "description": "Botnet command and control servers",
-        "color": "#7c2d12"
-      },
-      "ransomware": {
-        "name": "Ransomware",
-        "description": "Ransomware distribution and payment sites",
-        "color": "#991b1b"
-      },
-      "banking_trojan": {
-        "name": "Banking Trojan",
-        "description": "Banking trojans and financial malware",
-        "color": "#be123c"
-      },
-      "cybercrime": {
-        "name": "Cybercrime",
-        "description": "General cybercrime infrastructure",
-        "color": "#9333ea"
-      },
-      "ssh_attacks": {
-        "name": "SSH Attacks",
-        "description": "SSH brute force and attack sources",
-        "color": "#1d4ed8"
-      },
-      "compromised": {
-        "name": "Compromised",
-        "description": "Compromised hosts and infrastructure",
-        "color": "#059669"
-      },
-      "virus": {
-        "name": "Virus",
-        "description": "Virus distribution sites",
-        "color": "#dc2626"
-      },
-      "c2": {
-        "name": "Command & Control",
-        "description": "Command and control servers",
-        "color": "#7c2d12"
-      },
-      "threat_intel": {
-        "name": "Threat Intelligence",
-        "description": "General threat intelligence platforms and feeds",
-        "color": "#2563eb"
-      }
+  "default_feeds": [
+    {
+      "name": "Phishing Army Extended",
+      "url": "https://phishing.army/download/phishing_army_blocklist_extended.txt",
+      "feed_type": "phishing",
+      "format_type": "domains",
+      "description": "Extended phishing domain blocklist from Phishing Army",
+      "update_frequency": 43200,
+      "category": "phishing",
+      "is_active": true
     },
-    "metadata": {
-      "version": "1.1",
-      "last_updated": "2025-08-26",
-      "description": "Updated threat intelligence feeds with maintained and free OSINT sources",
-      "total_feeds": 18,
-      "active_by_default": 9
+    {
+      "name": "URLVoid Malicious URLs",
+      "url": "https://www.urlvoid.com/download/malicious-urls.txt",
+      "feed_type": "malware",
+      "format_type": "domains",
+      "description": "Malicious URLs detected by URLVoid scanning engines",
+      "update_frequency": 21600,
+      "category": "malware",
+      "is_active": false
+    },
+    {
+      "name": "Abuse.ch Feodo Tracker",
+      "url": "https://feodotracker.abuse.ch/downloads/ipblocklist.txt",
+      "feed_type": "malware",
+      "format_type": "domains",
+      "description": "Feodo Tracker botnet C2 domains from abuse.ch",
+      "update_frequency": 3600,
+      "category": "botnet",
+      "is_active": true
+    },
+    {
+      "name": "Spam404 Scam Domains",
+      "url": "https://raw.githubusercontent.com/Spam404/lists/master/main-blacklist.txt",
+      "feed_type": "malware",
+      "format_type": "domains",
+      "description": "Scam and spam domains from Spam404 project",
+      "update_frequency": 86400,
+      "category": "spam",
+      "is_active": true
+    },
+    {
+      "name": "OpenPhish Feed",
+      "url": "https://openphish.com/feed.txt",
+      "feed_type": "phishing",
+      "format_type": "domains",
+      "description": "Real-time phishing URL feed from OpenPhish",
+      "update_frequency": 3600,
+      "category": "phishing",
+      "is_active": true
+    },
+    {
+      "name": "Abuse.ch ThreatFox",
+      "url": "https://threatfox.abuse.ch/downloads/ipblocklist_recommended.txt",
+      "feed_type": "malware",
+      "format_type": "domains",
+      "description": "Recommended malware IP blocklist from ThreatFox (abuse.ch)",
+      "update_frequency": 3600,
+      "category": "malware",
+      "is_active": false
+    },
+    {
+      "name": "Abuse.ch URLHaus",
+      "url": "https://urlhaus.abuse.ch/downloads/text/",
+      "feed_type": "malware",
+      "format_type": "domains",
+      "description": "Live malware distribution URLs from URLHaus (abuse.ch)",
+      "update_frequency": 3600,
+      "category": "malware",
+      "is_active": true
+    },
+    {
+      "name": "StevenBlack Unified Hosts",
+      "url": "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts",
+      "feed_type": "malware",
+      "format_type": "hosts",
+      "description": "Unified hosts list from Steven Black (adware, malware, spyware)",
+      "update_frequency": 86400,
+      "category": "malware",
+      "is_active": true
+    },
+    {
+      "name": "Cybercrime Tracker",
+      "url": "http://cybercrime-tracker.net/all.php",
+      "feed_type": "malware",
+      "format_type": "domains",
+      "description": "Cybercrime tracker malicious URLs",
+      "update_frequency": 21600,
+      "category": "cybercrime",
+      "is_active": false
+    },
+    {
+      "name": "Blocklist.de SSH",
+      "url": "https://lists.blocklist.de/lists/ssh.txt",
+      "feed_type": "malware",
+      "format_type": "domains",
+      "description": "SSH attack sources from blocklist.de",
+      "update_frequency": 3600,
+      "category": "ssh_attacks",
+      "is_active": false
+    },
+    {
+      "name": "Emerging Threats Compromised",
+      "url": "https://rules.emergingthreats.net/fwrules/emerging-Block-IPs.txt",
+      "feed_type": "malware",
+      "format_type": "domains",
+      "description": "Compromised hosts from Emerging Threats",
+      "update_frequency": 3600,
+      "category": "compromised",
+      "is_active": false
+    },
+    {
+      "name": "Malc0de Blacklist",
+      "url": "http://malc0de.com/bl/BOOT",
+      "feed_type": "malware",
+      "format_type": "domains",
+      "description": "Malc0de malware blacklist",
+      "update_frequency": 86400,
+      "category": "malware",
+      "is_active": false
+    },
+    {
+      "name": "Clean MX Virus",
+      "url": "http://support.clean-mx.de/clean-mx/xmlviruses.php?response=alive&format=text&domain=1",
+      "feed_type": "malware",
+      "format_type": "domains",
+      "description": "Clean MX virus domain list",
+      "update_frequency": 21600,
+      "category": "virus",
+      "is_active": false
+    },
+    {
+      "name": "Bambenek C2 Domains",
+      "url": "http://osint.bambenekconsulting.com/feeds/c2-dommasterlist.txt",
+      "feed_type": "malware",
+      "format_type": "domains",
+      "description": "Command and Control domains from Bambenek Consulting",
+      "update_frequency": 3600,
+      "category": "c2",
+      "is_active": true
+    },
+    {
+      "name": "PhishTank Verified",
+      "url": "http://data.phishtank.com/data/online-valid.csv",
+      "feed_type": "phishing",
+      "format_type": "domains",
+      "description": "Verified phishing URLs from PhishTank",
+      "update_frequency": 3600,
+      "category": "phishing",
+      "is_active": true
+    },
+    {
+      "name": "FireHOL Level 1",
+      "url": "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset",
+      "feed_type": "malware",
+      "format_type": "domains",
+      "description": "FireHOL consolidated IP reputation blocklist level 1",
+      "update_frequency": 86400,
+      "category": "malware",
+      "is_active": true
+    },
+    {
+      "name": "StopForumSpam Toxic Domains",
+      "url": "https://www.stopforumspam.com/downloads/toxic_domains_whole.txt",
+      "feed_type": "malware",
+      "format_type": "domains",
+      "description": "Spam and scam domains from StopForumSpam",
+      "update_frequency": 86400,
+      "category": "spam",
+      "is_active": false
+    },
+    {
+      "name": "AlienVault OTX Public Pulses",
+      "url": "https://otx.alienvault.com/api/v1/indicators/export",
+      "feed_type": "malware",
+      "format_type": "domains",
+      "description": "AlienVault OTX community threat intelligence pulses (requires free API key)",
+      "update_frequency": 3600,
+      "category": "threat_intel",
+      "is_active": false
     }
+  ],
+  "categories": {
+    "malware": {
+      "name": "Malware",
+      "description": "General malware domains, IPs and URLs",
+      "color": "#dc2626"
+    },
+    "phishing": {
+      "name": "Phishing",
+      "description": "Phishing and credential theft sites",
+      "color": "#ea580c"
+    },
+    "spam": {
+      "name": "Spam",
+      "description": "Spam and unwanted content",
+      "color": "#ca8a04"
+    },
+    "botnet": {
+      "name": "Botnet",
+      "description": "Botnet command and control servers",
+      "color": "#7c2d12"
+    },
+    "ransomware": {
+      "name": "Ransomware",
+      "description": "Ransomware distribution and payment sites",
+      "color": "#991b1b"
+    },
+    "banking_trojan": {
+      "name": "Banking Trojan",
+      "description": "Banking trojans and financial malware",
+      "color": "#be123c"
+    },
+    "cybercrime": {
+      "name": "Cybercrime",
+      "description": "General cybercrime infrastructure",
+      "color": "#9333ea"
+    },
+    "ssh_attacks": {
+      "name": "SSH Attacks",
+      "description": "SSH brute force and attack sources",
+      "color": "#1d4ed8"
+    },
+    "compromised": {
+      "name": "Compromised",
+      "description": "Compromised hosts and infrastructure",
+      "color": "#059669"
+    },
+    "virus": {
+      "name": "Virus",
+      "description": "Virus distribution sites",
+      "color": "#dc2626"
+    },
+    "c2": {
+      "name": "Command & Control",
+      "description": "Command and control servers",
+      "color": "#7c2d12"
+    },
+    "threat_intel": {
+      "name": "Threat Intelligence",
+      "description": "General threat intelligence platforms and feeds",
+      "color": "#2563eb"
+    }
+  },
+  "metadata": {
+    "version": "1.1",
+    "last_updated": "2025-08-26",
+    "description": "Updated threat intelligence feeds with maintained and free OSINT sources",
+    "total_feeds": 18,
+    "active_by_default": 9
   }
-  
+}

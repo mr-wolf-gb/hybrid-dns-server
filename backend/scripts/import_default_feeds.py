@@ -50,27 +50,27 @@ async def main():
     
     args = parser.parse_args()
     
-    # Get database session
-    db_gen = get_database_session()
-    db = next(db_gen)
-    
-    try:
-        threat_feed_service = ThreatFeedService(db)
-        
-        if args.categories:
-            await show_categories(threat_feed_service)
-        elif args.list:
-            await list_available_feeds(threat_feed_service)
-        elif args.import_feeds is not None or args.all:
-            await import_feeds(threat_feed_service, args)
-        else:
-            parser.print_help()
+    # Get database session using async context manager
+    async for db in get_database_session():
+        try:
+            threat_feed_service = ThreatFeedService(db)
             
-    except Exception as e:
-        logger.error(f"Script failed: {e}")
-        sys.exit(1)
-    finally:
-        db.close()
+            if args.categories:
+                await show_categories(threat_feed_service)
+            elif args.list:
+                await list_available_feeds(threat_feed_service)
+            elif args.import_feeds is not None or args.all:
+                await import_feeds(threat_feed_service, args)
+            else:
+                parser.print_help()
+                
+        except Exception as e:
+            logger.error(f"Script failed: {e}")
+            sys.exit(1)
+        finally:
+            # Session is automatically closed by the async generator
+            pass
+        break  # Only use the first (and only) session
 
 
 async def show_categories(service: ThreatFeedService):
