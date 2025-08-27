@@ -11,6 +11,7 @@ import { Loading } from '@/components/ui'
 const DNSZones = React.lazy(() => import('@/pages/DNSZones'))
 const Forwarders = React.lazy(() => import('@/pages/Forwarders'))
 const Security = React.lazy(() => import('@/pages/Security'))
+const DiagnosticTools = React.lazy(() => import('@/pages/DiagnosticTools'))
 const QueryLogs = React.lazy(() => import('@/pages/QueryLogs'))
 const Settings = React.lazy(() => import('@/pages/Settings'))
 const HealthMonitoring = React.lazy(() => import('@/pages/HealthMonitoring'))
@@ -75,6 +76,14 @@ const App: React.FC = () => {
           element={
             <React.Suspense fallback={<Loading size="lg" text="Loading security..." />}>
               <Security />
+            </React.Suspense>
+          }
+        />
+        <Route
+          path="diagnostics"
+          element={
+            <React.Suspense fallback={<Loading size="lg" text="Loading diagnostic tools..." />}>
+              <DiagnosticTools />
             </React.Suspense>
           }
         />
