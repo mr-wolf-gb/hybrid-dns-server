@@ -16,7 +16,7 @@ from ..core.auth_context import get_current_user_id, track_user_action
 from ..core.logging_config import get_logger
 from ..core.exceptions import ValidationException, RPZException
 from .enhanced_event_service import get_enhanced_event_service
-from ..websocket.event_types import EventType, EventPriority, EventCategory, EventSeverity, create_event
+from ..websocket.event_types import EventType, EventPriority, EventCategory, EventSeverity, EventMetadata, create_event
 
 logger = get_logger(__name__)
 
@@ -331,20 +331,157 @@ class RPZService(BaseService[RPZRule]):
         """Bulk create RPZ rules with error handling"""
         logger.info(f"Bulk creating {len(rules_data)} RPZ rules")
         
+        if not rules_data:
+            return 0, 0, []
+        
         created_count = 0
         error_count = 0
         errors = []
         
-        for i, rule_data in enumerate(rules_data):
+        # Process rules in smaller batches to avoid overwhelming the database
+        batch_size = 100
+        for batch_start in range(0, len(rules_data), batch_size):
+            batch_end = min(batch_start + batch_size, len(rules_data))
+            batch_data = rules_data[batch_start:batch_end]
+            
             try:
-                rule_data['source'] = source
-                await self.create_rule(rule_data)
-                created_count += 1
+                # Validate and prepare batch data
+                valid_rules = []
+                for i, rule_data in enumerate(batch_data):
+                    try:
+                        # Validate required fields
+                        if not rule_data.get('domain'):
+                            raise ValidationException("Domain is required")
+                        if not rule_data.get('rpz_zone'):
+                            raise ValidationException("RPZ zone is required")
+                        if not rule_data.get('action'):
+                            raise ValidationException("Action is required")
+                        
+                        # Normalize domain
+                        rule_data['domain'] = rule_data['domain'].strip().lower()
+                        
+                        # Normalize RPZ zone name (remove 'rpz.' prefix if present)
+                        rpz_zone = rule_data['rpz_zone']
+                        if rpz_zone.startswith('rpz.'):
+                            rule_data['rpz_zone'] = rpz_zone[4:]  # Remove 'rpz.' prefix
+                        
+                        # Set default values
+                        rule_data.setdefault('is_active', True)
+                        rule_data.setdefault('source', source)
+                        
+                        # Add user tracking fields if they exist
+                        user_id = get_current_user_id()
+                        if user_id:
+                            if hasattr(RPZRule, 'created_by'):
+                                rule_data['created_by'] = user_id
+                            if hasattr(RPZRule, 'updated_by'):
+                                rule_data['updated_by'] = user_id
+                        
+                        valid_rules.append(rule_data)
+                        
+                    except Exception as e:
+                        error_count += 1
+                        error_msg = f"Rule {batch_start + i + 1} (domain: {rule_data.get('domain', 'unknown')}): {str(e)}"
+                        errors.append(error_msg)
+                
+                # Bulk insert valid rules
+                if valid_rules:
+                    try:
+                        # Create RPZRule instances
+                        rule_instances = [RPZRule(**rule_data) for rule_data in valid_rules]
+                        
+                        # Add all instances to the session
+                        for rule in rule_instances:
+                            self.db.add(rule)
+                        
+                        # Commit the batch
+                        if self.is_async:
+                            await self.db.flush()
+                            await self.db.commit()
+                        else:
+                            self.db.flush()
+                            self.db.commit()
+                        
+                        batch_created = len(rule_instances)
+                        created_count += batch_created
+                        
+                        logger.info(f"Created batch of {batch_created} RPZ rules")
+                        
+                        # Emit events for created rules (sample a few to avoid spam)
+                        if batch_created > 0:
+                            sample_rule = rule_instances[0]
+                            try:
+                                await self._emit_rpz_event(
+                                    event_type=EventType.RPZ_RULE_CREATED,
+                                    rule=sample_rule,
+                                    action="bulk_create",
+                                    details={
+                                        "batch_size": batch_created,
+                                        "total_rules": len(rules_data),
+                                        "source": source,
+                                        "threat_level": self._determine_threat_level(sample_rule)
+                                    }
+                                )
+                            except Exception as e:
+                                logger.error(f"Failed to emit bulk create event: {e}")
+                        
+                    except IntegrityError as e:
+                        # Handle duplicate entries by trying individual inserts
+                        if self.is_async:
+                            await self.db.rollback()
+                        else:
+                            self.db.rollback()
+                        
+                        logger.warning(f"Bulk insert failed due to duplicates, trying individual inserts: {e}")
+                        
+                        for rule_data in valid_rules:
+                            try:
+                                # Check for existing rule
+                                existing_rule = await self.get_rule_by_domain_and_zone(
+                                    rule_data['domain'], 
+                                    rule_data['rpz_zone']
+                                )
+                                if existing_rule:
+                                    error_count += 1
+                                    errors.append(f"Rule for domain '{rule_data['domain']}' already exists in zone '{rule_data['rpz_zone']}'")
+                                    continue
+                                
+                                # Create individual rule
+                                rule = RPZRule(**rule_data)
+                                self.db.add(rule)
+                                
+                                if self.is_async:
+                                    await self.db.flush()
+                                    await self.db.commit()
+                                else:
+                                    self.db.flush()
+                                    self.db.commit()
+                                
+                                created_count += 1
+                                logger.info(f"Created RPZ rule {rule.id} for domain {rule.domain} with action {rule.action}")
+                                
+                            except Exception as e:
+                                if self.is_async:
+                                    await self.db.rollback()
+                                else:
+                                    self.db.rollback()
+                                error_count += 1
+                                error_msg = f"Rule for domain '{rule_data.get('domain', 'unknown')}': {str(e)}"
+                                errors.append(error_msg)
+                    
+                    except Exception as e:
+                        if self.is_async:
+                            await self.db.rollback()
+                        else:
+                            self.db.rollback()
+                        logger.error(f"Failed to create batch of rules: {e}")
+                        error_count += len(valid_rules)
+                        errors.append(f"Batch insert failed: {str(e)}")
+                        
             except Exception as e:
-                error_count += 1
-                error_msg = f"Rule {i+1} (domain: {rule_data.get('domain', 'unknown')}): {str(e)}"
-                errors.append(error_msg)
-                logger.warning(f"Failed to create rule in bulk import: {error_msg}")
+                logger.error(f"Failed to process batch: {e}")
+                error_count += len(batch_data)
+                errors.append(f"Batch processing failed: {str(e)}")
         
         logger.info(f"Bulk import completed: {created_count} created, {error_count} errors")
         return created_count, error_count, errors
@@ -1289,25 +1426,35 @@ class RPZService(BaseService[RPZRule]):
                 severity = EventSeverity.WARNING
             else:
                 priority = EventPriority.NORMAL
-                severity = EventSeverity.MEDIUM
+                severity = EventSeverity.INFO
             
             # Create and emit the event
             event = create_event(
                 event_type=event_type,
-                category=EventCategory.SECURITY,
                 data=event_data,
-                user_id=user_id,
+                source_user_id=user_id,
                 priority=priority,
                 severity=severity,
-                metadata={
-                    "service": "rpz_service",
-                    "action": action,
-                    "domain": rule.domain if rule else details.get("domain"),
-                    "threat_level": threat_level
-                }
+                metadata=EventMetadata(
+                    source_service="rpz_service",
+                    source_component="rpz_rule_management",
+                    custom_fields={
+                        "action": action,
+                        "domain": rule.domain if rule else details.get("domain"),
+                        "threat_level": threat_level
+                    }
+                )
             )
             
-            await self.event_service.emit_event(event)
+            await self.event_service.emit_event(
+                event_type=event.type,
+                data=event.data,
+                source_user_id=event.source_user_id,
+                target_user_id=event.target_user_id,
+                priority=event.priority,
+                severity=event.severity,
+                metadata=event.metadata
+            )
             
         except Exception as e:
             logger.error(f"Failed to emit RPZ event: {e}")

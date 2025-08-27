@@ -23,7 +23,7 @@ from ..core.auth_context import get_current_user_id, track_user_action
 from ..core.logging_config import get_logger
 from ..core.exceptions import ValidationException, ThreatFeedException
 from .enhanced_event_service import get_enhanced_event_service
-from ..websocket.event_types import EventType, EventPriority, EventCategory, EventSeverity, create_event
+from ..websocket.event_types import EventType, EventPriority, EventCategory, EventSeverity, EventMetadata, create_event
 
 logger = get_logger(__name__)
 
@@ -730,13 +730,18 @@ class ThreatFeedService(BaseService[ThreatFeed]):
     async def update_feed_from_source(self, feed: ThreatFeed) -> ThreatFeedUpdateResult:
         """Update a single threat feed from its source"""
         logger.info(f"Updating feed from source: {feed.name}")
+        logger.info(f"Updating threat feed ID: {feed.id}")
         
         start_time = datetime.utcnow()
         
-        # Mark feed as pending update
-        await self.update_feed(feed.id, {
-            'last_update_status': UpdateStatus.PENDING
-        })
+        try:
+            # Mark feed as pending update
+            await self.update_feed(feed.id, {
+                'last_update_status': UpdateStatus.PENDING
+            })
+        except Exception as e:
+            logger.error(f"Failed to update feed status to pending: {e}")
+            # Continue with the update process
         
         try:
             # Fetch feed data
@@ -812,14 +817,18 @@ class ThreatFeedService(BaseService[ThreatFeed]):
                     }
                     new_rules_data.append(rule_data)
                 
-                created_count, error_count, errors = await self.rpz_service.bulk_create_rules(
-                    new_rules_data, 
-                    source=f"threat_feed_{feed.id}"
-                )
-                rules_added = created_count
-                
-                if errors:
-                    logger.warning(f"Errors adding rules from feed {feed.name}: {errors[:5]}")  # Log first 5 errors
+                try:
+                    created_count, error_count, errors = await self.rpz_service.bulk_create_rules(
+                        new_rules_data, 
+                        source=f"threat_feed_{feed.id}"
+                    )
+                    rules_added = created_count
+                    
+                    if errors:
+                        logger.warning(f"Errors adding rules from feed {feed.name}: {errors[:5]}")  # Log first 5 errors
+                except Exception as e:
+                    logger.error(f"Failed to create rules for feed {feed.name}: {e}")
+                    rules_added = 0
             
             # Reactivate existing rules that are still in the feed
             if domains_to_keep:
@@ -904,16 +913,15 @@ class ThreatFeedService(BaseService[ThreatFeed]):
         
         logger.info(f"Updating {len(feeds)} threat feeds")
         
-        # Update feeds concurrently (but limit concurrency to avoid overwhelming servers)
-        semaphore = asyncio.Semaphore(5)  # Max 5 concurrent updates
-        
-        async def update_with_semaphore(feed):
-            async with semaphore:
-                return await self.update_feed_from_source(feed)
-        
-        # Execute updates
-        update_tasks = [update_with_semaphore(feed) for feed in feeds]
-        feed_results = await asyncio.gather(*update_tasks, return_exceptions=True)
+        # Update feeds sequentially to avoid database session conflicts
+        feed_results = []
+        for feed in feeds:
+            try:
+                result = await self.update_feed_from_source(feed)
+                feed_results.append(result)
+            except Exception as e:
+                logger.error(f"Exception updating feed {feed.name}: {e}")
+                feed_results.append(e)
         
         # Process results
         successful_updates = 0
@@ -1626,31 +1634,41 @@ class ThreatFeedService(BaseService[ThreatFeed]):
                 severity = EventSeverity.ERROR
             elif action == "update_success" and details.get("rules_added", 0) > 100:
                 priority = EventPriority.HIGH
-                severity = EventSeverity.MEDIUM
+                severity = EventSeverity.INFO
             elif action == "delete":
                 priority = EventPriority.HIGH
-                severity = EventSeverity.MEDIUM
+                severity = EventSeverity.INFO
             else:
                 priority = EventPriority.NORMAL
-                severity = EventSeverity.LOW
+                severity = EventSeverity.INFO
             
             # Create and emit the event
             event = create_event(
                 event_type=event_type,
-                category=EventCategory.SECURITY,
                 data=event_data,
-                user_id=user_id,
+                source_user_id=user_id,
                 priority=priority,
                 severity=severity,
-                metadata={
-                    "service": "threat_feed_service",
-                    "action": action,
-                    "feed_name": feed.name if feed else details.get("feed_name"),
-                    "feed_type": feed.feed_type if feed else details.get("feed_type")
-                }
+                metadata=EventMetadata(
+                    source_service="threat_feed_service",
+                    source_component="threat_feed_management",
+                    custom_fields={
+                        "action": action,
+                        "feed_name": feed.name if feed else details.get("feed_name"),
+                        "feed_type": feed.feed_type if feed else details.get("feed_type")
+                    }
+                )
             )
             
-            await self.event_service.emit_event(event)
+            await self.event_service.emit_event(
+                event_type=event.type,
+                data=event.data,
+                source_user_id=event.source_user_id,
+                target_user_id=event.target_user_id,
+                priority=event.priority,
+                severity=event.severity,
+                metadata=event.metadata
+            )
             
         except Exception as e:
             logger.error(f"Failed to emit threat feed event: {e}")
@@ -1677,25 +1695,35 @@ class ThreatFeedService(BaseService[ThreatFeed]):
                 severity = EventSeverity.WARNING
                 priority = EventPriority.HIGH
             else:
-                severity = EventSeverity.MEDIUM
+                severity = EventSeverity.INFO
                 priority = EventPriority.NORMAL
             
             # Create and emit the event
             event = create_event(
                 event_type=EventType.SECURITY_THREAT_DETECTED,
-                category=EventCategory.SECURITY,
                 data=event_data,
                 priority=priority,
                 severity=severity,
-                metadata={
-                    "service": "threat_feed_service",
-                    "threat_type": threat_type,
-                    "domain": domain,
-                    "source": source
-                }
+                metadata=EventMetadata(
+                    source_service="threat_feed_service",
+                    source_component="threat_detection",
+                    custom_fields={
+                        "threat_type": threat_type,
+                        "domain": domain,
+                        "source": source
+                    }
+                )
             )
             
-            await self.event_service.emit_event(event)
+            await self.event_service.emit_event(
+                event_type=event.type,
+                data=event.data,
+                source_user_id=event.source_user_id,
+                target_user_id=event.target_user_id,
+                priority=event.priority,
+                severity=event.severity,
+                metadata=event.metadata
+            )
             
         except Exception as e:
             logger.error(f"Failed to emit threat detection event: {e}")

@@ -114,7 +114,7 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
   // Fetch threat feeds
   const { data: feeds, isLoading } = useQuery({
     queryKey: ['threat-feeds'],
-    queryFn: () => rpzService.getThreatFeeds(),
+    queryFn: () => rpzService.getThreatFeeds({ active_only: false, limit: 1000 }),
     enabled: isOpen,
   })
 
@@ -383,10 +383,10 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
       render: (feed: ThreatFeed) => (
         <div>
           <div className="font-medium text-gray-900 dark:text-gray-100">
-            {feed.name}
+            {feed.name || 'Unknown Feed'}
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400 font-mono">
-            {feed.url.length > 50 ? `${feed.url.substring(0, 50)}...` : feed.url}
+            {(feed.url || '').length > 50 ? `${feed.url.substring(0, 50)}...` : (feed.url || '')}
           </div>
         </div>
       ),
@@ -396,7 +396,7 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
       header: 'Type',
       render: (feed: ThreatFeed) => (
         <Badge variant="info">
-          {feed.feed_type.replace('_', ' ')}
+          {(feed.feed_type || '').replace('_', ' ')}
         </Badge>
       ),
     },
@@ -425,7 +425,7 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
       render: (feed: ThreatFeed) => (
         <div className="text-center">
           <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            {feed.rule_count.toLocaleString()}
+            {(feed.rules_count || 0).toLocaleString()}
           </div>
           <div className="text-xs text-gray-500 dark:text-gray-400">
             rules
@@ -472,9 +472,9 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
             size="sm"
             onClick={() => handleToggleFeed(feed)}
             loading={toggleFeedMutation.isPending}
-            title={feed.enabled ? 'Disable feed' : 'Enable feed'}
+            title={feed.is_active ? 'Disable feed' : 'Enable feed'}
           >
-            {feed.enabled ? (
+            {feed.is_active ? (
               <XCircleIcon className="h-4 w-4 text-red-600" />
             ) : (
               <CheckCircleIcon className="h-4 w-4 text-green-600" />
@@ -502,7 +502,7 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
     },
   ]
 
-  const feedsData = feeds?.data || []
+  const feedsData = Array.isArray(feeds?.data) ? feeds.data : []
 
   return (
     <Modal
@@ -881,7 +881,7 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
                     <Card className="p-4">
                       <div className="text-center">
                         <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                          {statistics.data.total_rules.toLocaleString()}
+                          {(statistics.data?.total_rules || 0).toLocaleString()}
                         </div>
                         <div className="text-sm text-gray-500 dark:text-gray-400">
                           Total Rules
@@ -909,7 +909,7 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
                       {Object.entries(statistics.data.rules_by_category).map(([category, count]) => (
                         <div key={category} className="text-center">
                           <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                            {count.toLocaleString()}
+                            {(count || 0).toLocaleString()}
                           </div>
                           <div className="text-sm text-gray-500 dark:text-gray-400 capitalize">
                             {category.replace('_', ' ')}
