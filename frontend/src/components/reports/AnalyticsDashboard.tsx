@@ -7,34 +7,13 @@ import {
   ServerIcon,
   GlobeAltIcon
 } from '@heroicons/react/24/outline';
-import { Line, Bar, Doughnut } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
-} from 'chart.js';
+// Chart.js will be loaded dynamically
+import LazyChart from '@/components/charts/LazyChart'
 import { toast } from 'react-toastify';
 
 import { reportsApi } from '../../services/api';
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement
-);
+// Chart.js registration will be handled by LazyChart
 
 interface AnalyticsData {
   trends: any;

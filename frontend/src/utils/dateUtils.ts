@@ -101,12 +101,14 @@ export const safeEndOfDay = (date: Date | string | number): Date => {
   }
 }
 
-// Initialize chartjs adapter safely
+// Initialize chartjs adapter safely - only when Chart.js is actually loaded
 export const initializeChartJSAdapter = async (): Promise<void> => {
   try {
-    // Only load if we're in a browser environment and Chart.js is available
-    if (typeof window !== 'undefined' && window.Chart) {
-      await import('chartjs-adapter-date-fns')
+    // Only load if we're in a browser environment
+    if (typeof window !== 'undefined') {
+      // Dynamic import to avoid loading at module level
+      const { default: adapter } = await import('chartjs-adapter-date-fns')
+      return adapter
     }
   } catch (error) {
     console.warn('Failed to load chartjs-adapter-date-fns:', error)

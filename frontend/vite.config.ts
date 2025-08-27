@@ -48,8 +48,11 @@ export default defineConfig(({ mode }) => {
                 return 'data-vendor'
               }
               
-              // Charts and visualization
-              if (id.includes('chart.js') || id.includes('recharts') || id.includes('d3')) {
+              // Charts and visualization - separate Chart.js to avoid initialization issues
+              if (id.includes('chart.js') || id.includes('chartjs-adapter')) {
+                return 'chartjs-vendor'
+              }
+              if (id.includes('recharts') || id.includes('d3')) {
                 return 'charts-vendor'
               }
               

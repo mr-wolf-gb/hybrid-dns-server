@@ -1,19 +1,5 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
-  TimeScale,
-} from 'chart.js'
-import { Line, Bar, Doughnut } from 'react-chartjs-2'
 import { safeFormat, safeSubDays, safeStartOfDay, safeEndOfDay, initializeChartJSAdapter } from '@/utils/dateUtils'
 import { analyticsService } from '@/services/api'
 import { AnalyticsFilters } from '@/components/analytics/AnalyticsFilters'
@@ -23,18 +9,7 @@ import { ExportControls } from '@/components/analytics/ExportControls'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { ErrorMessage } from '@/components/ui/ErrorMessage'
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
-  TimeScale
-)
+// Chart.js components will be loaded dynamically
 
 interface AnalyticsFilters {
   dateRange: {

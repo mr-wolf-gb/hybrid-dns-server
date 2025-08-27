@@ -1,18 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-} from 'chart.js'
-import { Line } from 'react-chartjs-2'
 import { useWebSocketContext } from '@/contexts/WebSocketContext'
+import LazyChart from '@/components/charts/LazyChart'
 
 ChartJS.register(
   CategoryScale,
@@ -47,7 +36,7 @@ const RealTimeChart: React.FC<RealTimeChartProps> = ({
 }) => {
   const [streamData, setStreamData] = useState<QueryStreamData[]>([])
   const [isLive, setIsLive] = useState(autoRefresh)
-  const chartRef = useRef<ChartJS<'line'>>(null)
+  const chartRef = useRef<any>(null)
 
   // Use existing WebSocket connection from context
   const { isConnected, registerEventHandler, unregisterEventHandler } = useWebSocketContext()
@@ -267,7 +256,11 @@ const RealTimeChart: React.FC<RealTimeChartProps> = ({
 
       {/* Chart */}
       <div className="h-80 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-        <Line ref={chartRef} data={chartData} options={chartOptions} />
+        <LazyChart>
+          {({ Line }) => (
+            <Line ref={chartRef} data={chartData} options={chartOptions} />
+          )}
+        </LazyChart>
       </div>
 
       {/* Summary Stats */}

@@ -1,32 +1,11 @@
 import React from 'react'
-import { Line, Doughnut, Bar } from 'react-chartjs-2'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
-  BarElement,
-} from 'chart.js'
+// Chart.js will be loaded dynamically
+import LazyChart from '@/components/charts/LazyChart'
 import { Card } from '@/components/ui'
 import { formatNumber, getCategoryColor } from '@/utils'
 import { DNSLog } from '@/types'
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
-  BarElement
-)
+// Chart.js registration will be handled by LazyChart
 
 interface SecurityStatsProps {
   categoryStats: Record<string, number>
