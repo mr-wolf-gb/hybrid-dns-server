@@ -12,6 +12,7 @@ import io
 
 from ...core.database import get_database_session
 from ...core.security import get_current_user
+from ...models.auth import User
 from ...schemas.security import (
     RPZRuleCreate, RPZRuleUpdate, RPZRule as RPZRuleSchema,
     RPZRuleImportResult, RPZAction, RPZCategory, RPZCategoryStatus,
