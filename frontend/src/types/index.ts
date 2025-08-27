@@ -387,8 +387,9 @@ export interface ApiError {
   message: string
   details?: string[]
   code?: string
-}// Enhanced 
-RPZ and Threat Feed types
+}
+
+// Enhanced RPZ and Threat Feed types
 export interface ThreatFeedStatus {
   id: number
   name: string

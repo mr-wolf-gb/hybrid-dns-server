@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   WrenchScrewdriverIcon,
   GlobeAltIcon,
@@ -7,13 +7,15 @@ import {
   CloudIcon,
   InformationCircleIcon,
 } from '@heroicons/react/24/outline'
-import { Card, Button, Input, Select, Badge, Loading } from '@/components/ui'
-import { DNSLookupTool } from '@/components/diagnostics/DNSLookupTool'
-import { PingTool } from '@/components/diagnostics/PingTool'
-import { ZoneTestTool } from '@/components/diagnostics/ZoneTestTool'
-import { ForwarderTestTool } from '@/components/diagnostics/ForwarderTestTool'
-import { ThreatTestTool } from '@/components/diagnostics/ThreatTestTool'
-import { NetworkInfoTool } from '@/components/diagnostics/NetworkInfoTool'
+import { Card, Button, Select, Badge } from '@/components/ui'
+import { preloadAllDiagnosticTools, preloadDiagnosticTool } from '@/utils/preload'
+// Lazy load diagnostic tool components for better performance
+const DNSLookupTool = React.lazy(() => import('@/components/diagnostics/DNSLookupTool').then(m => ({ default: m.DNSLookupTool })))
+const PingTool = React.lazy(() => import('@/components/diagnostics/PingTool').then(m => ({ default: m.PingTool })))
+const ZoneTestTool = React.lazy(() => import('@/components/diagnostics/ZoneTestTool').then(m => ({ default: m.ZoneTestTool })))
+const ForwarderTestTool = React.lazy(() => import('@/components/diagnostics/ForwarderTestTool').then(m => ({ default: m.ForwarderTestTool })))
+const ThreatTestTool = React.lazy(() => import('@/components/diagnostics/ThreatTestTool').then(m => ({ default: m.ThreatTestTool })))
+const NetworkInfoTool = React.lazy(() => import('@/components/diagnostics/NetworkInfoTool').then(m => ({ default: m.NetworkInfoTool })))
 
 type DiagnosticTool = 
   | 'dns-lookup'
@@ -87,27 +89,56 @@ const DiagnosticTools: React.FC = () => {
   const [selectedTool, setSelectedTool] = useState<DiagnosticTool | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
 
+  // Preload all diagnostic tools when component mounts
+  useEffect(() => {
+    preloadAllDiagnosticTools()
+  }, [])
+
+  // Preload specific tool when user hovers over it
+  const handleToolHover = (toolId: DiagnosticTool) => {
+    preloadDiagnosticTool(toolId)
+  }
+
   const filteredTools = diagnosticTools.filter(tool => 
     selectedCategory === 'all' || tool.category === selectedCategory
   )
 
   const renderTool = () => {
-    switch (selectedTool) {
-      case 'dns-lookup':
-        return <DNSLookupTool />
-      case 'ping':
-        return <PingTool />
-      case 'zone-test':
-        return <ZoneTestTool />
-      case 'forwarder-test':
-        return <ForwarderTestTool />
-      case 'threat-test':
-        return <ThreatTestTool />
-      case 'network-info':
-        return <NetworkInfoTool />
-      default:
-        return null
-    }
+    const toolComponent = (() => {
+      switch (selectedTool) {
+        case 'dns-lookup':
+          return <DNSLookupTool />
+        case 'ping':
+          return <PingTool />
+        case 'zone-test':
+          return <ZoneTestTool />
+        case 'forwarder-test':
+          return <ForwarderTestTool />
+        case 'threat-test':
+          return <ThreatTestTool />
+        case 'network-info':
+          return <NetworkInfoTool />
+        default:
+          return null
+      }
+    })()
+
+    if (!toolComponent) return null
+
+    return (
+      <React.Suspense fallback={
+        <Card className="p-6">
+          <div className="flex items-center justify-center py-8">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-4"></div>
+              <p className="text-gray-500 dark:text-gray-400">Loading diagnostic tool...</p>
+            </div>
+          </div>
+        </Card>
+      }>
+        {toolComponent}
+      </React.Suspense>
+    )
   }
 
   return (
@@ -146,13 +177,14 @@ const DiagnosticTools: React.FC = () => {
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
                 className="w-48"
-              >
-                <option value="all">All Categories</option>
-                <option value="dns">DNS Tools</option>
-                <option value="network">Network Tools</option>
-                <option value="security">Security Tools</option>
-                <option value="system">System Tools</option>
-              </Select>
+                options={[
+                  { value: 'all', label: 'All Categories' },
+                  { value: 'dns', label: 'DNS Tools' },
+                  { value: 'network', label: 'Network Tools' },
+                  { value: 'security', label: 'Security Tools' },
+                  { value: 'system', label: 'System Tools' }
+                ]}
+              />
             </div>
           </Card>
 
@@ -161,11 +193,13 @@ const DiagnosticTools: React.FC = () => {
             {filteredTools.map((tool) => {
               const IconComponent = tool.icon
               return (
-                <Card
+                <div
                   key={tool.id}
-                  className="p-6 hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-primary-300 dark:hover:border-primary-600"
+                  className="cursor-pointer"
                   onClick={() => setSelectedTool(tool.id)}
+                  onMouseEnter={() => handleToolHover(tool.id)}
                 >
+                  <Card className="p-6 hover:shadow-lg transition-shadow border-2 hover:border-primary-300 dark:hover:border-primary-600">
                   <div className="flex items-start space-x-4">
                     <div className="flex-shrink-0">
                       <IconComponent className="h-8 w-8 text-primary-600 dark:text-primary-400" />
@@ -189,7 +223,8 @@ const DiagnosticTools: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                </Card>
+                  </Card>
+                </div>
               )
             })}
           </div>

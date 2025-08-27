@@ -1,13 +1,14 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import LoginForm from '@/components/auth/LoginForm'
 import Layout from '@/components/layout/Layout'
-import Dashboard from '@/pages/Dashboard'
 import { Loading } from '@/components/ui'
+import { preloadCriticalPages } from '@/utils/preload'
 
-// Lazy load other pages for better performance
+// Lazy load all pages for better performance
+const Dashboard = React.lazy(() => import('@/pages/Dashboard'))
 const DNSZones = React.lazy(() => import('@/pages/DNSZones'))
 const Forwarders = React.lazy(() => import('@/pages/Forwarders'))
 const Security = React.lazy(() => import('@/pages/Security'))
@@ -22,6 +23,13 @@ const Analytics = React.lazy(() => import('@/pages/Analytics'))
 
 const App: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth()
+
+  // Preload critical pages after authentication
+  useEffect(() => {
+    if (isAuthenticated) {
+      preloadCriticalPages()
+    }
+  }, [isAuthenticated])
 
   if (isLoading) {
     return (
@@ -54,7 +62,14 @@ const App: React.FC = () => {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Dashboard />} />
+        <Route 
+          index 
+          element={
+            <React.Suspense fallback={<Loading size="lg" text="Loading dashboard..." />}>
+              <Dashboard />
+            </React.Suspense>
+          } 
+        />
         <Route
           path="zones"
           element={

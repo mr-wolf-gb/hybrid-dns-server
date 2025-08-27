@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { InformationCircleIcon, ServerIcon, GlobeAltIcon, RefreshIcon } from '@heroicons/react/24/outline'
+import { InformationCircleIcon, ServerIcon, GlobeAltIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { Card, Button, Badge, Loading } from '@/components/ui'
 import { api } from '@/services/api'
 import { toast } from 'react-toastify'
@@ -33,7 +33,7 @@ export const NetworkInfoTool: React.FC = () => {
     setIsLoading(true)
     try {
       const response = await api.get<NetworkInfoResponse>('/diagnostics/network-info')
-      
+
       if (response.data.success && response.data.network_info) {
         setNetworkInfo(response.data.network_info)
         setLastUpdated(new Date())
@@ -96,7 +96,7 @@ export const NetworkInfoTool: React.FC = () => {
               onClick={fetchNetworkInfo}
               disabled={isLoading}
             >
-              {isLoading ? <Loading size="sm" /> : <RefreshIcon className="h-4 w-4" />}
+              {isLoading ? <Loading size="sm" /> : <ArrowPathIcon className="h-4 w-4" />}
               Refresh
             </Button>
           </div>
@@ -111,7 +111,7 @@ export const NetworkInfoTool: React.FC = () => {
               <GlobeAltIcon className="h-5 w-5 mr-2" />
               DNS Configuration
             </h4>
-            
+
             <div className="space-y-4">
               {networkInfo.system_dns && (
                 <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
@@ -125,7 +125,7 @@ export const NetworkInfoTool: React.FC = () => {
                   </div>
                 </div>
               )}
-              
+
               {networkInfo.system_dns_servers && networkInfo.system_dns_servers.length > 0 && (
                 <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
                   <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
@@ -150,7 +150,7 @@ export const NetworkInfoTool: React.FC = () => {
                   </div>
                 </div>
               )}
-              
+
               {networkInfo.dns_error && (
                 <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
                   <div className="text-sm text-yellow-700 dark:text-yellow-300">
@@ -168,7 +168,7 @@ export const NetworkInfoTool: React.FC = () => {
                 <ServerIcon className="h-5 w-5 mr-2" />
                 Network Interfaces
               </h4>
-              
+
               <div className="space-y-4">
                 {Object.entries(networkInfo.network_interfaces).map(([interfaceName, addresses]) => (
                   <div key={interfaceName} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
@@ -180,7 +180,7 @@ export const NetworkInfoTool: React.FC = () => {
                         {addresses.length} address{addresses.length !== 1 ? 'es' : ''}
                       </Badge>
                     </div>
-                    
+
                     <div className="space-y-2">
                       {addresses.map((addr, index) => (
                         <div key={index} className="flex items-center justify-between p-2 bg-white dark:bg-gray-700 rounded border">
@@ -210,7 +210,7 @@ export const NetworkInfoTool: React.FC = () => {
                   </div>
                 ))}
               </div>
-              
+
               {networkInfo.interface_error && (
                 <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mt-4">
                   <div className="text-sm text-yellow-700 dark:text-yellow-300">
@@ -226,7 +226,7 @@ export const NetworkInfoTool: React.FC = () => {
             <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
               Network Summary
             </h4>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
                 <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
@@ -236,30 +236,30 @@ export const NetworkInfoTool: React.FC = () => {
                   {networkInfo.network_interfaces ? Object.keys(networkInfo.network_interfaces).length : 0}
                 </div>
               </div>
-              
+
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
                 <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
                   IPv4 Addresses
                 </div>
                 <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {networkInfo.network_interfaces 
+                  {networkInfo.network_interfaces
                     ? Object.values(networkInfo.network_interfaces)
-                        .flat()
-                        .filter(addr => addr.type === 'IPv4').length
+                      .flat()
+                      .filter(addr => addr.type === 'IPv4').length
                     : 0
                   }
                 </div>
               </div>
-              
+
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
                 <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
                   IPv6 Addresses
                 </div>
                 <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {networkInfo.network_interfaces 
+                  {networkInfo.network_interfaces
                     ? Object.values(networkInfo.network_interfaces)
-                        .flat()
-                        .filter(addr => addr.type === 'IPv6').length
+                      .flat()
+                      .filter(addr => addr.type === 'IPv6').length
                     : 0
                   }
                 </div>
@@ -272,7 +272,7 @@ export const NetworkInfoTool: React.FC = () => {
             <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
               Network Diagnostic Tips
             </h4>
-            
+
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
               <div className="text-sm text-blue-800 dark:text-blue-200 space-y-2">
                 <p className="font-medium">Understanding Your Network Configuration:</p>
