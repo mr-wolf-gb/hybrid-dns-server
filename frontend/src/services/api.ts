@@ -632,43 +632,15 @@ export const reportsApi = {
     api.post('/reports/export', data, { responseType: 'blob' }),
 
   // Analytics
-  getQueryTrends: (startDate: string, endDate: string, interval?: string): Promise<AxiosResponse<any>> =>
-    api.get('/analytics/query-analytics', {
-      params: { hours: 24 } // Convert date range to hours for now
-    }),
-
-  getTopDomains: (startDate: string, endDate: string, limit?: number): Promise<AxiosResponse<any>> =>
+  getTopDomains: (hours?: number): Promise<AxiosResponse<any>> =>
     api.get('/analytics/top-domains', {
-      params: { hours: 24, limit: limit || 20 }
+      params: { hours: hours || 24 }
     }),
 
-  getClientAnalytics: (startDate: string, endDate: string): Promise<AxiosResponse<any>> =>
+  getClientAnalytics: (hours?: number): Promise<AxiosResponse<any>> =>
     api.get('/analytics/client-analytics', {
-      params: { hours: 24 }
+      params: { hours: hours || 24 }
     }),
-
-  getPerformanceAnalytics: (startDate: string, endDate: string): Promise<AxiosResponse<any>> =>
-    api.get('/analytics/performance', {
-      params: { hours: 24 }
-    }),
-
-  getErrorAnalytics: (startDate: string, endDate: string): Promise<AxiosResponse<any>> =>
-    api.get('/analytics/response-time-analytics', {
-      params: { hours: 24 }
-    }),
-
-  getSecurityAnalytics: (startDate: string, endDate: string): Promise<AxiosResponse<any>> =>
-    api.get('/analytics/threat-analytics', {
-      params: { days: 7 }
-    }),
-
-  getZoneAnalytics: (zoneId?: number): Promise<AxiosResponse<any>> =>
-    api.get('/analytics/query-analytics', {
-      params: { hours: 24 }
-    }),
-
-  getAnalyticsInsights: (startDate: string, endDate: string): Promise<AxiosResponse<any>> =>
-    api.get('/analytics/anomalies'),
 
   // History and Statistics
   getReportHistory: (limit?: number): Promise<AxiosResponse<any>> =>

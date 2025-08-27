@@ -7,7 +7,7 @@ import {
   InformationCircleIcon
 } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
-import { format } from 'date-fns'
+import { safeFormat } from '@/utils/dateUtils'
 
 interface ConnectionStatusProps {
   showDetails?: boolean
@@ -213,7 +213,7 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
               Last updated: {(() => {
                 try {
                   const date = new Date(systemStatus.uptime);
-                  return isNaN(date.getTime()) ? 'Invalid date' : format(date, 'MMM d, yyyy HH:mm:ss');
+                  return isNaN(date.getTime()) ? 'Invalid date' : safeFormat(date, 'MMM dd, yyyy HH:mm:ss');
                 } catch {
                   return 'Invalid date';
                 }

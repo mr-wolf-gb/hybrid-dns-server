@@ -14,8 +14,7 @@ import {
   TimeScale,
 } from 'chart.js'
 import { Line, Bar, Doughnut } from 'react-chartjs-2'
-import 'chartjs-adapter-date-fns'
-import { format, subDays, startOfDay, endOfDay } from 'date-fns'
+import { safeFormat, safeSubDays, safeStartOfDay, safeEndOfDay, initializeChartJSAdapter } from '@/utils/dateUtils'
 import { analyticsService } from '@/services/api'
 import { AnalyticsFilters } from '@/components/analytics/AnalyticsFilters'
 import { PerformanceBenchmarks } from '@/components/analytics/PerformanceBenchmarks'
@@ -52,8 +51,8 @@ interface AnalyticsFilters {
 export const Analytics: React.FC = () => {
   const [filters, setFilters] = useState<AnalyticsFilters>({
     dateRange: {
-      start: startOfDay(subDays(new Date(), 7)),
-      end: endOfDay(new Date()),
+      start: safeStartOfDay(safeSubDays(new Date(), 7)),
+      end: safeEndOfDay(new Date()),
     },
     interval: 'day',
     zones: [],
@@ -75,43 +74,43 @@ export const Analytics: React.FC = () => {
   // Query trends data
   const { data: trendsData, isLoading: trendsLoading, error: trendsError } = useQuery({
     queryKey: ['analytics', 'trends', filters.dateRange, filters.interval],
-    queryFn: () => analyticsService.getQueryTrends('', ''),
+    queryFn: () => analyticsService.getPerformanceMetrics(24),
   })
 
   // Performance analytics
   const { data: performanceData, isLoading: performanceLoading } = useQuery({
     queryKey: ['analytics', 'performance', filters.dateRange],
-    queryFn: () => analyticsService.getPerformanceAnalytics('', ''),
+    queryFn: () => analyticsService.getPerformanceMetrics(24),
   })
 
   // Security analytics
   const { data: securityData, isLoading: securityLoading } = useQuery({
     queryKey: ['analytics', 'security', filters.dateRange],
-    queryFn: () => analyticsService.getSecurityAnalytics('', ''),
+    queryFn: () => analyticsService.getQueryAnalytics(24),
   })
 
   // Top domains
   const { data: topDomainsData, isLoading: topDomainsLoading } = useQuery({
     queryKey: ['analytics', 'top-domains', filters.dateRange],
-    queryFn: () => analyticsService.getTopDomains('', '', 20),
+    queryFn: () => analyticsService.getTopDomains(24),
   })
 
   // Client analytics
   const { data: clientData } = useQuery({
     queryKey: ['analytics', 'clients', filters.dateRange],
-    queryFn: () => analyticsService.getClientAnalytics('', ''),
+    queryFn: () => analyticsService.getClientAnalytics(24),
   })
 
   // Zone analytics (using query analytics for now)
   const { data: zoneData } = useQuery({
     queryKey: ['analytics', 'zones'],
-    queryFn: () => analyticsService.getZoneAnalytics(),
+    queryFn: () => analyticsService.getQueryAnalytics(24),
   })
 
   // Analytics insights
   const { data: insightsData, isLoading: insightsLoading } = useQuery({
     queryKey: ['analytics', 'insights', filters.dateRange],
-    queryFn: () => analyticsService.getAnalyticsInsights('', ''),
+    queryFn: () => analyticsService.getQueryAnalytics(24),
   })
 
   // Chart configurations
@@ -122,7 +121,7 @@ export const Analytics: React.FC = () => {
     return {
       data: {
         labels: hourlyStats.map((item: any) =>
-          format(new Date(item.hour), filters.interval === 'hour' ? 'HH:mm' : 'MMM dd')
+          safeFormat(new Date(item.hour), filters.interval === 'hour' ? 'HH:mm' : 'MMM dd')
         ),
         datasets: [
           {
@@ -185,7 +184,7 @@ export const Analytics: React.FC = () => {
     return {
       data: {
         labels: hours.map((item: any) =>
-          format(new Date(item.timestamp), 'HH:mm')
+          safeFormat(new Date(item.timestamp), 'HH:mm')
         ),
         datasets: [
           {

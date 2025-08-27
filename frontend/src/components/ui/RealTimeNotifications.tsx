@@ -11,7 +11,7 @@ import {
   XCircleIcon,
   AdjustmentsHorizontalIcon
 } from '@heroicons/react/24/outline'
-import { format } from 'date-fns'
+import { safeFormat } from '@/utils/dateUtils'
 import clsx from 'clsx'
 
 interface NotificationPanelProps {
@@ -237,7 +237,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, onClose }
                               {(() => {
                                 try {
                                   const date = new Date(event.timestamp);
-                                  return isNaN(date.getTime()) ? 'Invalid' : format(date, 'HH:mm');
+                                  return isNaN(date.getTime()) ? 'Invalid' : safeFormat(date, 'HH:mm:ss');
                                 } catch {
                                   return 'Invalid';
                                 }
@@ -263,7 +263,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, onClose }
                           {(() => {
                             try {
                               const date = new Date(event.timestamp);
-                              return isNaN(date.getTime()) ? 'Invalid date' : format(date, 'MMM d, yyyy HH:mm:ss');
+                              return isNaN(date.getTime()) ? 'Invalid date' : safeFormat(date, 'MMM dd, yyyy HH:mm:ss');
                             } catch {
                               return 'Invalid date';
                             }

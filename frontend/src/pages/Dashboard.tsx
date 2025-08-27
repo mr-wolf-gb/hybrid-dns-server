@@ -355,85 +355,100 @@ const Dashboard: React.FC = () => {
           {/* Charts and tables grid */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Query volume chart */}
-            <Card
-              title="Query Volume (24h)"
-              description="DNS queries over the last 24 hours"
-            >
-              {dashboardData?.queries_per_hour && (
-                <DashboardChart data={dashboardData.queries_per_hour} />
-              )}
+            <Card>
+              <CardHeader>
+                <CardTitle>Query Volume (24h)</CardTitle>
+                <p className="text-sm text-gray-600 dark:text-gray-400">DNS queries over the last 24 hours</p>
+              </CardHeader>
+              <CardContent>
+                {dashboardData?.queries_per_hour && (
+                  <DashboardChart data={dashboardData.queries_per_hour} />
+                )}
+              </CardContent>
             </Card>
 
             {/* Forwarder status */}
-            <Card
-              title="Forwarder Health"
-              description="Status of DNS forwarders"
-            >
-              {dashboardData?.forwarder_health && (
-                <ForwarderStatusCard forwarders={dashboardData.forwarder_health} />
-              )}
+            <Card>
+              <CardHeader>
+                <CardTitle>Forwarder Health</CardTitle>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Status of DNS forwarders</p>
+              </CardHeader>
+              <CardContent>
+                {dashboardData?.forwarder_health && (
+                  <ForwarderStatusCard forwarders={dashboardData.forwarder_health} />
+                )}
+              </CardContent>
             </Card>
           </div>
 
           {/* Top domains and recent queries */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             {/* Top domains */}
-            <Card
-              title="Top Domains"
-              description="Most queried domains today"
-            >
-              <div className="space-y-3">
-                {dashboardData?.top_domains?.slice(0, 8).map((domain, index) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                      {domain.domain}
-                    </span>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">
-                      {formatNumber(domain.count)}
-                    </span>
-                  </div>
-                )) || (
-                  <p className="text-sm text-gray-500 dark:text-gray-400">No data available</p>
-                )}
-              </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Top Domains</CardTitle>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Most queried domains today</p>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {dashboardData?.top_domains?.slice(0, 8).map((domain, index) => (
+                    <div key={index} className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                        {domain.domain}
+                      </span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        {formatNumber(domain.count)}
+                      </span>
+                    </div>
+                  )) || (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">No data available</p>
+                  )}
+                </div>
+              </CardContent>
             </Card>
 
             {/* Blocked domains */}
-            <Card
-              title="Blocked Domains"
-              description="Recently blocked domains"
-            >
-              <div className="space-y-3">
-                {dashboardData?.blocked_domains?.slice(0, 8).map((domain, index) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate block">
-                        {domain.domain}
+            <Card>
+              <CardHeader>
+                <CardTitle>Blocked Domains</CardTitle>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Recently blocked domains</p>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {dashboardData?.blocked_domains?.slice(0, 8).map((domain, index) => (
+                    <div key={index} className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate block">
+                          {domain.domain}
+                        </span>
+                        <Badge variant="danger" className="mt-1">
+                          {domain.category}
+                        </Badge>
+                      </div>
+                      <span className="text-sm text-gray-500 dark:text-gray-400 ml-2">
+                        {formatNumber(domain.count)}
                       </span>
-                      <Badge variant="danger" size="sm" className="mt-1">
-                        {domain.category}
-                      </Badge>
                     </div>
-                    <span className="text-sm text-gray-500 dark:text-gray-400 ml-2">
-                      {formatNumber(domain.count)}
-                    </span>
-                  </div>
-                )) || (
-                  <p className="text-sm text-gray-500 dark:text-gray-400">No blocked domains</p>
-                )}
-              </div>
+                  )) || (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">No blocked domains</p>
+                  )}
+                </div>
+              </CardContent>
             </Card>
 
             {/* Recent queries */}
-            <Card
-              title="Recent Queries"
-              description="Latest DNS queries"
-            >
-              {queriesLoading ? (
-                <Loading text="Loading queries..." />
-              ) : (
-                <RecentQueriesTable queries={recentQueries?.data || []} />
-              )}
+            <Card>
+              <CardHeader>
+                <CardTitle>Recent Queries</CardTitle>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Latest DNS queries</p>
+              </CardHeader>
+              <CardContent>
+                {queriesLoading ? (
+                  <Loading text="Loading queries..." />
+                ) : (
+                  <RecentQueriesTable queries={recentQueries?.data || []} />
+                )}
+              </CardContent>
             </Card>
           </div>
 
