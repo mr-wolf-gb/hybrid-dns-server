@@ -43,34 +43,22 @@ const AnalyticsDashboard: React.FC = () => {
       setLoading(true);
 
       const [
-        trendsResponse,
         topDomainsResponse,
-        clientsResponse,
-        performanceResponse,
-        errorsResponse,
-        securityResponse,
-        zonesResponse,
-        insightsResponse
+        clientsResponse
       ] = await Promise.all([
-        reportsApi.getQueryTrends(dateRange.start_date, dateRange.end_date),
-        reportsApi.getTopDomains(dateRange.start_date, dateRange.end_date),
-        reportsApi.getClientAnalytics(dateRange.start_date, dateRange.end_date),
-        reportsApi.getPerformanceAnalytics(dateRange.start_date, dateRange.end_date),
-        reportsApi.getErrorAnalytics(dateRange.start_date, dateRange.end_date),
-        reportsApi.getSecurityAnalytics(dateRange.start_date, dateRange.end_date),
-        reportsApi.getZoneAnalytics(),
-        reportsApi.getAnalyticsInsights(dateRange.start_date, dateRange.end_date)
+        reportsApi.getTopDomains(),
+        reportsApi.getClientAnalytics()
       ]);
 
       setAnalyticsData({
-        trends: trendsResponse.data,
-        topDomains: topDomainsResponse.data.top_domains,
+        trends: null,
+        topDomains: topDomainsResponse.data.top_domains || [],
         clients: clientsResponse.data,
-        performance: performanceResponse.data,
-        errors: errorsResponse.data,
-        security: securityResponse.data,
-        zones: zonesResponse.data,
-        insights: insightsResponse.data.insights
+        performance: null,
+        errors: null,
+        security: null,
+        zones: null,
+        insights: []
       });
     } catch (error) {
       console.error('Failed to load analytics data:', error);

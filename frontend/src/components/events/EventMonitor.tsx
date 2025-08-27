@@ -3,7 +3,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Card, Button, Badge, Input, Select } from '../ui';
+import { Card, CardContent, CardHeader, CardTitle, Button, Badge, Input, Select as SelectNew, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui';
 import { useWebSocketContext, WebSocketMessage } from '../../contexts/WebSocketContext';
 
 import {
@@ -220,7 +220,7 @@ const EventMonitor: React.FC = () => {
               />
             </div>
 
-            <Select
+            <SelectNew
               value={filter.category}
               onValueChange={(value) => setFilter(prev => ({ ...prev, category: value }))}
             >
@@ -235,9 +235,9 @@ const EventMonitor: React.FC = () => {
                   </SelectItem>
                 ))}
               </SelectContent>
-            </Select>
+            </SelectNew>
 
-            <Select
+            <SelectNew
               value={filter.severity}
               onValueChange={(value) => setFilter(prev => ({ ...prev, severity: value }))}
             >
@@ -252,9 +252,9 @@ const EventMonitor: React.FC = () => {
                   </SelectItem>
                 ))}
               </SelectContent>
-            </Select>
+            </SelectNew>
 
-            <Select
+            <SelectNew
               value={filter.source}
               onValueChange={(value) => setFilter(prev => ({ ...prev, source: value }))}
             >
@@ -269,9 +269,9 @@ const EventMonitor: React.FC = () => {
                   </SelectItem>
                 ))}
               </SelectContent>
-            </Select>
+            </SelectNew>
 
-            <Select
+            <SelectNew
               value={filter.eventType}
               onValueChange={(value) => setFilter(prev => ({ ...prev, eventType: value }))}
             >
@@ -286,7 +286,7 @@ const EventMonitor: React.FC = () => {
                   </SelectItem>
                 ))}
               </SelectContent>
-            </Select>
+            </SelectNew>
 
             <div className="flex items-center gap-2">
               <Button
@@ -310,7 +310,7 @@ const EventMonitor: React.FC = () => {
           <div className="flex items-center gap-4 mt-4 pt-4 border-t">
             <div className="flex items-center gap-2">
               <label className="text-sm font-medium">Max Events:</label>
-              <Select
+              <SelectNew
                 value={maxEvents.toString()}
                 onValueChange={(value) => setMaxEvents(parseInt(value))}
               >
@@ -323,7 +323,7 @@ const EventMonitor: React.FC = () => {
                   <SelectItem value="1000">1000</SelectItem>
                   <SelectItem value="2000">2000</SelectItem>
                 </SelectContent>
-              </Select>
+              </SelectNew>
             </div>
 
             <div className="flex items-center gap-2">

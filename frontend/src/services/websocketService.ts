@@ -325,6 +325,10 @@ export class WebSocketService {
       }
     }
   }
+
+  public disableAutoReconnect(): void {
+    this.options.autoReconnect = false
+  }
 }
 
 // Singleton instances for different connection types
@@ -365,7 +369,7 @@ export function disconnectAllForUser(userId: string): void {
 export function forceDisconnectAll(): void {
   connections.forEach(service => {
     // Force immediate disconnection without reconnection
-    service.options.autoReconnect = false
+    service.disableAutoReconnect()
     service.disconnect()
   })
   connections.clear()

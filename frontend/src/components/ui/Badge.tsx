@@ -6,13 +6,15 @@ interface BadgeProps {
   variant?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'outline' | 'destructive' | 'primary' | 'secondary'
   size?: 'sm' | 'md' | 'lg'
   className?: string
+  onClick?: () => void
 }
 
 const Badge: React.FC<BadgeProps> = ({
   children,
   variant = 'default',
   size = 'sm',
-  className
+  className,
+  onClick
 }) => {
   const baseClasses = 'inline-flex items-center rounded-full font-medium'
 
@@ -34,17 +36,21 @@ const Badge: React.FC<BadgeProps> = ({
     lg: 'px-4 py-2 text-base',
   }
 
+  const Component = onClick ? 'button' : 'span'
+
   return (
-    <span
+    <Component
       className={cn(
         baseClasses,
         variantClasses[variant],
         sizeClasses[size],
+        onClick && 'cursor-pointer hover:opacity-80',
         className
       )}
+      onClick={onClick}
     >
       {children}
-    </span>
+    </Component>
   )
 }
 

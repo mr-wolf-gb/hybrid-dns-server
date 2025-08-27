@@ -858,15 +858,17 @@ const DNSZones: React.FC = () => {
       {/* Record modal */}
       {isRecordModalOpen && viewingZoneRecords && (
         <RecordModal
-          zoneId={viewingZoneRecords.id}
+          zoneId={(viewingZoneRecords as Zone)?.id ?? 0}
           record={selectedRecord}
           isOpen={isRecordModalOpen}
           onClose={() => setIsRecordModalOpen(false)}
           onSuccess={() => {
             setIsRecordModalOpen(false)
-            queryClient.invalidateQueries({
-              queryKey: ['records', viewingZoneRecords.id]
-            })
+            if (viewingZoneRecords) {
+              queryClient.invalidateQueries({
+                queryKey: ['records', (viewingZoneRecords as Zone)?.id]
+              })
+            }
           }}
         />
       )}
@@ -883,7 +885,7 @@ const DNSZones: React.FC = () => {
       {/* Zone import/export modal */}
       {isImportExportModalOpen && (
         <ZoneImportExportModal
-          zone={selectedZone}
+          zone={selectedZone || undefined}
           isOpen={isImportExportModalOpen}
           onClose={() => setIsImportExportModalOpen(false)}
           onSuccess={() => {

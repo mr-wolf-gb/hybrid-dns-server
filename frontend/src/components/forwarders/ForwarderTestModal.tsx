@@ -72,7 +72,7 @@ const ForwarderTestModal: React.FC<ForwarderTestModalProps> = ({
         response_time: Math.floor(Math.random() * 200) + 10,
         resolved_ips: ['192.168.1.100', '192.168.1.101'],
         server_responses: forwarder.servers.map(server => ({
-          server,
+          server: server.ip,
           success: Math.random() > 0.1,
           response_time: Math.floor(Math.random() * 150) + 5,
           resolved_ips: Math.random() > 0.5 ? ['192.168.1.100'] : undefined,

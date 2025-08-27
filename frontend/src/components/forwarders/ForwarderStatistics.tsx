@@ -59,7 +59,7 @@ const ForwarderStatistics: React.FC<ForwarderStatisticsProps> = ({ forwarders })
           stats.unknown++
       }
 
-      if (forwarder.type in stats.byType) {
+      if (forwarder.type && forwarder.type in stats.byType) {
         stats.byType[forwarder.type as keyof typeof stats.byType]++
       }
 

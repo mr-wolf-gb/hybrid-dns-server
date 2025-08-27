@@ -99,7 +99,7 @@ const RPZRuleModal: React.FC<RPZRuleModalProps> = ({
   // Fetch rule templates
   const { data: templates } = useQuery({
     queryKey: ['rpz-templates'],
-    queryFn: () => rpzService.getRuleTemplates(),
+    queryFn: () => rpzService.getTemplates(),
     enabled: isOpen,
   })
 
@@ -208,7 +208,7 @@ const RPZRuleModal: React.FC<RPZRuleModalProps> = ({
     setSelectedTemplate(template)
     setValue('rpz_zone', template.zone)
     setValue('action', template.action)
-    setValue('category', template.category)
+    setValue('category', template.category as 'malware' | 'phishing' | 'social_media' | 'adult' | 'gambling' | 'custom')
     if (template.redirect_target) {
       setValue('redirect_target', template.redirect_target)
     }

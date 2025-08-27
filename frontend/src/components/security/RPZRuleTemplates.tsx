@@ -39,33 +39,30 @@ const RPZRuleTemplates: React.FC<RPZRuleTemplatesProps> = ({ isOpen, onClose, on
     formState: { errors },
     reset,
     control
-  } = useForm<RPZRuleTemplateFormData>({
+  } = useForm<Omit<RPZRuleTemplateFormData, 'domains'>>({
     defaultValues: {
       name: '',
       description: '',
       category: 'malware',
-      action: 'block',
+      action: 'block' as const,
       zone: 'rpz.malware',
-      redirect_target: '',
-      domains: ['']
+      redirect_target: ''
     }
   })
 
-  const { fields, append, remove } = useFieldArray({
-    control,
-    name: 'domains'
-  })
+  // Manual domain management instead of useFieldArray
+  const [domains, setDomains] = useState<string[]>([''])
 
   // Fetch templates
   const { data: templates, isLoading } = useQuery({
     queryKey: ['rpz-templates'],
-    queryFn: () => rpzService.getRuleTemplates(),
+    queryFn: () => rpzService.getTemplates(),
     enabled: isOpen
   })
 
   // Create template mutation
   const createTemplateMutation = useMutation({
-    mutationFn: rpzService.createRuleTemplate,
+    mutationFn: rpzService.createTemplate,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rpz-templates'] })
       toast.success('Template created successfully')
@@ -80,7 +77,7 @@ const RPZRuleTemplates: React.FC<RPZRuleTemplatesProps> = ({ isOpen, onClose, on
   // Update template mutation
   const updateTemplateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: RPZRuleTemplateFormData }) =>
-      rpzService.updateRuleTemplate(id, data),
+      rpzService.updateTemplate(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rpz-templates'] })
       toast.success('Template updated successfully')
@@ -95,7 +92,7 @@ const RPZRuleTemplates: React.FC<RPZRuleTemplatesProps> = ({ isOpen, onClose, on
 
   // Delete template mutation
   const deleteTemplateMutation = useMutation({
-    mutationFn: rpzService.deleteRuleTemplate,
+    mutationFn: rpzService.deleteTemplate,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rpz-templates'] })
       toast.success('Template deleted successfully')
@@ -113,9 +110,9 @@ const RPZRuleTemplates: React.FC<RPZRuleTemplatesProps> = ({ isOpen, onClose, on
       category: 'malware',
       action: 'block',
       zone: 'rpz.malware',
-      redirect_target: '',
-      domains: ['']
+      redirect_target: ''
     })
+    setDomains([''])
     setIsFormOpen(true)
   }
 
@@ -127,9 +124,9 @@ const RPZRuleTemplates: React.FC<RPZRuleTemplatesProps> = ({ isOpen, onClose, on
       category: template.category,
       action: template.action,
       zone: template.zone,
-      redirect_target: template.redirect_target || '',
-      domains: template.domains.length > 0 ? template.domains : ['']
+      redirect_target: template.redirect_target || ''
     })
+    setDomains(template.domains.length > 0 ? template.domains : [''])
     setIsFormOpen(true)
   }
 
@@ -146,11 +143,11 @@ const RPZRuleTemplates: React.FC<RPZRuleTemplatesProps> = ({ isOpen, onClose, on
     }
   }
 
-  const onSubmit = (data: RPZRuleTemplateFormData) => {
+  const onSubmit = (data: Omit<RPZRuleTemplateFormData, 'domains'>) => {
     // Filter out empty domains
     const cleanedData = {
       ...data,
-      domains: data.domains.filter(domain => domain.trim().length > 0)
+      domains: domains.filter(domain => domain.trim().length > 0)
     }
 
     if (selectedTemplate) {
@@ -304,7 +301,7 @@ const RPZRuleTemplates: React.FC<RPZRuleTemplatesProps> = ({ isOpen, onClose, on
             title={selectedTemplate ? 'Edit Template' : 'Create Template'}
             size="lg"
           >
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-6">
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <Input
@@ -372,19 +369,27 @@ const RPZRuleTemplates: React.FC<RPZRuleTemplatesProps> = ({ isOpen, onClose, on
                     Template Domains
                   </label>
                   <div className="space-y-2">
-                    {fields.map((field, index) => (
-                      <div key={field.id} className="flex items-center space-x-2">
+                    {domains.map((domain: string, index: number) => (
+                      <div key={index} className="flex items-center space-x-2">
                         <Input
                           placeholder="example.com or *.example.com"
-                          {...register(`domains.${index}` as const)}
+                          value={domain}
+                          onChange={(e) => {
+                            const newDomains = [...domains]
+                            newDomains[index] = e.target.value
+                            setDomains(newDomains)
+                          }}
                           className="flex-1"
                         />
-                        {fields.length > 1 && (
+                        {domains.length > 1 && (
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={() => remove(index)}
+                            onClick={() => {
+                              const newDomains = domains.filter((_, i) => i !== index)
+                              setDomains(newDomains)
+                            }}
                             className="text-red-600 hover:text-red-700"
                           >
                             <XMarkIcon className="h-4 w-4" />
@@ -396,7 +401,7 @@ const RPZRuleTemplates: React.FC<RPZRuleTemplatesProps> = ({ isOpen, onClose, on
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => append('')}
+                      onClick={() => setDomains([...domains, ''])}
                     >
                       <PlusIcon className="h-4 w-4 mr-2" />
                       Add Domain

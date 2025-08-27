@@ -245,13 +245,13 @@ const PerformanceMetrics: React.FC = () => {
               </div>
               <div>
                 <div className="text-lg font-semibold text-gray-900 dark:text-white">
-                  {formatResponseTime(overall_metrics.p95_response_time)}
+                  {formatResponseTime(overall_metrics.p95_response_time ?? null)}
                 </div>
                 <div className="text-xs text-gray-500">95th Percentile</div>
               </div>
               <div>
                 <div className="text-lg font-semibold text-gray-900 dark:text-white">
-                  {formatResponseTime(overall_metrics.p99_response_time)}
+                  {formatResponseTime(overall_metrics.p99_response_time ?? null)}
                 </div>
                 <div className="text-xs text-gray-500">99th Percentile</div>
               </div>

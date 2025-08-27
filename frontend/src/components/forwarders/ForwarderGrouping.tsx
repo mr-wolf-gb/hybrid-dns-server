@@ -61,13 +61,13 @@ const ForwarderGrouping: React.FC<ForwarderGroupingProps> = ({
       
       switch (groupBy) {
         case 'type':
-          groupKey = forwarder.type
+          groupKey = forwarder.type || 'unknown'
           break
         case 'status':
           groupKey = forwarder.is_active ? 'active' : 'inactive'
           break
         case 'health':
-          groupKey = forwarder.health_status
+          groupKey = forwarder.health_status || 'unknown'
           break
         default:
           groupKey = 'all'
@@ -273,8 +273,8 @@ const ForwarderGrouping: React.FC<ForwarderGroupingProps> = ({
                               {forwarder.domain}
                             </p>
                           </div>
-                          <Badge className={getTypeColor(forwarder.type)} size="sm">
-                            {getTypeLabel(forwarder.type)}
+                          <Badge className={getTypeColor(forwarder.type || 'unknown')} size="sm">
+                            {getTypeLabel(forwarder.type || 'unknown')}
                           </Badge>
                         </div>
                         
@@ -302,8 +302,8 @@ const ForwarderGrouping: React.FC<ForwarderGroupingProps> = ({
                               <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                                 {forwarder.name}
                               </h4>
-                              <Badge className={getTypeColor(forwarder.type)} size="sm">
-                                {getTypeLabel(forwarder.type)}
+                              <Badge className={getTypeColor(forwarder.type || 'unknown')} size="sm">
+                                {getTypeLabel(forwarder.type || 'unknown')}
                               </Badge>
                             </div>
                             <p className="text-xs text-gray-500 dark:text-gray-400 truncate">

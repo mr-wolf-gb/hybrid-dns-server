@@ -10,7 +10,7 @@ import LazyChart from '@/components/charts/LazyChart'
 import { rpzService } from '@/services/api'
 import { Card, Button, Select, Badge } from '@/components/ui'
 import { formatNumber, formatDateTime } from '@/utils'
-import { BlockedQueryReport, ThreatDetectionReport } from '@/types'
+// import { BlockedQueryReport, ThreatDetectionReport } from '@/types'
 
 interface SecurityAnalyticsProps {
     isOpen: boolean

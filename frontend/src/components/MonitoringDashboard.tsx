@@ -1,13 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, Button, Badge, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui';
+import { Card, CardContent, CardHeader, CardTitle, Button, Badge, Tabs, TabsContent, TabsList, TabsTrigger, Alert, AlertDescription, Select as SelectNew, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui';
 import { 
   LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
-import { 
-  Activity, AlertTriangle, TrendingUp, TrendingDown, 
-  Clock, Shield, Users, Globe, Zap, Database 
-} from 'lucide-react';
+import {
+  ChartBarIcon as Activity,
+  ExclamationTriangleIcon as AlertTriangle,
+  ArrowTrendingUpIcon as TrendingUp,
+  ArrowTrendingDownIcon as TrendingDown,
+  ClockIcon as Clock,
+  ShieldCheckIcon as Shield,
+  UsersIcon as Users,
+  GlobeAltIcon as Globe,
+  BoltIcon as Zap,
+  CircleStackIcon as Database
+} from '@heroicons/react/24/outline';
 
 interface PerformanceMetrics {
   queries_per_second: number;
@@ -213,7 +221,7 @@ const MonitoringDashboard: React.FC = () => {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Performance Monitoring</h1>
         <div className="flex items-center space-x-4">
-          <Select value={timeRange} onValueChange={setTimeRange}>
+          <SelectNew value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger className="w-32">
               <SelectValue />
             </SelectTrigger>
@@ -223,7 +231,7 @@ const MonitoringDashboard: React.FC = () => {
               <SelectItem value="24">24 Hours</SelectItem>
               <SelectItem value="168">7 Days</SelectItem>
             </SelectContent>
-          </Select>
+          </SelectNew>
           <Button
             variant="outline"
             onClick={() => setAutoRefresh(!autoRefresh)}

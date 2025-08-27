@@ -36,6 +36,7 @@ interface FeedFormData {
   update_frequency: number
   description?: string
   is_active: boolean
+  auto_update?: boolean
 }
 
 interface CustomListFormData {
@@ -927,7 +928,7 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
                         Feeds Needing Attention
                       </h4>
                       <div className="space-y-2">
-                        {statistics.data.health_metrics.feeds_needing_attention.map((feed) => (
+                        {statistics.data.health_metrics.feeds_needing_attention.map((feed: any) => (
                           <div key={feed.feed_id} className="flex items-center justify-between p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
                             <div>
                               <div className="font-medium text-gray-900 dark:text-gray-100">
@@ -951,7 +952,7 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
                         Recommendations
                       </h4>
                       <ul className="space-y-2">
-                        {statistics.data.health_metrics.recommendations.map((recommendation, index) => (
+                        {statistics.data.health_metrics.recommendations.map((recommendation: any, index: number) => (
                           <li key={index} className="flex items-start space-x-2">
                             <CheckCircleIcon className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
                             <span className="text-sm text-gray-700 dark:text-gray-300">
@@ -1027,7 +1028,7 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
                         Overdue Feeds
                       </h4>
                       <div className="space-y-2">
-                        {schedule.data.overdue_feeds.map((feed) => (
+                        {schedule.data.overdue_feeds.map((feed: any) => (
                           <div key={feed.feed_id} className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
                             <div>
                               <div className="font-medium text-gray-900 dark:text-gray-100">
@@ -1053,7 +1054,7 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
                         Upcoming Updates
                       </h4>
                       <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {schedule.data.upcoming_updates.slice(0, 10).map((feed) => (
+                        {schedule.data.upcoming_updates.slice(0, 10).map((feed: any) => (
                           <div key={feed.feed_id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                             <div>
                               <div className="font-medium text-gray-900 dark:text-gray-100">

@@ -208,8 +208,8 @@ export interface ZoneHealth {
 export interface ZoneFormData {
   name: string
   zone_type: 'master' | 'slave' | 'forward'
-  master_servers: string[]
-  forwarders: string[]
+  master_servers: { value: string }[]
+  forwarders: { value: string }[]
   email: string
   description?: string
   refresh: number

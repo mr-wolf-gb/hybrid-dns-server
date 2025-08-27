@@ -223,7 +223,7 @@ export const RealTimeEventProvider: React.FC<RealTimeEventProviderProps> = ({ ch
       id: `${message.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       type: message.type,
       data: message.data,
-      timestamp: message.timestamp,
+      timestamp: message.timestamp || new Date().toISOString(),
       acknowledged: false,
       severity
     }

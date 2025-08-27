@@ -14,7 +14,7 @@ import LazyChart from '@/components/charts/LazyChart'
 import { rpzService } from '@/services/api'
 import { Card, Button, Badge, Select } from '@/components/ui'
 import { formatNumber, formatDateTime, formatRelativeTime } from '@/utils'
-import { ThreatIntelligenceStats, ThreatDetectionReport } from '@/types'
+// import { ThreatIntelligenceStats, ThreatDetectionReport } from '@/types'
 
 interface ThreatIntelligenceDashboardProps {
     isOpen: boolean

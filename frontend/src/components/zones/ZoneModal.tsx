@@ -62,7 +62,7 @@ const ZONE_TEMPLATES: ZoneTemplate[] = [
     zone_type: 'forward',
     defaults: {
       email: 'admin@company.local',
-      forwarders: ['8.8.8.8', '8.8.4.4'],
+      forwarders: [{ value: '8.8.8.8' }, { value: '8.8.4.4' }],
     }
   }
 ]
@@ -86,8 +86,8 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
     defaultValues: zone ? {
       name: zone.name,
       zone_type: zone.zone_type,
-      master_servers: zone.master_servers || [],
-      forwarders: zone.forwarders || [],
+      master_servers: (zone.master_servers || []).map(server => ({ value: server })),
+      forwarders: (zone.forwarders || []).map(forwarder => ({ value: forwarder })),
       email: zone.email,
       description: zone.description || '',
       refresh: zone.refresh,
@@ -135,13 +135,13 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
         while (masterServerFields.length > 0) {
           removeMasterServer(0)
         }
-        value.forEach(server => appendMasterServer(server))
+        value.forEach(server => appendMasterServer(typeof server === 'string' ? { value: server } : server))
       } else if (key === 'forwarders' && Array.isArray(value)) {
         // Clear existing and add new forwarders
         while (forwarderFields.length > 0) {
           removeForwarder(0)
         }
-        value.forEach(forwarder => appendForwarder(forwarder))
+        value.forEach(forwarder => appendForwarder(typeof forwarder === 'string' ? { value: forwarder } : forwarder))
       } else {
         setValue(key as keyof ZoneFormData, value as any)
       }
@@ -269,9 +269,9 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
     const cleanedData = {
       ...data,
       email: convertEmailToDNSFormat(data.email),
-      master_servers: data.master_servers?.filter(server => server.trim() !== '') || [],
-      forwarders: data.forwarders?.filter(forwarder => forwarder.trim() !== '') || [],
-    }
+      master_servers: data.master_servers?.map(item => item.value).filter(server => server.trim() !== '') || [],
+      forwarders: data.forwarders?.map(item => item.value).filter(forwarder => forwarder.trim() !== '') || [],
+    } as any
 
     if (isEditing) {
       updateMutation.mutate(cleanedData)
@@ -295,8 +295,8 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
       reset({
         name: zone.name,
         zone_type: zone.zone_type,
-        master_servers: zone.master_servers || [],
-        forwarders: zone.forwarders || [],
+        master_servers: (zone.master_servers || []).map(server => ({ value: server })),
+        forwarders: (zone.forwarders || []).map(forwarder => ({ value: forwarder })),
         email: zone.email,
         description: zone.description || '',
         refresh: zone.refresh,
@@ -405,7 +405,7 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
                 <div key={field.id} className="flex items-end space-x-3">
                   <div className="flex-1">
                     <Controller
-                      name={`master_servers.${index}`}
+                      name={`master_servers.${index}.value`}
                       control={control}
                       rules={{ validate: validateIPAddress }}
                       render={({ field, fieldState }) => (
@@ -434,7 +434,7 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => appendMasterServer('')}
+                onClick={() => appendMasterServer({ value: '' })}
                 className="flex items-center space-x-2"
               >
                 <PlusIcon className="h-4 w-4" />
@@ -455,7 +455,7 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
                 <div key={field.id} className="flex items-end space-x-3">
                   <div className="flex-1">
                     <Controller
-                      name={`forwarders.${index}`}
+                      name={`forwarders.${index}.value`}
                       control={control}
                       rules={{ validate: validateIPAddress }}
                       render={({ field, fieldState }) => (
@@ -484,7 +484,7 @@ const ZoneModal: React.FC<ZoneModalProps> = ({ zone, isOpen, onClose, onSuccess 
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => appendForwarder('')}
+                onClick={() => appendForwarder({ value: '' })}
                 className="flex items-center space-x-2"
               >
                 <PlusIcon className="h-4 w-4" />

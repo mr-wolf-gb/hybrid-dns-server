@@ -147,7 +147,7 @@ export class UnifiedWebSocketService {
         return
       }
 
-      this.connectionStatus = 'connecting'
+      // Connection is being established
 
       try {
         this.ws = new WebSocket(this.url)
@@ -206,7 +206,7 @@ export class UnifiedWebSocketService {
         }
 
       } catch (error) {
-        this.connectionStatus = 'error'
+        // Connection error occurred
         console.error('WebSocket connection error:', error)
         reject(error)
       }

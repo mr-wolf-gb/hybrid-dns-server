@@ -47,7 +47,7 @@ const RealTimeChart: React.FC<RealTimeChartProps> = ({
     if (!isConnected) return
 
     const handlerId = 'realtime-chart'
-    
+
     registerEventHandler(handlerId, ['system_status'], (message) => {
       if (message.data?.type === 'query_update') {
         // Add new data point to the chart
@@ -65,16 +65,16 @@ const RealTimeChart: React.FC<RealTimeChartProps> = ({
             updated[existingIndex] = {
               ...updated[existingIndex],
               total_queries: updated[existingIndex].total_queries + 1,
-              blocked_queries: data.data.blocked ? updated[existingIndex].blocked_queries + 1 : updated[existingIndex].blocked_queries,
-              allowed_queries: data.data.blocked ? updated[existingIndex].allowed_queries : updated[existingIndex].allowed_queries + 1
+              blocked_queries: message.data.blocked ? updated[existingIndex].blocked_queries + 1 : updated[existingIndex].blocked_queries,
+              allowed_queries: message.data.blocked ? updated[existingIndex].allowed_queries : updated[existingIndex].allowed_queries + 1
             }
           } else {
             // Add new data point
             const newPoint: QueryStreamData = {
               timestamp: currentMinute.toISOString(),
               total_queries: 1,
-              blocked_queries: data.data.blocked ? 1 : 0,
-              allowed_queries: data.data.blocked ? 0 : 1,
+              blocked_queries: message.data.blocked ? 1 : 0,
+              allowed_queries: message.data.blocked ? 0 : 1,
               unique_clients: 1,
               avg_response_time: 0
             }
@@ -234,8 +234,8 @@ const RealTimeChart: React.FC<RealTimeChartProps> = ({
           <button
             onClick={toggleLive}
             className={`px-3 py-1 text-sm rounded-md border ${isLive
-                ? 'border-red-300 text-red-700 bg-red-50 hover:bg-red-100 dark:border-red-600 dark:text-red-400 dark:bg-red-900/20 dark:hover:bg-red-900/30'
-                : 'border-green-300 text-green-700 bg-green-50 hover:bg-green-100 dark:border-green-600 dark:text-green-400 dark:bg-green-900/20 dark:hover:bg-green-900/30'
+              ? 'border-red-300 text-red-700 bg-red-50 hover:bg-red-100 dark:border-red-600 dark:text-red-400 dark:bg-red-900/20 dark:hover:bg-red-900/30'
+              : 'border-green-300 text-green-700 bg-green-50 hover:bg-green-100 dark:border-green-600 dark:text-green-400 dark:bg-green-900/20 dark:hover:bg-green-900/30'
               }`}
           >
             {isLive ? 'Pause' : 'Resume'}

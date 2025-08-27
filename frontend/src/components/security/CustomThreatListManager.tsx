@@ -10,7 +10,7 @@ import {
     ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline'
 import { rpzService } from '@/services/api'
-import { Modal, Button, Input, Card, Badge, Table, Textarea } from '@/components/ui'
+import { Modal, Button, Input, Card, Badge, Table, Textarea, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui'
 import { formatDateTime, formatNumber } from '@/utils'
 import { ThreatFeed, RPZRule } from '@/types'
 import { toast } from 'react-toastify'
@@ -359,15 +359,19 @@ const CustomThreatListManager: React.FC<CustomThreatListManagerProps> = ({
                                         />
 
                                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                            <Select
-                                                label="Action"
-                                                {...register('action')}
-                                                options={[
-                                                    { value: 'block', label: 'Block' },
-                                                    { value: 'redirect', label: 'Redirect' },
-                                                    { value: 'passthru', label: 'Pass Through' },
-                                                ]}
-                                            />
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Action</label>
+                                                <Select {...register('action')}>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Select action" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="block">Block</SelectItem>
+                                                        <SelectItem value="redirect">Redirect</SelectItem>
+                                                        <SelectItem value="passthru">Pass Through</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
 
                                             {watchAction === 'redirect' && (
                                                 <Input

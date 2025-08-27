@@ -3,7 +3,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Button, Input, Badge, Select } from '../ui';
+import { Card, CardContent, CardHeader, CardTitle, Button, Input, Badge, Select as SelectNew, SelectTrigger, SelectValue, SelectContent, SelectItem, Label, Textarea, Progress } from '../ui';
 import { useWebSocketContext } from '../../contexts/WebSocketContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'react-toastify';
@@ -261,7 +261,7 @@ const EventReplay: React.FC = () => {
 
               <div>
                 <Label htmlFor="replay-speed">Replay Speed</Label>
-                <Select
+                <SelectNew
                   value={replayConfig.replay_speed.toString()}
                   onValueChange={(value) => handleInputChange('replay_speed', parseInt(value))}
                 >
@@ -275,7 +275,7 @@ const EventReplay: React.FC = () => {
                       </SelectItem>
                     ))}
                   </SelectContent>
-                </Select>
+                </SelectNew>
               </div>
             </div>
 

@@ -1,4 +1,4 @@
-import { SelectHTMLAttributes, forwardRef } from 'react'
+import React, { SelectHTMLAttributes, forwardRef, createContext, useContext, useState } from 'react'
 import { ChevronDownIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/utils'
 
@@ -16,6 +16,132 @@ interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'chi
   placeholder?: string
   children?: React.ReactNode
   onValueChange?: (value: string) => void
+}
+
+// Context for the new Select components
+interface SelectContextType {
+  value: string
+  onValueChange: (value: string) => void
+  open: boolean
+  setOpen: (open: boolean) => void
+}
+
+const SelectContext = createContext<SelectContextType | undefined>(undefined)
+
+// New Select component for shadcn-style usage
+interface NewSelectProps {
+  value?: string
+  defaultValue?: string
+  onValueChange?: (value: string) => void
+  children: React.ReactNode
+}
+
+const NewSelect: React.FC<NewSelectProps> = ({ value, defaultValue, onValueChange, children }) => {
+  const [internalValue, setInternalValue] = useState(defaultValue || '')
+  const [open, setOpen] = useState(false)
+  const currentValue = value !== undefined ? value : internalValue
+
+  const handleValueChange = (newValue: string) => {
+    if (value === undefined) {
+      setInternalValue(newValue)
+    }
+    onValueChange?.(newValue)
+    setOpen(false)
+  }
+
+  return (
+    <SelectContext.Provider value={{ value: currentValue, onValueChange: handleValueChange, open, setOpen }}>
+      <div className="relative">
+        {children}
+      </div>
+    </SelectContext.Provider>
+  )
+}
+
+interface SelectTriggerProps {
+  children: React.ReactNode
+  className?: string
+}
+
+const SelectTrigger: React.FC<SelectTriggerProps> = ({ children, className }) => {
+  const context = useContext(SelectContext)
+  if (!context) throw new Error('SelectTrigger must be used within Select')
+
+  const { open, setOpen } = context
+
+  return (
+    <button
+      type="button"
+      className={cn(
+        'flex h-10 w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:ring-offset-gray-950 dark:placeholder:text-gray-400 dark:focus:ring-blue-400',
+        className
+      )}
+      onClick={() => setOpen(!open)}
+    >
+      {children}
+      <ChevronDownIcon className="h-4 w-4 opacity-50" />
+    </button>
+  )
+}
+
+const SelectValue: React.FC<{ placeholder?: string }> = ({ placeholder }) => {
+  const context = useContext(SelectContext)
+  if (!context) throw new Error('SelectValue must be used within Select')
+
+  const { value } = context
+  return <span>{value || placeholder}</span>
+}
+
+interface SelectContentProps {
+  children: React.ReactNode
+  className?: string
+}
+
+const SelectContent: React.FC<SelectContentProps> = ({ children, className }) => {
+  const context = useContext(SelectContext)
+  if (!context) throw new Error('SelectContent must be used within Select')
+
+  const { open } = context
+
+  if (!open) return null
+
+  return (
+    <div
+      className={cn(
+        'absolute top-full z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none dark:border-gray-600 dark:bg-gray-700 sm:text-sm',
+        className
+      )}
+    >
+      {children}
+    </div>
+  )
+}
+
+interface SelectItemProps {
+  value: string
+  children: React.ReactNode
+  className?: string
+}
+
+const SelectItem: React.FC<SelectItemProps> = ({ value, children, className }) => {
+  const context = useContext(SelectContext)
+  if (!context) throw new Error('SelectItem must be used within Select')
+
+  const { onValueChange, value: selectedValue } = context
+  const isSelected = selectedValue === value
+
+  return (
+    <div
+      className={cn(
+        'relative cursor-default select-none py-2 pl-3 pr-9 text-gray-900 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-600',
+        isSelected && 'bg-blue-100 text-blue-900 dark:bg-blue-900 dark:text-blue-100',
+        className
+      )}
+      onClick={() => onValueChange(value)}
+    >
+      {children}
+    </div>
+  )
 }
 
 const Select = forwardRef<HTMLSelectElement, SelectProps>(
@@ -80,4 +206,6 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
 
 Select.displayName = 'Select'
 
+// Export both old and new Select components
+export { NewSelect as Select, SelectTrigger, SelectValue, SelectContent, SelectItem }
 export default Select
