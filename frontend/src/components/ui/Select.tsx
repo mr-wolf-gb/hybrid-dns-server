@@ -1,4 +1,4 @@
-import React, { SelectHTMLAttributes, forwardRef } from 'react'
+import { SelectHTMLAttributes, forwardRef } from 'react'
 import { ChevronDownIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/utils'
 
@@ -12,12 +12,14 @@ interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'chi
   label?: string
   error?: string
   helperText?: string
-  options: SelectOption[]
+  options?: SelectOption[]
   placeholder?: string
+  children?: React.ReactNode
+  onValueChange?: (value: string) => void
 }
 
 const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className, label, error, helperText, options, placeholder, ...props }, ref) => {
+  ({ className, label, error, helperText, options, placeholder, children, onValueChange, onChange, ...props }, ref) => {
     const baseClasses = 'block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm bg-white text-gray-900 dark:bg-gray-700 dark:border-gray-500 dark:text-white dark:focus:border-blue-400 dark:focus:ring-blue-400 appearance-none pr-10 p-2.5'
     const errorClasses = 'border-red-300 focus:border-red-500 focus:ring-red-500 dark:border-red-400 dark:focus:border-red-400 dark:focus:ring-red-400'
 
@@ -37,6 +39,10 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
               className
             )}
             ref={ref}
+            onChange={(e) => {
+              onValueChange?.(e.target.value)
+              onChange?.(e)
+            }}
             {...props}
           >
             {placeholder && (
@@ -44,7 +50,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
                 {placeholder}
               </option>
             )}
-            {options.map((option) => (
+            {children || options?.map((option) => (
               <option
                 key={option.value}
                 value={option.value}

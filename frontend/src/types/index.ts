@@ -322,6 +322,7 @@ export interface ThreatFeedFormData {
   update_frequency: number
   description?: string
   is_active: boolean
+  auto_update?: boolean
 }
 
 export interface SecurityStatistics {

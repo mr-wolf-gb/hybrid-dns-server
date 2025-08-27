@@ -10,7 +10,7 @@ import {
     ArrowTrendingDownIcon,
     InformationCircleIcon,
 } from '@heroicons/react/24/outline'
-import { Line, Doughnut, Bar } from 'react-chartjs-2'
+import LazyChart from '@/components/charts/LazyChart'
 import { rpzService } from '@/services/api'
 import { Card, Button, Badge, Select } from '@/components/ui'
 import { formatNumber, formatDateTime, formatRelativeTime } from '@/utils'
@@ -247,7 +247,11 @@ const ThreatIntelligenceDashboard: React.FC<ThreatIntelligenceDashboardProps> = 
                         >
                             <div className="h-64">
                                 {stats?.threat_feeds?.feeds_by_type && Object.keys(stats.threat_feeds.feeds_by_type).length > 0 ? (
-                                    <Doughnut data={feedTypeChartData} options={chartOptions} />
+                                    <LazyChart>
+                                        {({ Doughnut }) => (
+                                            <Doughnut data={feedTypeChartData} options={chartOptions} />
+                                        )}
+                                    </LazyChart>
                                 ) : (
                                     <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
                                         No feed data available
@@ -264,7 +268,11 @@ const ThreatIntelligenceDashboard: React.FC<ThreatIntelligenceDashboardProps> = 
                         >
                             <div className="h-64">
                                 {report?.threat_timeline?.length ? (
-                                    <Line data={threatTimelineData} options={chartOptions} />
+                                    <LazyChart>
+                                        {({ Line }) => (
+                                            <Line data={threatTimelineData} options={chartOptions} />
+                                        )}
+                                    </LazyChart>
                                 ) : (
                                     <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
                                         No timeline data available
@@ -282,7 +290,11 @@ const ThreatIntelligenceDashboard: React.FC<ThreatIntelligenceDashboardProps> = 
                         >
                             <div className="h-64">
                                 {report?.threat_categories && Object.keys(report.threat_categories).length > 0 ? (
-                                    <Bar data={categoryThreatData} options={barChartOptions} />
+                                    <LazyChart>
+                                        {({ Bar }) => (
+                                            <Bar data={categoryThreatData} options={barChartOptions} />
+                                        )}
+                                    </LazyChart>
                                 ) : (
                                     <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
                                         No category data available

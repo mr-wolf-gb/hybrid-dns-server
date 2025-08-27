@@ -182,7 +182,7 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
     onSuccess: (response, feedId) => {
       queryClient.invalidateQueries({ queryKey: ['threat-feeds'] })
       const feed = feeds?.data?.find((f: ThreatFeed) => f.id === feedId)
-      toast.success(`Updated ${feed?.name}: ${response.data.data.imported} rules imported`)
+      toast.success(`Updated ${feed?.name}: ${response.data.rules_added} rules imported`)
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.detail || 'Failed to update threat feed')
@@ -214,7 +214,8 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
 
   // Create custom threat list mutation
   const createCustomListMutation = useMutation({
-    mutationFn: rpzService.createCustomThreatList,
+    mutationFn: ({ name, domains, category, description }: { name: string; domains: string[]; category?: string; description?: string }) => 
+      rpzService.createCustomThreatList(name, domains, category, description),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['threat-feeds'] })
       toast.success('Custom threat list created successfully')
@@ -438,13 +439,13 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
       header: 'Last Update',
       render: (feed: ThreatFeed) => (
         <div>
-          {feed.last_update ? (
+          {feed.last_updated ? (
             <>
               <div className="text-sm text-gray-900 dark:text-gray-100">
-                {formatRelativeTime(feed.last_update)}
+                {formatRelativeTime(feed.last_updated)}
               </div>
               <div className="text-xs text-gray-500 dark:text-gray-400">
-                {formatDateTime(feed.last_update)}
+                {formatDateTime(feed.last_updated)}
               </div>
             </>
           ) : (

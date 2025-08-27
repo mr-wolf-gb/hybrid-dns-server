@@ -32,6 +32,8 @@ Modified `frontend/vite.config.ts` to:
 Updated the following components to use LazyChart:
 - `frontend/src/components/dashboard/RealTimeChart.tsx`
 - `frontend/src/components/security/SecurityStats.tsx`
+- `frontend/src/components/security/SecurityAnalytics.tsx`
+- `frontend/src/components/security/ThreatIntelligenceDashboard.tsx`
 - `frontend/src/components/reports/AnalyticsDashboard.tsx`
 - `frontend/src/pages/Analytics.tsx`
 
@@ -43,7 +45,7 @@ Updated the following components to use LazyChart:
 ## Results
 
 ### Bundle Optimization
-- `chartjs-vendor`: 200KB (Chart.js isolated)
+- `chartjs-vendor`: 201KB (Chart.js isolated)
 - `charts-vendor`: 323KB (other chart libraries)
 - Total build time: ~12 seconds
 - No more initialization conflicts
@@ -89,6 +91,8 @@ const MyChart = () => (
 - `frontend/vite.config.ts`
 - `frontend/src/components/dashboard/RealTimeChart.tsx`
 - `frontend/src/components/security/SecurityStats.tsx`
+- `frontend/src/components/security/SecurityAnalytics.tsx`
+- `frontend/src/components/security/ThreatIntelligenceDashboard.tsx`
 - `frontend/src/components/reports/AnalyticsDashboard.tsx`
 - `frontend/src/pages/Analytics.tsx`
 

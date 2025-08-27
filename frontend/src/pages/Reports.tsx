@@ -11,11 +11,11 @@ import {
 } from '@heroicons/react/24/outline';
 import { toast } from 'react-toastify';
 
-import { reportsApi } from '../services/api';
-import ReportTemplateModal from '../components/reports/ReportTemplateModal';
-import ReportScheduleModal from '../components/reports/ReportScheduleModal';
-import ReportGenerateModal from '../components/reports/ReportGenerateModal';
-import AnalyticsDashboard from '../components/reports/AnalyticsDashboard';
+import { reportsApi } from '@/services/api';
+import ReportTemplateModal from '@/components/reports/ReportTemplateModal';
+import ReportScheduleModal from '@/components/reports/ReportScheduleModal';
+import ReportGenerateModal from '@/components/reports/ReportGenerateModal';
+import AnalyticsDashboard from '@/components/reports/AnalyticsDashboard';
 
 interface ReportTemplate {
   template_id: string;

@@ -4,6 +4,9 @@ import { cn } from '@/utils'
 interface CardProps {
   children: ReactNode
   className?: string
+  title?: string
+  description?: string
+  action?: ReactNode
 }
 
 interface CardHeaderProps {
@@ -21,13 +24,28 @@ interface CardTitleProps {
   className?: string
 }
 
-const Card: React.FC<CardProps> = ({ children, className }) => {
+const Card: React.FC<CardProps> = ({ children, className, title, description, action }) => {
   return (
     <div className={cn(
       'bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700',
       className
     )}>
-      {children}
+      {(title || description || action) && (
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              {title && <CardTitle>{title}</CardTitle>}
+              {description && (
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{description}</p>
+              )}
+            </div>
+            {action && <div>{action}</div>}
+          </div>
+        </CardHeader>
+      )}
+      <CardContent>
+        {children}
+      </CardContent>
     </div>
   )
 }

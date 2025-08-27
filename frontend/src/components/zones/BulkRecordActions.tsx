@@ -101,7 +101,7 @@ const BulkRecordActions: React.FC<BulkRecordActionsProps> = ({
   // Import records mutation
   const importMutation = useMutation({
     mutationFn: async (data: { records: RecordFormData[] }) => {
-      await recordsService.importRecords(zoneId, data)
+      return recordsService.importRecords(zoneId, data)
     },
     onSuccess: (response) => {
       const result = response.data

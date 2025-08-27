@@ -3,17 +3,6 @@ import { useQuery } from '@tanstack/react-query'
 import { useWebSocketContext } from '@/contexts/WebSocketContext'
 import LazyChart from '@/components/charts/LazyChart'
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-)
-
 interface QueryStreamData {
   timestamp: string
   total_queries: number

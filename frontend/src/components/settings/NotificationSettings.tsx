@@ -120,19 +120,20 @@ export const NotificationSettings: React.FC = () => {
     const queryClient = useQueryClient()
 
     // Fetch current preferences
-    const { data: currentPreferences, isLoading } = useQuery({
+    const { data: currentPreferences, isLoading, error } = useQuery({
         queryKey: ['notification-preferences'],
         queryFn: () => userService.getNotificationPreferences(),
-        onSuccess: (data) => {
-            if (data?.data) {
-                setPreferences({ ...DEFAULT_PREFERENCES, ...data.data })
-            }
-        },
-        onError: () => {
+    })
+
+    // Handle data updates with useEffect instead of onSuccess
+    useEffect(() => {
+        if (currentPreferences?.data) {
+            setPreferences({ ...DEFAULT_PREFERENCES, ...currentPreferences.data })
+        } else if (error) {
             // If preferences don't exist, use defaults
             setPreferences(DEFAULT_PREFERENCES)
         }
-    })
+    }, [currentPreferences, error])
 
     // Save preferences mutation
     const savePreferencesMutation = useMutation({

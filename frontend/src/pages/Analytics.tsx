@@ -9,7 +9,7 @@ import { ExportControls } from '@/components/analytics/ExportControls'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { ErrorMessage } from '@/components/ui/ErrorMessage'
 
-// Chart.js components will be loaded dynamically
+import LazyChart from '@/components/charts/LazyChart'
 
 interface AnalyticsFilters {
   dateRange: {
@@ -373,7 +373,9 @@ export const Analytics: React.FC = () => {
               {trendsLoading ? (
                 <LoadingSpinner />
               ) : queryTrendsChart ? (
-                <Line {...queryTrendsChart} />
+                <LazyChart>
+                  {({ Line }) => <Line {...queryTrendsChart} />}
+                </LazyChart>
               ) : (
                 <div className="text-center text-gray-500">No data available</div>
               )}
@@ -384,7 +386,9 @@ export const Analytics: React.FC = () => {
               {topDomainsLoading ? (
                 <LoadingSpinner />
               ) : queryTypeChart ? (
-                <Doughnut {...queryTypeChart} />
+                <LazyChart>
+                  {({ Doughnut }) => <Doughnut {...queryTypeChart} />}
+                </LazyChart>
               ) : (
                 <div className="text-center text-gray-500">No data available</div>
               )}
@@ -420,7 +424,9 @@ export const Analytics: React.FC = () => {
               {securityLoading ? (
                 <LoadingSpinner />
               ) : securityChart ? (
-                <Bar {...securityChart} />
+                <LazyChart>
+                  {({ Bar }) => <Bar {...securityChart} />}
+                </LazyChart>
               ) : (
                 <div className="text-center text-gray-500">No data available</div>
               )}
@@ -435,7 +441,9 @@ export const Analytics: React.FC = () => {
               {performanceLoading ? (
                 <LoadingSpinner />
               ) : responseTimeChart ? (
-                <Line {...responseTimeChart} />
+                <LazyChart>
+                  {({ Line }) => <Line {...responseTimeChart} />}
+                </LazyChart>
               ) : (
                 <div className="text-center text-gray-500">No data available</div>
               )}

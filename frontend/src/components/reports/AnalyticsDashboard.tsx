@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ChartBarIcon, 
-  ClockIcon, 
+import {
+  ChartBarIcon,
+  ClockIcon,
   ExclamationTriangleIcon,
   ShieldCheckIcon,
   ServerIcon,
@@ -41,7 +41,7 @@ const AnalyticsDashboard: React.FC = () => {
   const loadAnalyticsData = async () => {
     try {
       setLoading(true);
-      
+
       const [
         trendsResponse,
         topDomainsResponse,
@@ -280,18 +280,22 @@ const AnalyticsDashboard: React.FC = () => {
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Query Trends</h3>
           <div className="h-64">
-            <Line
-              data={trendsChartData}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                  y: {
-                    beginAtZero: true,
-                  },
-                },
-              }}
-            />
+            <LazyChart>
+              {({ Line }) => (
+                <Line
+                  data={trendsChartData}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                      y: {
+                        beginAtZero: true,
+                      },
+                    },
+                  }}
+                />
+              )}
+            </LazyChart>
           </div>
         </div>
 
@@ -299,19 +303,23 @@ const AnalyticsDashboard: React.FC = () => {
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Top Queried Domains</h3>
           <div className="h-64">
-            <Bar
-              data={topDomainsChartData}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                indexAxis: 'y' as const,
-                scales: {
-                  x: {
-                    beginAtZero: true,
-                  },
-                },
-              }}
-            />
+            <LazyChart>
+              {({ Bar }) => (
+                <Bar
+                  data={topDomainsChartData}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y' as const,
+                    scales: {
+                      x: {
+                        beginAtZero: true,
+                      },
+                    },
+                  }}
+                />
+              )}
+            </LazyChart>
           </div>
         </div>
 
@@ -319,18 +327,22 @@ const AnalyticsDashboard: React.FC = () => {
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Response Codes</h3>
           <div className="h-64">
-            <Doughnut
-              data={errorTypesChartData}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                  legend: {
-                    position: 'bottom' as const,
-                  },
-                },
-              }}
-            />
+            <LazyChart>
+              {({ Doughnut }) => (
+                <Doughnut
+                  data={errorTypesChartData}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: {
+                        position: 'bottom' as const,
+                      },
+                    },
+                  }}
+                />
+              )}
+            </LazyChart>
           </div>
         </div>
 
@@ -399,13 +411,12 @@ const AnalyticsDashboard: React.FC = () => {
                     {client.unique_domains}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                      client.success_rate >= 95 
-                        ? 'bg-green-100 text-green-800'
-                        : client.success_rate >= 90
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${client.success_rate >= 95
+                      ? 'bg-green-100 text-green-800'
+                      : client.success_rate >= 90
                         ? 'bg-yellow-100 text-yellow-800'
                         : 'bg-red-100 text-red-800'
-                    }`}>
+                      }`}>
                       {client.success_rate}%
                     </span>
                   </td>

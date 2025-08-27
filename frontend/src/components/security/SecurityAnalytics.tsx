@@ -6,7 +6,7 @@ import {
     CalendarIcon,
     FunnelIcon,
 } from '@heroicons/react/24/outline'
-import { Line, Bar, Doughnut } from 'react-chartjs-2'
+import LazyChart from '@/components/charts/LazyChart'
 import { rpzService } from '@/services/api'
 import { Card, Button, Select, Badge } from '@/components/ui'
 import { formatNumber, formatDateTime } from '@/utils'
@@ -255,7 +255,11 @@ const SecurityAnalytics: React.FC<SecurityAnalyticsProps> = ({
                         >
                             <div className="h-64">
                                 {queries?.hourly_breakdown?.length ? (
-                                    <Line data={hourlyBlocksData} options={chartOptions} />
+                                    <LazyChart>
+                                        {({ Line }) => (
+                                            <Line data={hourlyBlocksData} options={chartOptions} />
+                                        )}
+                                    </LazyChart>
                                 ) : (
                                     <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
                                         No data available for selected time range
@@ -271,7 +275,11 @@ const SecurityAnalytics: React.FC<SecurityAnalyticsProps> = ({
                         >
                             <div className="h-64">
                                 {report?.threat_categories && Object.keys(report.threat_categories).length > 0 ? (
-                                    <Doughnut data={categoryDistributionData} options={chartOptions} />
+                                    <LazyChart>
+                                        {({ Doughnut }) => (
+                                            <Doughnut data={categoryDistributionData} options={chartOptions} />
+                                        )}
+                                    </LazyChart>
                                 ) : (
                                     <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
                                         No category data available
@@ -289,7 +297,11 @@ const SecurityAnalytics: React.FC<SecurityAnalyticsProps> = ({
                     >
                         <div className="h-64">
                             {report?.threat_timeline?.length ? (
-                                <Line data={threatTimelineData} options={chartOptions} />
+                                <LazyChart>
+                                    {({ Line }) => (
+                                        <Line data={threatTimelineData} options={chartOptions} />
+                                    )}
+                                </LazyChart>
                             ) : (
                                 <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
                                     No timeline data available

@@ -21,9 +21,10 @@ import BulkRecordActions from './BulkRecordActions'
 interface RecordsViewProps {
   zone: Zone
   onBack: () => void
+  onCreateRecord?: () => void
 }
 
-const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
+const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack, onCreateRecord }) => {
   const [selectedRecord, setSelectedRecord] = useState<DNSRecord | null>(null)
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -171,8 +172,12 @@ const RecordsView: React.FC<RecordsViewProps> = ({ zone, onBack }) => {
   })
 
   const handleCreateRecord = () => {
-    setSelectedRecord(null)
-    setIsRecordModalOpen(true)
+    if (onCreateRecord) {
+      onCreateRecord()
+    } else {
+      setSelectedRecord(null)
+      setIsRecordModalOpen(true)
+    }
   }
 
   const handleEditRecord = (record: DNSRecord) => {

@@ -164,7 +164,11 @@ const SecurityStats: React.FC<SecurityStatsProps> = ({
       >
         <div className="h-64">
           {Object.keys(categoryStats).length > 0 ? (
-            <Doughnut data={categoryChartData} options={chartOptions} />
+            <LazyChart>
+              {({ Doughnut }) => (
+                <Doughnut data={categoryChartData} options={chartOptions} />
+              )}
+            </LazyChart>
           ) : (
             <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
               No category data available
@@ -181,7 +185,11 @@ const SecurityStats: React.FC<SecurityStatsProps> = ({
       >
         <div className="h-64">
           {blockedQueries.length > 0 ? (
-            <Line data={blocksOverTimeData} options={chartOptions} />
+            <LazyChart>
+              {({ Line }) => (
+                <Line data={blocksOverTimeData} options={chartOptions} />
+              )}
+            </LazyChart>
           ) : (
             <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
               No blocking data available
@@ -198,7 +206,11 @@ const SecurityStats: React.FC<SecurityStatsProps> = ({
       >
         <div className="h-64">
           {topDomains.length > 0 ? (
-            <Bar data={topBlockedDomainsData} options={barChartOptions} />
+            <LazyChart>
+              {({ Bar }) => (
+                <Bar data={topBlockedDomainsData} options={barChartOptions} />
+              )}
+            </LazyChart>
           ) : (
             <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
               No blocked domains data available
@@ -215,7 +227,11 @@ const SecurityStats: React.FC<SecurityStatsProps> = ({
       >
         <div className="h-64">
           {securityStats?.rules_by_action && Object.keys(securityStats.rules_by_action).length > 0 ? (
-            <Doughnut data={actionChartData} options={chartOptions} />
+            <LazyChart>
+              {({ Doughnut }) => (
+                <Doughnut data={actionChartData} options={chartOptions} />
+              )}
+            </LazyChart>
           ) : (
             <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
               No action data available
