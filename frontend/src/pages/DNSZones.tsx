@@ -20,7 +20,7 @@ import {
   ShieldCheckIcon,
 } from '@heroicons/react/24/outline'
 import { zonesService } from '@/services/api'
-import { Zone, DNSRecord, ValidationResult, ZoneStatistics as ZoneStatsType, ZoneHealth } from '@/types'
+import { Zone, DNSRecord } from '@/types'
 import { Card, Button, Table, Badge, Input, Select } from '@/components/ui'
 import { formatDateTime, formatNumber, debounce } from '@/utils'
 import { toast } from 'react-toastify'
@@ -30,7 +30,7 @@ import RecordsView from '@/components/zones/RecordsView'
 import ZoneValidationModal from '@/components/zones/ZoneValidationModal'
 import ZoneImportExportModal from '@/components/zones/ZoneImportExportModal'
 import ZoneStatistics from '@/components/zones/ZoneStatistics'
-import ZoneHealthIndicator from '@/components/zones/ZoneHealthIndicator'
+
 
 const DNSZones: React.FC = () => {
   const [selectedZone, setSelectedZone] = useState<Zone | null>(null)
@@ -206,10 +206,7 @@ const DNSZones: React.FC = () => {
     setViewingZoneRecords(zone)
   }
 
-  const handleCreateRecord = () => {
-    setSelectedRecord(null)
-    setIsRecordModalOpen(true)
-  }
+
 
   const handleValidateZone = (zone: Zone) => {
     setSelectedZone(zone)
@@ -371,6 +368,18 @@ const DNSZones: React.FC = () => {
                 >
                   <EyeIcon className="h-4 w-4 mr-2" />
                   View Records
+                </button>
+                <button
+                  onClick={() => {
+                    setSelectedZone(zone)
+                    setSelectedRecord(null)
+                    setIsRecordModalOpen(true)
+                    setIsOpen(false)
+                  }}
+                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <PlusIcon className="h-4 w-4 mr-2" />
+                  Add Record
                 </button>
                 <button
                   onClick={() => {
@@ -539,7 +548,6 @@ const DNSZones: React.FC = () => {
       <RecordsView
         zone={viewingZoneRecords}
         onBack={() => setViewingZoneRecords(null)}
-        onCreateRecord={handleCreateRecord}
       />
     )
   }
@@ -856,22 +864,25 @@ const DNSZones: React.FC = () => {
       )}
 
       {/* Record modal */}
-      {isRecordModalOpen && viewingZoneRecords && (
-        <RecordModal
-          zoneId={(viewingZoneRecords as Zone)?.id ?? 0}
-          record={selectedRecord}
-          isOpen={isRecordModalOpen}
-          onClose={() => setIsRecordModalOpen(false)}
-          onSuccess={() => {
-            setIsRecordModalOpen(false)
-            if (viewingZoneRecords) {
+      {isRecordModalOpen && (selectedZone || viewingZoneRecords) && (() => {
+        const currentZone = viewingZoneRecords || selectedZone
+        if (!currentZone) return null
+
+        return (
+          <RecordModal
+            zoneId={currentZone.id}
+            record={selectedRecord}
+            isOpen={isRecordModalOpen}
+            onClose={() => setIsRecordModalOpen(false)}
+            onSuccess={() => {
+              setIsRecordModalOpen(false)
               queryClient.invalidateQueries({
-                queryKey: ['records', (viewingZoneRecords as Zone)?.id]
+                queryKey: ['records', currentZone.id]
               })
-            }
-          }}
-        />
-      )}
+            }}
+          />
+        )
+      })()}
 
       {/* Zone validation modal */}
       {isValidationModalOpen && selectedZone && (
