@@ -303,22 +303,38 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
       'malware-domains': {
         name: 'Malware Domains List',
         url: 'https://mirror1.malwaredomains.com/files/domains.txt',
-        category: 'malware',
+        feed_type: 'malware',
+        format_type: 'domains',
+        update_frequency: 86400,
+        description: 'Community-maintained list of malware domains',
+        is_active: true,
       },
       'phishing-army': {
         name: 'Phishing Army',
         url: 'https://phishing.army/download/phishing_army_blocklist_extended.txt',
-        category: 'phishing',
+        feed_type: 'phishing',
+        format_type: 'domains',
+        update_frequency: 86400,
+        description: 'Comprehensive phishing domain blocklist',
+        is_active: true,
       },
       'abuse-ch': {
         name: 'Abuse.ch URLhaus',
         url: 'https://urlhaus.abuse.ch/downloads/hostfile/',
-        category: 'malware',
+        feed_type: 'malware',
+        format_type: 'hosts',
+        update_frequency: 86400,
+        description: 'URLhaus malware URL blocklist from Abuse.ch',
+        is_active: true,
       },
       'someonewhocares': {
         name: 'SomeoneWhoCares Hosts',
         url: 'https://someonewhocares.org/hosts/zero/hosts',
-        category: 'malware',
+        feed_type: 'malware',
+        format_type: 'hosts',
+        update_frequency: 86400,
+        description: 'Popular hosts file for blocking malware and ads',
+        is_active: true,
       },
     }
 
@@ -493,7 +509,7 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
       isOpen={isOpen}
       onClose={onClose}
       title="Threat Feed Management"
-      size="xl"
+      size="4xl"
     >
       <div className="space-y-6">
         {/* Header */}
@@ -591,9 +607,9 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
                 </div>
 
                 <Select
-                  label="Category"
-                  {...register('category', { required: 'Category is required' })}
-                  error={errors.category?.message}
+                  label="Feed Type"
+                  {...register('feed_type', { required: 'Feed type is required' })}
+                  error={errors.feed_type?.message}
                   options={[
                     { value: 'malware', label: 'Malware' },
                     { value: 'phishing', label: 'Phishing' },
@@ -604,24 +620,45 @@ const ThreatFeedManager: React.FC<ThreatFeedManagerProps> = ({ isOpen, onClose, 
                   ]}
                 />
 
+                <Select
+                  label="Format Type"
+                  {...register('format_type', { required: 'Format type is required' })}
+                  error={errors.format_type?.message}
+                  options={[
+                    { value: 'domains', label: 'Domain List' },
+                    { value: 'hosts', label: 'Hosts File' },
+                    { value: 'urls', label: 'URL List' },
+                    { value: 'json', label: 'JSON Format' }
+                  ]}
+                />
+
+                <div className="sm:col-span-2">
+                  <Input
+                    label="Description"
+                    placeholder="Description of this threat feed"
+                    {...register('description')}
+                    error={errors.description?.message}
+                  />
+                </div>
+
                 <Input
-                  label="Update Interval (hours)"
+                  label="Update Frequency (seconds)"
                   type="number"
-                  min="1"
-                  max="168"
-                  {...register('update_interval', {
-                    required: 'Update interval is required',
-                    min: { value: 1, message: 'Minimum interval is 1 hour' },
-                    max: { value: 168, message: 'Maximum interval is 168 hours (1 week)' },
+                  min="3600"
+                  max="604800"
+                  {...register('update_frequency', {
+                    required: 'Update frequency is required',
+                    min: { value: 3600, message: 'Minimum frequency is 3600 seconds (1 hour)' },
+                    max: { value: 604800, message: 'Maximum frequency is 604800 seconds (1 week)' },
                   })}
-                  error={errors.update_interval?.message}
+                  error={errors.update_frequency?.message}
                 />
 
                 <div className="sm:col-span-2 space-y-4">
                   <label className="flex items-center">
                     <input
                       type="checkbox"
-                      {...register('enabled')}
+                      {...register('is_active')}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
                     <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
