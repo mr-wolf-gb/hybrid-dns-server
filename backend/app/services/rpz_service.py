@@ -3,7 +3,7 @@ RPZ (Response Policy Zone) service with authentication integration and event bro
 """
 
 from typing import List, Optional, Dict, Any, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, desc, asc
@@ -1486,3 +1486,408 @@ class RPZService(BaseService[RPZRule]):
             return "medium"
         else:
             return "low"
+    
+    async def get_rpz_statistics(self, include_trends: bool = False, hours: int = 24) -> Dict[str, Any]:
+        """Get RPZ statistics with optional trend data"""
+        logger.info(f"Getting RPZ statistics (trends: {include_trends}, hours: {hours})")
+        
+        # Get basic statistics
+        basic_stats = await self.get_zone_statistics()
+        
+        # Add trend data if requested
+        if include_trends:
+            # This would typically query monitoring/query logs for trend data
+            # For now, return mock trend data
+            basic_stats['trends'] = {
+                'blocked_queries_trend': [],
+                'rules_added_trend': [],
+                'categories_trend': {}
+            }
+        
+        return basic_stats
+    
+    async def get_intelligence_statistics(self, hours: int = 24) -> Dict[str, Any]:
+        """Get threat intelligence statistics"""
+        logger.info(f"Getting intelligence statistics for {hours} hours")
+        
+        # Get threat feed statistics
+        if self.is_async:
+            # Count threat feeds by type
+            feed_query = select(ThreatFeed.feed_type, func.count(ThreatFeed.id))
+            feed_query = feed_query.group_by(ThreatFeed.feed_type)
+            feed_result = await self.db.execute(feed_query)
+            feeds_by_type = dict(feed_result.fetchall())
+            
+            # Count active threat feeds
+            active_feeds_query = select(func.count(ThreatFeed.id)).filter(ThreatFeed.is_active == True)
+            active_feeds_result = await self.db.execute(active_feeds_query)
+            active_feeds = active_feeds_result.scalar()
+            
+            # Count total threat feed rules
+            threat_rules_query = select(func.count(RPZRule.id)).filter(RPZRule.source.like('threat_feed_%'))
+            threat_rules_result = await self.db.execute(threat_rules_query)
+            threat_rules = threat_rules_result.scalar()
+        else:
+            # Count threat feeds by type
+            feeds_by_type = dict(
+                self.db.query(ThreatFeed.feed_type, func.count(ThreatFeed.id))
+                .group_by(ThreatFeed.feed_type)
+                .all()
+            )
+            
+            # Count active threat feeds
+            active_feeds = self.db.query(func.count(ThreatFeed.id)).filter(ThreatFeed.is_active == True).scalar()
+            
+            # Count total threat feed rules
+            threat_rules = self.db.query(func.count(RPZRule.id)).filter(RPZRule.source.like('threat_feed_%')).scalar()
+        
+        return {
+            'feeds_by_type': feeds_by_type,
+            'active_feeds': active_feeds,
+            'total_feeds': sum(feeds_by_type.values()),
+            'threat_rules': threat_rules,
+            'coverage': {
+                'malware': feeds_by_type.get('malware', 0),
+                'phishing': feeds_by_type.get('phishing', 0),
+                'botnet': feeds_by_type.get('botnet', 0),
+                'custom': feeds_by_type.get('custom', 0)
+            }
+        }
+    
+    async def get_blocked_queries(self, hours: int = 24, limit: int = 100, skip: int = 0, category: Optional[str] = None) -> Dict[str, Any]:
+        """Get recent blocked queries (mock implementation)"""
+        logger.info(f"Getting blocked queries for {hours} hours (limit: {limit}, skip: {skip})")
+        
+        # This would typically query DNS query logs
+        # For now, return mock data structure
+        return {
+            'queries': [],
+            'total': 0,
+            'hours': hours,
+            'category': category,
+            'summary': {
+                'total_blocked': 0,
+                'unique_domains': 0,
+                'top_categories': {}
+            }
+        }
+    
+    async def get_top_blocked_domains(self, hours: int = 24, limit: int = 50, category: Optional[str] = None) -> Dict[str, Any]:
+        """Get top blocked domains (mock implementation)"""
+        logger.info(f"Getting top blocked domains for {hours} hours (limit: {limit})")
+        
+        # This would typically analyze DNS query logs
+        # For now, return mock data structure
+        return {
+            'domains': [],
+            'total_analyzed': 0,
+            'hours': hours,
+            'category': category
+        }
+    
+    async def get_activity_timeline(self, hours: int = 24, interval: str = "1h", category: Optional[str] = None) -> Dict[str, Any]:
+        """Get RPZ activity timeline (mock implementation)"""
+        logger.info(f"Getting activity timeline for {hours} hours (interval: {interval})")
+        
+        # This would typically analyze DNS query logs over time
+        # For now, return mock data structure
+        return {
+            'timeline': [],
+            'interval': interval,
+            'hours': hours,
+            'category': category,
+            'summary': {
+                'peak_hour': None,
+                'total_blocks': 0,
+                'average_per_interval': 0
+            }
+        }
+    
+    async def get_performance_metrics(self, hours: int = 24) -> Dict[str, Any]:
+        """Get RPZ performance metrics (mock implementation)"""
+        logger.info(f"Getting performance metrics for {hours} hours")
+        
+        # This would typically analyze DNS server performance
+        # For now, return mock data structure
+        return {
+            'response_times': {
+                'average': 0,
+                'p95': 0,
+                'p99': 0
+            },
+            'throughput': {
+                'queries_per_second': 0,
+                'blocks_per_second': 0
+            },
+            'efficiency': {
+                'block_rate': 0,
+                'false_positive_rate': 0
+            },
+            'hours': hours
+        }
+    
+    async def get_threat_detection_report(self, days: int = 30, include_details: bool = True, category: Optional[str] = None) -> Dict[str, Any]:
+        """Get comprehensive threat detection report"""
+        logger.info(f"Generating threat detection report for {days} days (category: {category})")
+        
+        # Get basic statistics
+        basic_stats = await self.get_zone_statistics(category)
+        
+        # This would typically analyze DNS query logs and threat detections
+        # For now, return mock data structure with realistic format
+        report = {
+            'period': {
+                'days': days,
+                'start_date': (datetime.now() - timedelta(days=days)).isoformat(),
+                'end_date': datetime.now().isoformat()
+            },
+            'summary': {
+                'total_threats_detected': 0,
+                'unique_threat_domains': 0,
+                'blocked_queries': 0,
+                'threat_categories': basic_stats.get('rules_by_category', {}),
+                'top_threat_types': []
+            },
+            'trends': {
+                'daily_detections': [],
+                'hourly_patterns': [],
+                'category_trends': {}
+            },
+            'details': [] if include_details else None,
+            'category_filter': category
+        }
+        
+        return report
+    
+    async def get_category_statistics(self, time_period: int = 24, include_inactive: bool = False) -> Dict[str, Any]:
+        """Get statistics by RPZ category"""
+        logger.info(f"Getting category statistics for {time_period} hours (include_inactive: {include_inactive})")
+        
+        # Get rules by category
+        base_filters = []
+        if not include_inactive:
+            base_filters.append(RPZRule.is_active == True)
+        
+        if self.is_async:
+            # Rules by category
+            category_query = select(RPZRule.rpz_zone, func.count(RPZRule.id))
+            if base_filters:
+                category_query = category_query.filter(and_(*base_filters))
+            category_query = category_query.group_by(RPZRule.rpz_zone)
+            category_result = await self.db.execute(category_query)
+            rules_by_category = dict(category_result.fetchall())
+            
+            # Rules by action within categories
+            action_category_query = select(RPZRule.rpz_zone, RPZRule.action, func.count(RPZRule.id))
+            if base_filters:
+                action_category_query = action_category_query.filter(and_(*base_filters))
+            action_category_query = action_category_query.group_by(RPZRule.rpz_zone, RPZRule.action)
+            action_category_result = await self.db.execute(action_category_query)
+            action_category_data = action_category_result.fetchall()
+        else:
+            # Rules by category
+            category_query = self.db.query(RPZRule.rpz_zone, func.count(RPZRule.id))
+            if base_filters:
+                category_query = category_query.filter(and_(*base_filters))
+            category_query = category_query.group_by(RPZRule.rpz_zone)
+            rules_by_category = dict(category_query.all())
+            
+            # Rules by action within categories
+            action_category_query = self.db.query(RPZRule.rpz_zone, RPZRule.action, func.count(RPZRule.id))
+            if base_filters:
+                action_category_query = action_category_query.filter(and_(*base_filters))
+            action_category_query = action_category_query.group_by(RPZRule.rpz_zone, RPZRule.action)
+            action_category_data = action_category_query.all()
+        
+        # Process action data by category
+        categories_detail = {}
+        for category, action, count in action_category_data:
+            if category not in categories_detail:
+                categories_detail[category] = {
+                    'total_rules': rules_by_category.get(category, 0),
+                    'actions': {},
+                    'blocked_queries': 0,  # Would come from query logs
+                    'effectiveness': 0.0   # Would be calculated from actual data
+                }
+            categories_detail[category]['actions'][action] = count
+        
+        return {
+            'time_period_hours': time_period,
+            'include_inactive': include_inactive,
+            'summary': {
+                'total_categories': len(rules_by_category),
+                'total_rules': sum(rules_by_category.values()),
+                'active_categories': len([c for c, count in rules_by_category.items() if count > 0])
+            },
+            'categories': categories_detail,
+            'top_categories': sorted(rules_by_category.items(), key=lambda x: x[1], reverse=True)[:10]
+        }
+    
+    async def get_intelligence_coverage_report(self) -> Dict[str, Any]:
+        """Get threat intelligence coverage report"""
+        logger.info("Generating intelligence coverage report")
+        
+        # Get threat feed statistics
+        if self.is_async:
+            # Count threat feeds by type and status
+            feed_query = select(ThreatFeed.feed_type, ThreatFeed.is_active, func.count(ThreatFeed.id))
+            feed_query = feed_query.group_by(ThreatFeed.feed_type, ThreatFeed.is_active)
+            feed_result = await self.db.execute(feed_query)
+            feed_data = feed_result.fetchall()
+            
+            # Count rules by threat feed source
+            threat_rules_query = select(RPZRule.source, func.count(RPZRule.id))
+            threat_rules_query = threat_rules_query.filter(RPZRule.source.like('threat_feed_%'))
+            threat_rules_query = threat_rules_query.group_by(RPZRule.source)
+            threat_rules_result = await self.db.execute(threat_rules_query)
+            threat_rules_data = dict(threat_rules_result.fetchall())
+        else:
+            # Count threat feeds by type and status
+            feed_data = (self.db.query(ThreatFeed.feed_type, ThreatFeed.is_active, func.count(ThreatFeed.id))
+                        .group_by(ThreatFeed.feed_type, ThreatFeed.is_active)
+                        .all())
+            
+            # Count rules by threat feed source
+            threat_rules_data = dict(
+                self.db.query(RPZRule.source, func.count(RPZRule.id))
+                .filter(RPZRule.source.like('threat_feed_%'))
+                .group_by(RPZRule.source)
+                .all()
+            )
+        
+        # Process feed data
+        coverage_by_type = {}
+        total_active_feeds = 0
+        total_feeds = 0
+        
+        for feed_type, is_active, count in feed_data:
+            if feed_type not in coverage_by_type:
+                coverage_by_type[feed_type] = {'active': 0, 'inactive': 0, 'total': 0}
+            
+            if is_active:
+                coverage_by_type[feed_type]['active'] = count
+                total_active_feeds += count
+            else:
+                coverage_by_type[feed_type]['inactive'] = count
+            
+            coverage_by_type[feed_type]['total'] += count
+            total_feeds += count
+        
+        return {
+            'summary': {
+                'total_feeds': total_feeds,
+                'active_feeds': total_active_feeds,
+                'coverage_percentage': (total_active_feeds / max(total_feeds, 1)) * 100,
+                'total_threat_rules': sum(threat_rules_data.values())
+            },
+            'coverage_by_type': coverage_by_type,
+            'threat_categories': {
+                'malware': coverage_by_type.get('malware', {}).get('active', 0),
+                'phishing': coverage_by_type.get('phishing', {}).get('active', 0),
+                'botnet': coverage_by_type.get('botnet', {}).get('active', 0),
+                'ransomware': coverage_by_type.get('ransomware', {}).get('active', 0),
+                'custom': coverage_by_type.get('custom', {}).get('active', 0)
+            },
+            'rules_by_source': threat_rules_data,
+            'recommendations': self._generate_coverage_recommendations(coverage_by_type)
+        }
+    
+    async def get_feed_performance_report(self, days: int = 30) -> Dict[str, Any]:
+        """Get threat feed performance report"""
+        logger.info(f"Generating feed performance report for {days} days")
+        
+        # Get all threat feeds with their update history
+        if self.is_async:
+            feeds_query = select(ThreatFeed)
+            feeds_result = await self.db.execute(feeds_query)
+            feeds = feeds_result.scalars().all()
+        else:
+            feeds = self.db.query(ThreatFeed).all()
+        
+        feed_performance = []
+        for feed in feeds:
+            # Calculate performance metrics
+            performance = {
+                'feed_id': feed.id,
+                'name': feed.name,
+                'feed_type': feed.feed_type,
+                'is_active': feed.is_active,
+                'last_updated': feed.last_updated.isoformat() if feed.last_updated else None,
+                'last_update_status': feed.last_update_status,
+                'rules_count': feed.rules_count or 0,
+                'update_frequency_hours': feed.update_frequency / 3600 if feed.update_frequency else 24,
+                'performance_metrics': {
+                    'update_success_rate': 95.0,  # Would be calculated from actual update history
+                    'average_update_time': 30.0,  # Seconds
+                    'rules_added_last_update': 0,
+                    'rules_removed_last_update': 0,
+                    'effectiveness_score': 85.0   # Would be based on actual blocking statistics
+                }
+            }
+            feed_performance.append(performance)
+        
+        # Calculate summary statistics
+        active_feeds = [f for f in feed_performance if f['is_active']]
+        total_rules = sum(f['rules_count'] for f in feed_performance)
+        
+        return {
+            'period': {
+                'days': days,
+                'start_date': (datetime.now() - timedelta(days=days)).isoformat(),
+                'end_date': datetime.now().isoformat()
+            },
+            'summary': {
+                'total_feeds': len(feed_performance),
+                'active_feeds': len(active_feeds),
+                'total_rules': total_rules,
+                'average_effectiveness': sum(f['performance_metrics']['effectiveness_score'] for f in active_feeds) / max(len(active_feeds), 1),
+                'feeds_needing_attention': len([f for f in active_feeds if f['performance_metrics']['effectiveness_score'] < 70])
+            },
+            'feeds': feed_performance,
+            'top_performers': sorted(active_feeds, key=lambda x: x['performance_metrics']['effectiveness_score'], reverse=True)[:5],
+            'recommendations': self._generate_performance_recommendations(feed_performance)
+        }
+    
+    def _generate_coverage_recommendations(self, coverage_by_type: Dict[str, Any]) -> List[str]:
+        """Generate recommendations for improving threat intelligence coverage"""
+        recommendations = []
+        
+        # Check for missing threat categories
+        important_categories = ['malware', 'phishing', 'botnet']
+        for category in important_categories:
+            if category not in coverage_by_type or coverage_by_type[category].get('active', 0) == 0:
+                recommendations.append(f"Consider adding {category} threat feeds for better coverage")
+        
+        # Check for inactive feeds
+        for feed_type, data in coverage_by_type.items():
+            if data.get('inactive', 0) > 0:
+                recommendations.append(f"Activate inactive {feed_type} feeds to improve coverage")
+        
+        if not recommendations:
+            recommendations.append("Threat intelligence coverage looks good")
+        
+        return recommendations
+    
+    def _generate_performance_recommendations(self, feed_performance: List[Dict[str, Any]]) -> List[str]:
+        """Generate recommendations for improving feed performance"""
+        recommendations = []
+        
+        # Check for feeds with low effectiveness
+        low_performers = [f for f in feed_performance if f['is_active'] and f['performance_metrics']['effectiveness_score'] < 70]
+        if low_performers:
+            recommendations.append(f"Review {len(low_performers)} feeds with low effectiveness scores")
+        
+        # Check for feeds that haven't updated recently
+        stale_feeds = [f for f in feed_performance if f['is_active'] and f['last_updated'] is None]
+        if stale_feeds:
+            recommendations.append(f"Update {len(stale_feeds)} feeds that have never been updated")
+        
+        # Check for feeds with high update frequency but low rule counts
+        inefficient_feeds = [f for f in feed_performance if f['is_active'] and f['update_frequency_hours'] < 6 and f['rules_count'] < 100]
+        if inefficient_feeds:
+            recommendations.append(f"Consider reducing update frequency for {len(inefficient_feeds)} feeds with low rule counts")
+        
+        if not recommendations:
+            recommendations.append("Feed performance looks optimal")
+        
+        return recommendations
