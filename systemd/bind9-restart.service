@@ -1,0 +1,14 @@
+[Unit]
+Description=BIND9 Service Restart
+Documentation=man:named(8)
+After=bind9.service
+Requires=bind9.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl restart bind9
+RemainAfterExit=no
+TimeoutSec=60
+
+[Install]
+WantedBy=multi-user.target

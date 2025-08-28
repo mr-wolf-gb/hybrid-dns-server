@@ -881,7 +881,7 @@ response-policy {
 // QName Wait Recurse: false
 EOF
     
-    silent_exec "chown root:bind /etc/bind/rpz-policy.conf" "RPZ policy file ownership"
+    silent_exec "chown '$SERVICE_USER:bind' /etc/bind/rpz-policy.conf" "RPZ policy file ownership"
     silent_exec "chmod 664 /etc/bind/rpz-policy.conf" "RPZ policy file permissions"
     
     # Test DNS resolution
@@ -1100,7 +1100,7 @@ StandardError=journal
 SyslogIdentifier=hybrid-dns-backend
 
 # Security settings
-NoNewPrivileges=yes
+NoNewPrivileges=no
 ProtectSystem=strict
 ProtectHome=yes
 ReadWritePaths=$INSTALL_DIR /etc/bind /var/log/bind /tmp
@@ -1109,6 +1109,44 @@ PrivateDevices=yes
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectControlGroups=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # BIND9 reload service
+    cat > /etc/systemd/system/bind9-reload.service << EOF
+[Unit]
+Description=BIND9 Configuration Reload Service
+Documentation=man:named(8)
+After=$bind_service_name
+Requires=$bind_service_name
+
+[Service]
+Type=oneshot
+User=bind
+Group=bind
+ExecStart=/usr/sbin/rndc reload
+RemainAfterExit=no
+TimeoutSec=30
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # BIND9 restart service
+    cat > /etc/systemd/system/bind9-restart.service << EOF
+[Unit]
+Description=BIND9 Service Restart
+Documentation=man:named(8)
+After=$bind_service_name
+Requires=$bind_service_name
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl restart $bind_service_name
+RemainAfterExit=no
+TimeoutSec=60
 
 [Install]
 WantedBy=multi-user.target
@@ -1232,15 +1270,61 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
-    # Install sudoers configuration for dns-server user
-    info "Installing sudoers configuration for BIND9 management..."
+    # Install BIND9 restart helper script
+    info "Installing BIND9 management helper script..."
+    cp "$INSTALL_DIR/scripts/restart-bind9.sh" /usr/local/bin/restart-bind9
+    chmod 755 /usr/local/bin/restart-bind9
+    chown root:bind /usr/local/bin/restart-bind9
+    
+    # Install polkit rules for dns-server user to control BIND9 services
+    info "Installing polkit rules for BIND9 management..."
+    mkdir -p /etc/polkit-1/rules.d
+    cat > /etc/polkit-1/rules.d/10-dns-server.rules << 'EOF'
+// Allow dns-server user to control BIND9 related services
+polkit.addRule(function(action, subject) {
+    if ((action.id == "org.freedesktop.systemd1.manage-units" ||
+         action.id == "org.freedesktop.systemd1.manage-unit-files") &&
+        subject.user == "dns-server") {
+        
+        // Allow control of BIND9 related services
+        if (action.lookup("unit") == "bind9.service" ||
+            action.lookup("unit") == "named.service" ||
+            action.lookup("unit") == "bind9-reload.service" ||
+            action.lookup("unit") == "bind9-restart.service") {
+            return polkit.Result.YES;
+        }
+    }
+});
+
+// Allow dns-server user to reload BIND9 configuration
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        subject.user == "dns-server" &&
+        (action.lookup("verb") == "start" || 
+         action.lookup("verb") == "restart" ||
+         action.lookup("verb") == "reload")) {
+        
+        var unit = action.lookup("unit");
+        if (unit == "bind9-reload.service" || unit == "bind9-restart.service") {
+            return polkit.Result.YES;
+        }
+    }
+});
+EOF
+    chmod 644 /etc/polkit-1/rules.d/10-dns-server.rules
+    
+    # Install sudoers configuration as fallback for systems without polkit
+    info "Installing sudoers configuration for BIND9 management (fallback)..."
     cat > /etc/sudoers.d/dns-server << 'EOF'
 # Allow dns-server user to manage BIND9 service without password
+dns-server ALL=(ALL) NOPASSWD: /usr/local/bin/restart-bind9
 dns-server ALL=(ALL) NOPASSWD: /usr/bin/systemctl start bind9
 dns-server ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop bind9
 dns-server ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart bind9
 dns-server ALL=(ALL) NOPASSWD: /usr/bin/systemctl reload bind9
 dns-server ALL=(ALL) NOPASSWD: /usr/bin/systemctl status bind9
+dns-server ALL=(ALL) NOPASSWD: /usr/bin/systemctl start bind9-reload.service
+dns-server ALL=(ALL) NOPASSWD: /usr/bin/systemctl start bind9-restart.service
 dns-server ALL=(ALL) NOPASSWD: /usr/sbin/rndc *
 EOF
     chmod 440 /etc/sudoers.d/dns-server
@@ -1250,6 +1334,8 @@ EOF
     silent_exec "systemctl enable hybrid-dns-backend.service" "Backend service enable"
     silent_exec "systemctl enable hybrid-dns-monitor.service" "Monitor service enable"
     silent_exec "systemctl enable hybrid-dns-backup.timer" "Backup timer enable"
+    silent_exec "systemctl enable bind9-reload.service" "BIND9 reload service enable"
+    silent_exec "systemctl enable bind9-restart.service" "BIND9 restart service enable"
     
     success "Systemd services created"
 }

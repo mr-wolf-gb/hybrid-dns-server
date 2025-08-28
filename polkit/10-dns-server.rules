@@ -1,0 +1,29 @@
+// Allow dns-server user to control BIND9 related services
+polkit.addRule(function(action, subject) {
+    if ((action.id == "org.freedesktop.systemd1.manage-units" ||
+         action.id == "org.freedesktop.systemd1.manage-unit-files") &&
+        subject.user == "dns-server") {
+        
+        // Allow control of BIND9 related services
+        if (action.lookup("unit") == "bind9.service" ||
+            action.lookup("unit") == "bind9-reload.service" ||
+            action.lookup("unit") == "bind9-restart.service") {
+            return polkit.Result.YES;
+        }
+    }
+});
+
+// Allow dns-server user to reload BIND9 configuration
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        subject.user == "dns-server" &&
+        (action.lookup("verb") == "start" || 
+         action.lookup("verb") == "restart" ||
+         action.lookup("verb") == "reload")) {
+        
+        var unit = action.lookup("unit");
+        if (unit == "bind9-reload.service" || unit == "bind9-restart.service") {
+            return polkit.Result.YES;
+        }
+    }
+});

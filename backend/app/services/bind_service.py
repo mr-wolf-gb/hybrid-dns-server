@@ -660,15 +660,17 @@ response-policy {
                 else:
                     logger.error(f"rndc reload failed: {result['stderr']}")
             
-            # Fallback to systemctl restart
-            logger.warning("rndc command not found or failed, trying systemctl restart")
+            # Fallback to systemd service for reload
+            logger.warning("rndc command not found or failed, trying systemd reload service")
+            
             systemctl_path = await self._find_binary_path("systemctl")
-            sudo_path = await self._find_binary_path("sudo")
-            if systemctl_path and sudo_path:
-                result = await self._run_command([sudo_path, systemctl_path, "restart", self.service_name])
-            elif systemctl_path:
-                # Try without sudo first
-                result = await self._run_command([systemctl_path, "restart", self.service_name])
+            if systemctl_path:
+                # Try the dedicated reload service first
+                result = await self._run_command([systemctl_path, "start", "bind9-reload.service"])
+                if result["returncode"] != 0:
+                    # If reload service fails, try restart service
+                    logger.warning("BIND9 reload service failed, trying restart service")
+                    result = await self._run_command([systemctl_path, "start", "bind9-restart.service"])
             else:
                 logger.error("systemctl command not found")
                 return False
