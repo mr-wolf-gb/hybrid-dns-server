@@ -83,7 +83,7 @@ A production-ready hybrid DNS server solution running on Linux (Debian/Ubuntu), 
    ```
    Or
    ```bash
-   curl -sSL https://raw.githubusercontent.com/mr-wolf-gb/hybrid-dns-server/main/install.sh | sudo bash
+   wget https://raw.githubusercontent.com/mr-wolf-gb/hybrid-dns-server/main/install.sh && chmod +x install.sh && sudo ./install.sh
    ```
    Note: This will download the full repository during installation.
 

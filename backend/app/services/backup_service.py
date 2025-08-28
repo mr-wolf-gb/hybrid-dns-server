@@ -66,8 +66,19 @@ class BackupService:
         self.max_backups_per_type = 50  # Keep last 50 backups per type
         self.backup_retention_days = 30  # Keep backups for 30 days
         
-        # Ensure backup directory exists
-        self.backup_root.mkdir(parents=True, exist_ok=True)
+        # Ensure backup directory exists with proper permissions
+        try:
+            self.backup_root.mkdir(parents=True, exist_ok=True)
+            # Try to create common backup type directories
+            for backup_type in BackupType:
+                type_dir = self.backup_root / backup_type.value
+                try:
+                    type_dir.mkdir(exist_ok=True)
+                except PermissionError:
+                    self.logger.warning(f"Cannot create backup type directory {type_dir}, will use fallback")
+        except PermissionError as e:
+            self.logger.error(f"Cannot create backup root directory {self.backup_root}: {e}")
+            # This is a critical error, but we'll continue and hope for the best
         
         self.logger = get_bind_logger()
     
@@ -91,7 +102,13 @@ class BackupService:
             
             # Create type-specific backup directory
             type_backup_dir = self.backup_root / backup_type.value
-            type_backup_dir.mkdir(exist_ok=True)
+            try:
+                type_backup_dir.mkdir(exist_ok=True)
+            except PermissionError as e:
+                self.logger.error(f"Failed to create backup directory {type_backup_dir}: {e}")
+                # Fall back to using the main backup directory
+                type_backup_dir = self.backup_root
+                self.logger.info(f"Using fallback backup directory: {type_backup_dir}")
             
             # Generate backup filename
             backup_filename = f"{file_path.name}.{backup_id}"
@@ -139,7 +156,17 @@ class BackupService:
             
             # Create full backup directory
             full_backup_dir = self.backup_root / "full_config" / backup_id
-            full_backup_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                full_backup_dir.mkdir(parents=True, exist_ok=True)
+            except PermissionError as e:
+                self.logger.error(f"Failed to create full backup directory {full_backup_dir}: {e}")
+                # Fall back to using a flat structure in the main backup directory
+                full_backup_dir = self.backup_root / f"full_config_{backup_id}"
+                try:
+                    full_backup_dir.mkdir(exist_ok=True)
+                except PermissionError:
+                    self.logger.error(f"Cannot create backup directory at all, aborting backup")
+                    return None
             
             backed_up_files = []
             

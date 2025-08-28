@@ -725,13 +725,13 @@ EOF
     silent_exec "find /etc/bind/zones -name 'db.*' -exec sh -c 'echo \"\" >> \"\$1\"' _ {} \\;" "Zone files newline fix"
     silent_exec "find /etc/bind/rpz -name 'db.*' -exec sh -c 'echo \"\" >> \"\$1\"' _ {} \\;" "RPZ files newline fix"
     
-    # Set comprehensive permissions
-    silent_exec "chown -R bind:bind /etc/bind/" "BIND9 root ownership"
-    silent_exec "chown -R bind:bind /etc/bind/zones" "Zone files ownership"
-    silent_exec "chown -R bind:bind /etc/bind/rpz" "RPZ files ownership"
-    silent_exec "chown -R bind:bind /var/lib/bind/" "BIND9 data ownership"
-    silent_exec "chown -R bind:bind /var/log/bind" "BIND9 log ownership"
-    silent_exec "chown -R bind:bind /etc/bind/backups" "BIND9 backup ownership"
+    # Set comprehensive permissions - dns-server user owns files, bind group has access
+    silent_exec "chown -R '$SERVICE_USER:bind' /etc/bind/" "BIND9 root ownership"
+    silent_exec "chown -R '$SERVICE_USER:bind' /etc/bind/zones" "Zone files ownership"
+    silent_exec "chown -R '$SERVICE_USER:bind' /etc/bind/rpz" "RPZ files ownership"
+    silent_exec "chown -R bind:bind /var/lib/bind/" "BIND9 data ownership (BIND9 internal)"
+    silent_exec "chown -R bind:bind /var/log/bind" "BIND9 log ownership (BIND9 writes logs)"
+    silent_exec "chown -R '$SERVICE_USER:bind' /etc/bind/backups" "BIND9 backup ownership"
     
     # Allow service user to manage BIND9 files
     silent_exec "usermod -a -G bind '$SERVICE_USER'" "Adding service user to bind group"
@@ -740,7 +740,7 @@ EOF
     silent_exec "chmod 775 /etc/bind/zones" "Zone directory permissions"
     silent_exec "chmod 775 /etc/bind/rpz" "RPZ directory permissions"
     silent_exec "chmod 755 /var/log/bind" "BIND9 log permissions"
-    silent_exec "chmod 755 /etc/bind/backups" "BIND9 backup permissions"
+    silent_exec "chmod 775 /etc/bind/backups" "BIND9 backup permissions"
     
     # Set file permissions
     silent_exec "chmod 644 /etc/bind/*.conf" "BIND9 config permissions"
@@ -756,6 +756,11 @@ EOF
     # Ensure backend service user can write to BIND config files
     silent_exec "chmod g+w /etc/bind" "Enable group write on /etc/bind"
     silent_exec "find /etc/bind -type d -exec chmod g+s {} \\;" "Set setgid on BIND directories"
+    
+    # Create backup subdirectories with proper permissions
+    silent_exec "mkdir -p /etc/bind/backups/zone_file /etc/bind/backups/rpz_file /etc/bind/backups/configuration /etc/bind/backups/full_config" "Backup subdirectories creation"
+    silent_exec "chown -R '$SERVICE_USER:bind' /etc/bind/backups" "Backup subdirectories ownership"
+    silent_exec "chmod -R 775 /etc/bind/backups" "Backup subdirectories permissions"
     
     # Fix AppArmor profile if it exists (Ubuntu 24.04 specific)
     if [[ -f /etc/apparmor.d/usr.sbin.named ]]; then
