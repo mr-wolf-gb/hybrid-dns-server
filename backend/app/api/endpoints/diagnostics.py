@@ -254,76 +254,139 @@ async def dns_lookup(
             additional_info={}
         )
 
+async def tcp_ping(target: str, port: int = 80, timeout: int = 3) -> tuple[bool, float]:
+    """Alternative ping using TCP connection"""
+    try:
+        # Resolve hostname to IP if needed
+        if not validate_ip_address(target):
+            target = socket.gethostbyname(target)
+        
+        start_time = time.time()
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        result = sock.connect_ex((target, port))
+        sock.close()
+        end_time = time.time()
+        
+        response_time = (end_time - start_time) * 1000  # Convert to ms
+        return result == 0, response_time
+    except Exception:
+        return False, 0.0
+
 @router.post("/ping", response_model=PingResponse)
 async def ping_test(
     request: PingRequest,
     current_user: User = Depends(get_current_user)
 ):
-    """Perform ping test"""
+    """Perform ping test with fallback to TCP ping if system ping unavailable"""
     try:
         # Validate target
         if not (validate_hostname(request.target) or validate_ip_address(request.target)):
             raise HTTPException(status_code=400, detail="Invalid target hostname or IP address")
         
-        # Build ping command based on OS
-        import platform
-        system = platform.system().lower()
-        
-        if system == "windows":
-            command = ["ping", "-n", str(request.count), "-w", str(request.timeout * 1000), request.target]
-        else:
-            command = ["ping", "-c", str(request.count), "-W", str(request.timeout), request.target]
-        
-        success, stdout, stderr = await run_command(command, timeout=request.timeout + 10)
-        
-        # Parse ping results
-        packets_sent = request.count
-        packets_received = 0
-        min_time = None
-        max_time = None
-        avg_time = None
-        
-        if success and stdout:
-            # Parse output for statistics
-            lines = stdout.split('\n')
+        # First try system ping
+        try:
+            # Build ping command based on OS
+            import platform
+            system = platform.system().lower()
             
-            for line in lines:
-                # Windows format
-                if "Packets: Sent =" in line:
-                    parts = line.split(',')
-                    for part in parts:
-                        if "Received =" in part:
-                            packets_received = int(part.split('=')[1].strip().split()[0])
+            if system == "windows":
+                command = ["ping", "-n", str(request.count), "-w", str(request.timeout * 1000), request.target]
+            else:
+                command = ["ping", "-c", str(request.count), "-W", str(request.timeout), request.target]
+            
+            success, stdout, stderr = await run_command(command, timeout=request.timeout + 10)
+            
+            # Parse ping results
+            packets_sent = request.count
+            packets_received = 0
+            min_time = None
+            max_time = None
+            avg_time = None
+            
+            if success and stdout:
+                # Parse output for statistics
+                lines = stdout.split('\n')
                 
-                # Linux format
-                if "packets transmitted" in line:
-                    parts = line.split(',')
-                    packets_received = int(parts[1].strip().split()[0])
+                for line in lines:
+                    # Windows format
+                    if "Packets: Sent =" in line:
+                        parts = line.split(',')
+                        for part in parts:
+                            if "Received =" in part:
+                                packets_received = int(part.split('=')[1].strip().split()[0])
+                    
+                    # Linux format
+                    if "packets transmitted" in line:
+                        parts = line.split(',')
+                        packets_received = int(parts[1].strip().split()[0])
+                    
+                    # Time statistics
+                    if "min/avg/max" in line or "Minimum/Maximum/Average" in line:
+                        if "=" in line:
+                            times = line.split('=')[1].strip().replace('ms', '').split('/')
+                            if len(times) >= 3:
+                                min_time = float(times[0])
+                                avg_time = float(times[1])
+                                max_time = float(times[2])
+            
+            packet_loss = ((packets_sent - packets_received) / packets_sent) * 100 if packets_sent > 0 else 100
+            
+            return PingResponse(
+                target=request.target,
+                success=success and packets_received > 0,
+                packets_sent=packets_sent,
+                packets_received=packets_received,
+                packet_loss=packet_loss,
+                min_time=min_time,
+                max_time=max_time,
+                avg_time=avg_time,
+                error=stderr if stderr else None,
+                raw_output=stdout
+            )
+            
+        except FileNotFoundError:
+            # System ping not available, use TCP ping fallback
+            logger.info("System ping not available, using TCP ping fallback")
+            
+            packets_sent = request.count
+            packets_received = 0
+            times = []
+            
+            # Try multiple ports for better connectivity testing
+            test_ports = [80, 443, 53, 22]
+            
+            for i in range(packets_sent):
+                for port in test_ports:
+                    success, response_time = await tcp_ping(request.target, port, request.timeout)
+                    if success:
+                        packets_received += 1
+                        times.append(response_time)
+                        break  # Stop trying other ports if one succeeds
                 
-                # Time statistics
-                if "min/avg/max" in line or "Minimum/Maximum/Average" in line:
-                    if "=" in line:
-                        times = line.split('=')[1].strip().replace('ms', '').split('/')
-                        if len(times) >= 3:
-                            min_time = float(times[0])
-                            avg_time = float(times[1])
-                            max_time = float(times[2])
-        
-        packet_loss = ((packets_sent - packets_received) / packets_sent) * 100 if packets_sent > 0 else 100
-        
-        return PingResponse(
-            target=request.target,
-            success=success and packets_received > 0,
-            packets_sent=packets_sent,
-            packets_received=packets_received,
-            packet_loss=packet_loss,
-            min_time=min_time,
-            max_time=max_time,
-            avg_time=avg_time,
-            error=stderr if stderr else None,
-            raw_output=stdout
-        )
-        
+                # Small delay between attempts
+                if i < packets_sent - 1:
+                    await asyncio.sleep(0.1)
+            
+            # Calculate statistics
+            packet_loss = ((packets_sent - packets_received) / packets_sent) * 100 if packets_sent > 0 else 100
+            min_time = min(times) if times else None
+            max_time = max(times) if times else None
+            avg_time = sum(times) / len(times) if times else None
+            
+            return PingResponse(
+                target=request.target,
+                success=packets_received > 0,
+                packets_sent=packets_sent,
+                packets_received=packets_received,
+                packet_loss=packet_loss,
+                min_time=min_time,
+                max_time=max_time,
+                avg_time=avg_time,
+                error=None,
+                raw_output=f"TCP connectivity test to {request.target} (fallback method)\nTested ports: {test_ports}\nSuccessful connections: {packets_received}/{packets_sent}"
+            )
+            
     except Exception as e:
         logger.error(f"Ping test error: {str(e)}")
         return PingResponse(

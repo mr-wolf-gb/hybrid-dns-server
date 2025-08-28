@@ -6,6 +6,9 @@
 // Include zone files managed by the web interface
 include "/etc/bind/zones.conf";
 
+// Include forwarders managed by the web interface
+include "/etc/bind/forwarders.conf";
+
 //
 // CONDITIONAL FORWARDING CONFIGURATION
 // Multi-source forwarding for different domain types

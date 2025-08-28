@@ -333,6 +333,14 @@ class RecordService(BaseService[DNSRecord]):
             filters["is_active"] = True
         
         return await self.get_all(filters=filters)
+        
+    async def get_records_by_zone_and_type(self, zone_id: int, record_type: str, active_only: bool = True) -> List[DNSRecord]:
+        """Get DNS records for a specific zone and record type"""
+        filters = {"zone_id": zone_id, "record_type": record_type.upper()}
+        if active_only:
+            filters["is_active"] = True
+        
+        return await self.get_all(filters=filters)
     
     async def get_records_by_type(self, record_type: str, zone_id: Optional[int] = None, 
                                  active_only: bool = True) -> List[DNSRecord]:

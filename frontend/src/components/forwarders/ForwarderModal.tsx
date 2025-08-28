@@ -144,16 +144,35 @@ const ForwarderModal: React.FC<ForwarderModalProps> = ({
   })
 
   const onSubmit = (data: ForwarderFormData) => {
-    // Filter out empty servers
+    // Filter out empty servers and domains
     const cleanData = {
       ...data,
       servers: data.servers.filter(server => server.trim() !== ''),
+      domains: data.domains?.filter(domain => domain.trim() !== '') || [],
     }
 
+    // Validation
     if (cleanData.servers.length === 0) {
       toast.error('At least one DNS server is required')
       return
     }
+
+    if (!cleanData.domain || cleanData.domain.trim() === '') {
+      toast.error('Primary domain is required')
+      return
+    }
+
+    // Ensure primary domain is included in domains array
+    const allDomains = [cleanData.domain, ...cleanData.domains].filter(d => d.trim() !== '')
+    const uniqueDomains = [...new Set(allDomains)]
+    
+    if (uniqueDomains.length === 0) {
+      toast.error('At least one domain is required')
+      return
+    }
+
+    // Update the clean data with all domains
+    cleanData.domains = uniqueDomains.slice(1) // Remove primary domain from additional domains
 
     if (isEditing) {
       updateMutation.mutate(cleanData)
@@ -385,9 +404,14 @@ const ForwarderModal: React.FC<ForwarderModalProps> = ({
                   {...register('name', {
                     required: 'Name is required',
                     minLength: { value: 2, message: 'Name must be at least 2 characters' },
+                    maxLength: { value: 255, message: 'Name cannot exceed 255 characters' },
+                    pattern: {
+                      value: /^[a-zA-Z0-9\s\-_.()]+$/,
+                      message: 'Name can only contain letters, numbers, spaces, hyphens, underscores, dots, and parentheses'
+                    }
                   })}
                   error={errors.name?.message}
-                  helperText="Descriptive name for this forwarder"
+                  helperText="Descriptive name for this forwarder (e.g., 'Active Directory Primary', 'Internal DNS')"
                 />
 
                 <Select
@@ -494,17 +518,21 @@ const ForwarderModal: React.FC<ForwarderModalProps> = ({
                       <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
                         Server {index + 1}
                       </h4>
-                      {serverFields.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeServerField(index)}
-                          className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </Button>
-                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeServerField(index)}
+                        disabled={serverFields.length <= 1}
+                        className={`${
+                          serverFields.length <= 1 
+                            ? 'text-gray-400 cursor-not-allowed' 
+                            : 'text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300'
+                        }`}
+                        title={serverFields.length <= 1 ? 'At least one server is required' : 'Remove server'}
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </Button>
                     </div>
                     
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

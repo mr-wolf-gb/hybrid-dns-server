@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     # Server Configuration
     BACKEND_HOST: str = "0.0.0.0"
     BACKEND_PORT: int = 8000
+    SERVER_IP: str = Field(default="127.0.0.1", description="Server IP address for NS records")
     FRONTEND_PORT: int = 3000
     
     # BIND9 Configuration

@@ -281,9 +281,9 @@ export const forwardersService = {
     // Transform the form data to match the API schema
     const payload: ForwarderCreatePayload = {
       name: data.name,
-      domains: data.domain ? [data.domain, ...(data.domains || [])] : (data.domains || []),
-      forwarder_type: data.type === 'ad' ? 'active_directory' : data.type,
-      servers: data.servers.map(server => {
+      domains: data.domain ? [data.domain, ...(data.domains || []).filter(d => d.trim())] : (data.domains || []).filter(d => d.trim()),
+      forwarder_type: data.type === 'ad' ? 'active_directory' : data.type as 'intranet' | 'public',
+      servers: data.servers.filter(server => server.trim()).map(server => {
         const [ip, port] = server.split(':')
         return {
           ip: ip.trim(),
@@ -296,7 +296,16 @@ export const forwardersService = {
       description: data.description || '',
       health_check_enabled: data.health_check_enabled ?? true,
       priority: data.priority || 5,
+      group_name: data.description ? `${data.type.toUpperCase()} Group` : undefined,
       group_priority: 5
+    }
+
+    // Validate that we have at least one domain and one server
+    if (payload.domains.length === 0) {
+      throw new Error('At least one domain is required')
+    }
+    if (payload.servers.length === 0) {
+      throw new Error('At least one DNS server is required')
     }
 
     return api.post('/forwarders', payload)
@@ -308,13 +317,13 @@ export const forwardersService = {
 
     if (data.name) payload.name = data.name
     if (data.domain || data.domains) {
-      payload.domains = data.domain ? [data.domain, ...(data.domains || [])] : (data.domains || [])
+      payload.domains = data.domain ? [data.domain, ...(data.domains || []).filter(d => d.trim())] : (data.domains || []).filter(d => d.trim())
     }
     if (data.type) {
-      payload.forwarder_type = data.type === 'ad' ? 'active_directory' : data.type
+      payload.forwarder_type = data.type === 'ad' ? 'active_directory' : data.type as 'intranet' | 'public'
     }
     if (data.servers) {
-      payload.servers = data.servers.map(server => {
+      payload.servers = data.servers.filter(server => server.trim()).map(server => {
         const [ip, port] = server.split(':')
         return {
           ip: ip.trim(),

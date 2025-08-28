@@ -2233,6 +2233,10 @@ response-policy {
                     logger.warning(f"Generated zone file warnings for {zone.name}: {post_validation['warnings']}")
             
             logger.info(f"Successfully created zone file: {zone_file_path}")
+            
+            # Update zones.conf to include this zone
+            await self.generate_zones_configuration()
+            
             return True
             
         except Exception as e:
@@ -2284,6 +2288,9 @@ response-policy {
                     logger.warning(f"Zone {zone_id} not found or has no file path")
             else:
                 logger.warning("No database connection available for zone file deletion")
+            
+            # Update zones.conf to remove this zone
+            await self.generate_zones_configuration()
             
             return True
             
@@ -3527,6 +3534,101 @@ response-policy {
             logger.error(f"Failed to handle forwarder priority: {e}")
             return forwarders
     
+    async def generate_zones_configuration(self) -> bool:
+        """Generate zones.conf file with all active zones"""
+        logger = get_bind_logger()
+        logger.info("Generating zones configuration")
+        
+        try:
+            # Get all active zones from database
+            if not self.db:
+                logger.error("No database connection available")
+                return False
+            
+            if self.is_async:
+                from sqlalchemy import select
+                result = await self.db.execute(select(Zone).where(Zone.is_active == True))
+                zones = result.scalars().all()
+            else:
+                zones = self.db.query(Zone).filter(Zone.is_active == True).all()
+            
+            logger.info(f"Found {len(zones)} active zones to configure")
+            
+            # Generate configuration content using template
+            template = self.jinja_env.get_template("config/zones.j2")
+            content = template.render(
+                zones=zones,
+                config_dir=str(self.config_dir),
+                zones_dir=str(self.zones_dir),
+                rpz_dir=str(self.rpz_dir),
+                generated_at=datetime.now().isoformat(),
+                version="1.0"
+            )
+            
+            # Write zones configuration file
+            zones_config_path = self.config_dir / "zones.conf"
+            zones_config_path.write_text(content, encoding='utf-8')
+            zones_config_path.chmod(0o644)
+            
+            logger.info(f"Successfully generated zones configuration: {zones_config_path}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to generate zones configuration: {e}")
+            return False
+
+    async def regenerate_all_configurations(self) -> bool:
+        """Regenerate all BIND9 configurations from database"""
+        logger = get_bind_logger()
+        logger.info("Regenerating all BIND9 configurations from database")
+        
+        try:
+            success_count = 0
+            total_count = 0
+            
+            # Regenerate zones configuration
+            total_count += 1
+            if await self.generate_zones_configuration():
+                success_count += 1
+                logger.info("Successfully regenerated zones configuration")
+            else:
+                logger.error("Failed to regenerate zones configuration")
+            
+            # Regenerate forwarders configuration
+            total_count += 1
+            forwarders = await self._get_active_forwarders()
+            if await self.generate_forwarder_configuration(forwarders):
+                success_count += 1
+                logger.info("Successfully regenerated forwarders configuration")
+            else:
+                logger.error("Failed to regenerate forwarders configuration")
+            
+            # Regenerate RPZ configurations
+            total_count += 1
+            if await self.update_all_rpz_zones():
+                success_count += 1
+                logger.info("Successfully regenerated RPZ configurations")
+            else:
+                logger.error("Failed to regenerate RPZ configurations")
+            
+            logger.info(f"Configuration regeneration completed: {success_count}/{total_count} successful")
+            
+            # Reload BIND9 if any configurations were updated
+            if success_count > 0:
+                reload_success = await self.reload_configuration()
+                if reload_success:
+                    logger.info("Successfully reloaded BIND9 after configuration regeneration")
+                    return True
+                else:
+                    logger.error("Configuration regeneration succeeded but BIND9 reload failed")
+                    return False
+            
+            return success_count == total_count
+            
+        except Exception as e:
+            logger.error(f"Failed to regenerate all configurations: {e}")
+            return False
+
     async def generate_statistics_configuration(self, statistics_config: Dict[str, Any] = None) -> bool:
         """Generate BIND9 statistics configuration file from settings"""
         logger = get_bind_logger()

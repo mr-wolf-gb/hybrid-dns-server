@@ -90,6 +90,39 @@ async def create_zone(
     # Create zone in database
     zone = await zone_service.create_zone(zone_data.dict())
     
+    # For master zones, create default NS record if none exists
+    if zone.zone_type == "master":
+        from ..services.record_service import RecordService
+        record_service = RecordService(db)
+        
+        # Check if NS records exist
+        existing_ns_records = await record_service.get_records_by_zone_and_type(zone.id, "NS")
+        if not existing_ns_records:
+            # Create default NS record pointing to the zone name itself
+            ns_record_data = {
+                "name": "@",
+                "record_type": "NS",
+                "value": f"ns1.{zone.name}",
+                "ttl": 86400,
+                "is_active": True
+            }
+            await record_service.create_record(zone.id, ns_record_data)
+            
+            # Also create A record for the NS record
+            # Try to get server IP from settings or use localhost
+            from ..core.config import get_settings
+            settings = get_settings()
+            server_ip = getattr(settings, 'SERVER_IP', '127.0.0.1')
+            
+            a_record_data = {
+                "name": "ns1",
+                "record_type": "A", 
+                "value": server_ip,
+                "ttl": 86400,
+                "is_active": True
+            }
+            await record_service.create_record(zone.id, a_record_data)
+    
     # Generate BIND9 configuration
     try:
         await bind_service.create_zone_file(zone)

@@ -664,6 +664,7 @@ configure_bind9() {
     silent_exec "cp '$INSTALL_DIR/bind9/named.conf.options' /etc/bind/" "BIND9 options copy"
     silent_exec "cp '$INSTALL_DIR/bind9/named.conf.local' /etc/bind/" "BIND9 local config copy"
     silent_exec "cp '$INSTALL_DIR/bind9/zones.conf' /etc/bind/" "BIND9 zones config copy"
+    silent_exec "cp '$INSTALL_DIR/bind9/forwarders.conf' /etc/bind/" "BIND9 forwarders config copy"
     
     # Create directories with proper permissions
     silent_exec "mkdir -p /etc/bind/zones /etc/bind/rpz /var/log/bind /etc/bind/backups" "BIND9 directories creation"

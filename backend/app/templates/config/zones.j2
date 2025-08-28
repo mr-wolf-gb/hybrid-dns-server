@@ -1,0 +1,60 @@
+//
+// Dynamic Zones Configuration
+// This file is automatically managed by the Hybrid DNS Server web interface
+// Do not edit manually - changes will be overwritten
+//
+// Generated at: {{ generated_at }}
+// Configuration version: {{ version }}
+//
+
+{% if zones %}
+// === AUTHORITATIVE ZONES SECTION ===
+// Managed via Web Interface
+// Local zones hosted on this server
+
+{% for zone in zones %}
+{% if zone.zone_type == 'master' %}
+// {{ zone.name }} - Master Zone
+zone "{{ zone.name }}" {
+    type master;
+    file "{{ zones_dir }}/{{ zone.file_path | basename }}";
+    allow-update { none; };
+    allow-transfer {
+        // Add secondary DNS servers here if needed
+    };
+    notify yes;
+    {% if zone.description %}// Description: {{ zone.description }}{% endif %}
+};
+
+{% elif zone.zone_type == 'slave' %}
+// {{ zone.name }} - Slave Zone
+zone "{{ zone.name }}" {
+    type slave;
+    masters { {{ zone.masters | join('; ') }}; };
+    file "slaves/{{ zone.file_path | basename }}";
+    allow-notify { {{ zone.masters | join('; ') }}; };
+    {% if zone.description %}// Description: {{ zone.description }}{% endif %}
+};
+
+{% elif zone.zone_type == 'forward' %}
+// {{ zone.name }} - Forward Zone
+zone "{{ zone.name }}" {
+    type forward;
+    forward {{ zone.forward_policy | default('first') }};
+    forwarders { {{ zone.forwarders | join('; ') }}; };
+    {% if zone.description %}// Description: {{ zone.description }}{% endif %}
+};
+
+{% endif %}
+{% endfor %}
+
+{% else %}
+// === AUTHORITATIVE ZONES SECTION ===
+// Managed via Web Interface
+// Local zones hosted on this server
+// (No active zones configured)
+
+{% endif %}
+
+// Last updated: {{ generated_at }}
+// Total zones configured: {{ zones | length }}
