@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     BIND9_ZONES_DIR: str = "/etc/bind/zones"
     BIND9_RPZ_DIR: str = "/etc/bind/rpz" 
     BIND9_LOG_DIR: str = "/var/log/named"
-    BIND9_SERVICE_NAME: str = "named"
+    BIND9_SERVICE_NAME: str = "bind9"
     BIND9_RNDC_KEY: str = "/etc/bind/rndc.key"
     
     # Custom configuration paths (for development/testing)

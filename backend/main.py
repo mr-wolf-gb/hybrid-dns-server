@@ -66,10 +66,11 @@ async def lifespan(app: FastAPI):
     # Regenerate BIND9 configurations from database on startup
     try:
         from app.core.database import get_database_session
-        db = next(get_database_session())
-        bind_service_with_db = BindService(db)
-        await bind_service_with_db.regenerate_all_configurations()
-        logger.info("BIND9 configurations regenerated from database on startup")
+        async for db in get_database_session():
+            bind_service_with_db = BindService(db)
+            await bind_service_with_db.regenerate_all_configurations()
+            logger.info("BIND9 configurations regenerated from database on startup")
+            break  # Only need one iteration
     except Exception as e:
         logger.error(f"Failed to regenerate BIND9 configurations on startup: {e}")
     

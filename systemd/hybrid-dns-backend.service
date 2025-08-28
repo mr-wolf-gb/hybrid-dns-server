@@ -16,11 +16,12 @@ Environment=DATABASE_URL=postgresql://dns_user:${DB_PASSWORD}@localhost/hybrid_d
 Environment=SECRET_KEY=${SECRET_KEY}
 Environment=ADMIN_PASSWORD=${ADMIN_PASSWORD}
 Environment=REDIS_URL=redis://localhost:6379/0
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Security
-NoNewPrivileges=yes
+NoNewPrivileges=no
 PrivateTmp=yes
-ProtectSystem=strict
+ProtectSystem=false
 ProtectHome=yes
 ReadWritePaths=/opt/hybrid-dns-server/backend/logs
 ReadWritePaths=/var/log/hybrid-dns

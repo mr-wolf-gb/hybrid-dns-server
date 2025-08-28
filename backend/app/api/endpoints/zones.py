@@ -92,7 +92,7 @@ async def create_zone(
     
     # For master zones, create default NS record if none exists
     if zone.zone_type == "master":
-        from ..services.record_service import RecordService
+        from ...services.record_service import RecordService
         record_service = RecordService(db)
         
         # Check if NS records exist
@@ -110,7 +110,7 @@ async def create_zone(
             
             # Also create A record for the NS record
             # Try to get server IP from settings or use localhost
-            from ..core.config import get_settings
+            from ...core.config import get_settings
             settings = get_settings()
             server_ip = getattr(settings, 'SERVER_IP', '127.0.0.1')
             

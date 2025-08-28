@@ -53,6 +53,7 @@ class BindService:
         self.jinja_env.filters['ensure_trailing_dot'] = self._ensure_trailing_dot_filter
         self.jinja_env.filters['rpz_format_domain'] = self._rpz_format_domain_filter
         self.jinja_env.filters['format_ttl'] = self._format_ttl_filter
+        self.jinja_env.filters['basename'] = self._basename_filter
         self.jinja_env.filters['format_serial'] = self._format_serial_filter
         self.jinja_env.filters['format_duration'] = self._format_duration_filter
         self.jinja_env.filters['validate_ip'] = self._validate_ip_filter
@@ -116,8 +117,10 @@ class BindService:
         has_systemctl = await self._check_command_availability("systemctl")
         service_registered = False
         if has_systemctl:
-            result = await self._run_command(["systemctl", "list-unit-files", self.service_name])
-            service_registered = result["returncode"] == 0 and self.service_name in result["stdout"]
+            systemctl_path = await self._find_binary_path("systemctl")
+            if systemctl_path:
+                result = await self._run_command([systemctl_path, "list-unit-files", self.service_name])
+                service_registered = result["returncode"] == 0 and self.service_name in result["stdout"]
         
         installation_status = {
             "is_fully_installed": len(missing_commands) == 0 and rpz_policy_exists,
@@ -521,14 +524,16 @@ response-policy {
             uptime = 0
             
             if has_systemctl:
-                result = await self._run_command(["systemctl", "is-active", self.service_name])
-                is_active = result["stdout"].strip() == "active"
-                
-                # Get uptime if running
-                if is_active:
-                    uptime_result = await self._run_command([
-                        "systemctl", "show", "-p", "ActiveEnterTimestamp", self.service_name
-                    ])
+                systemctl_path = await self._find_binary_path("systemctl")
+                if systemctl_path:
+                    result = await self._run_command([systemctl_path, "is-active", self.service_name])
+                    is_active = result["stdout"].strip() == "active"
+                    
+                    # Get uptime if running
+                    if is_active:
+                        uptime_result = await self._run_command([
+                            systemctl_path, "show", "-p", "ActiveEnterTimestamp", self.service_name
+                        ])
                     if uptime_result["returncode"] == 0:
                         # Parse uptime from systemd output
                         timestamp_line = uptime_result["stdout"].strip()
@@ -590,7 +595,12 @@ response-policy {
         """Start BIND9 service"""
         logger = get_bind_logger()
         try:
-            result = await self._run_command(["systemctl", "start", self.service_name])
+            systemctl_path = await self._find_binary_path("systemctl")
+            if not systemctl_path:
+                logger.error("systemctl command not found")
+                return False
+                
+            result = await self._run_command([systemctl_path, "start", self.service_name])
             success = result["returncode"] == 0
             
             if success:
@@ -608,7 +618,12 @@ response-policy {
         """Stop BIND9 service"""
         logger = get_bind_logger()
         try:
-            result = await self._run_command(["systemctl", "stop", self.service_name])
+            systemctl_path = await self._find_binary_path("systemctl")
+            if not systemctl_path:
+                logger.error("systemctl command not found")
+                return False
+                
+            result = await self._run_command([systemctl_path, "stop", self.service_name])
             success = result["returncode"] == 0
             
             if success:
@@ -639,7 +654,12 @@ response-policy {
             
             # Fallback to systemctl restart
             logger.warning("rndc command not found or failed, trying systemctl restart")
-            result = await self._run_command(["systemctl", "restart", self.service_name])
+            systemctl_path = await self._find_binary_path("systemctl")
+            if systemctl_path:
+                result = await self._run_command([systemctl_path, "restart", self.service_name])
+            else:
+                logger.error("systemctl command not found")
+                return False
             success = result["returncode"] == 0
             
             if success:
@@ -1582,9 +1602,13 @@ response-policy {
         
         try:
             # Check if BIND9 service exists
-            result = await self._run_command(["systemctl", "list-unit-files", self.service_name])
-            if result["returncode"] != 0 or self.service_name not in result["stdout"]:
-                errors.append(f"BIND9 service {self.service_name} is not installed or not found")
+            systemctl_path = await self._find_binary_path("systemctl")
+            if systemctl_path:
+                result = await self._run_command([systemctl_path, "list-unit-files", self.service_name])
+                if result["returncode"] != 0 or self.service_name not in result["stdout"]:
+                    errors.append(f"BIND9 service {self.service_name} is not installed or not found")
+            else:
+                errors.append("systemctl command not found - required for service management")
             
             # Check if rndc is available
             result = await self._run_command(["which", "rndc"])
@@ -1739,9 +1763,13 @@ response-policy {
                 warnings.append("Could not determine OS version")
             
             # Check systemd availability
-            result = await self._run_command(["systemctl", "--version"])
-            if result["returncode"] != 0:
-                errors.append("systemd not available - required for service management")
+            systemctl_path = await self._find_binary_path("systemctl")
+            if systemctl_path:
+                result = await self._run_command([systemctl_path, "--version"])
+                if result["returncode"] != 0:
+                    errors.append("systemd not available - required for service management")
+            else:
+                errors.append("systemctl command not found - systemd required for service management")
             
             return {
                 "valid": len(errors) == 0,
@@ -1964,9 +1992,13 @@ response-policy {
                 warnings.append("Log rotation not configured for BIND9 - logs may grow large")
             
             # Check syslog configuration
-            result = await self._run_command(["systemctl", "is-active", "rsyslog"])
-            if result["returncode"] != 0:
-                warnings.append("rsyslog service not active - system logging may not work properly")
+            systemctl_path = await self._find_binary_path("systemctl")
+            if systemctl_path:
+                result = await self._run_command([systemctl_path, "is-active", "rsyslog"])
+                if result["returncode"] != 0:
+                    warnings.append("rsyslog service not active - system logging may not work properly")
+            else:
+                warnings.append("systemctl not available - cannot check rsyslog status")
             
             return {
                 "valid": len(errors) == 0,
@@ -4846,6 +4878,11 @@ $ORIGIN {rpz_zone}.rpz.
             return f"{serial}  ; {year}-{month}-{day} rev {revision}"
         else:
             return str(serial)
+    
+    def _basename_filter(self, path: str) -> str:
+        """Jinja2 filter to get basename of a file path"""
+        import os
+        return os.path.basename(path)
     
     def _format_duration_filter(self, seconds: int) -> str:
         """Jinja2 filter to format duration in seconds to human-readable format"""

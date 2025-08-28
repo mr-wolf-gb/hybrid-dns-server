@@ -612,8 +612,9 @@ async def _update_bind_configuration(feed_type: str):
         from ...core.database import get_database_session
         
         # Get a database session for the background task
-        db = next(get_database_session())
-        bind_service = BindService(db)
+        async for db in get_database_session():
+            bind_service = BindService(db)
+            break  # Only need one iteration
         
         # Update the RPZ zone file for this feed type
         await bind_service.update_rpz_zone_file(f"rpz.{feed_type}")
