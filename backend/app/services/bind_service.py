@@ -3765,9 +3765,9 @@ include "{config_path}";
             else:
                 logger.error("Failed to regenerate forwarders configuration")
             
-            # Regenerate RPZ configurations
+            # Regenerate RPZ configurations (without reload to prevent recursion)
             total_count += 1
-            if await self.update_all_rpz_zones():
+            if await self.update_all_rpz_zones(reload_bind=False):
                 success_count += 1
                 logger.info("Successfully regenerated RPZ configurations")
             else:
@@ -3775,16 +3775,7 @@ include "{config_path}";
             
             logger.info(f"Configuration regeneration completed: {success_count}/{total_count} successful")
             
-            # Reload BIND9 if any configurations were updated
-            if success_count > 0:
-                reload_success = await self.reload_configuration()
-                if reload_success:
-                    logger.info("Successfully reloaded BIND9 after configuration regeneration")
-                    return True
-                else:
-                    logger.error("Configuration regeneration succeeded but BIND9 reload failed")
-                    return False
-            
+            # Return success status - caller will handle reload
             return success_count == total_count
             
         except Exception as e:
@@ -4365,7 +4356,7 @@ $ORIGIN {rpz_zone}.rpz.
             logger.error(f"Failed to create category-based RPZ zones: {e}")
             return False
     
-    async def update_all_rpz_zones(self) -> bool:
+    async def update_all_rpz_zones(self, reload_bind: bool = True) -> bool:
         """Update all RPZ zones from database"""
         logger = get_bind_logger()
         logger.info("Updating all RPZ zones")
@@ -4375,13 +4366,17 @@ $ORIGIN {rpz_zone}.rpz.
             success = await self.create_category_based_rpz_zones()
             
             if success:
-                # Reload BIND9 configuration to apply changes
-                reload_success = await self.reload_configuration()
-                if reload_success:
-                    logger.info("Successfully updated all RPZ zones and reloaded BIND9")
+                if reload_bind:
+                    # Reload BIND9 configuration to apply changes
+                    reload_success = await self.reload_configuration()
+                    if reload_success:
+                        logger.info("Successfully updated all RPZ zones and reloaded BIND9")
+                    else:
+                        logger.warning("RPZ zones updated but BIND9 reload failed")
+                    return reload_success
                 else:
-                    logger.warning("RPZ zones updated but BIND9 reload failed")
-                return reload_success
+                    logger.info("Successfully updated all RPZ zones (reload skipped)")
+                    return True
             else:
                 logger.error("Failed to update some RPZ zones")
                 return False
