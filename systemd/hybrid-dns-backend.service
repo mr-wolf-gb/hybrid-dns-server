@@ -7,8 +7,8 @@ Wants=hybrid-dns-monitoring.service
 
 [Service]
 Type=exec
-User=dns-admin
-Group=dns-admin
+User=dns-server
+Group=dns-server
 WorkingDirectory=/opt/hybrid-dns-server/backend
 
 # Environment

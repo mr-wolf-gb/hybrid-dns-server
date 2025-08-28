@@ -1232,6 +1232,19 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
+    # Install sudoers configuration for dns-server user
+    info "Installing sudoers configuration for BIND9 management..."
+    cat > /etc/sudoers.d/dns-server << 'EOF'
+# Allow dns-server user to manage BIND9 service without password
+dns-server ALL=(ALL) NOPASSWD: /usr/bin/systemctl start bind9
+dns-server ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop bind9
+dns-server ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart bind9
+dns-server ALL=(ALL) NOPASSWD: /usr/bin/systemctl reload bind9
+dns-server ALL=(ALL) NOPASSWD: /usr/bin/systemctl status bind9
+dns-server ALL=(ALL) NOPASSWD: /usr/sbin/rndc *
+EOF
+    chmod 440 /etc/sudoers.d/dns-server
+    
     # Reload systemd and enable services
     silent_exec "systemctl daemon-reload" "Systemd daemon reload"
     silent_exec "systemctl enable hybrid-dns-backend.service" "Backend service enable"

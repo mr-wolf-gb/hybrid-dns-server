@@ -1,0 +1,7 @@
+# Allow dns-server user to manage BIND9 service without password
+dns-server ALL=(ALL) NOPASSWD: /usr/bin/systemctl start bind9
+dns-server ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop bind9
+dns-server ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart bind9
+dns-server ALL=(ALL) NOPASSWD: /usr/bin/systemctl reload bind9
+dns-server ALL=(ALL) NOPASSWD: /usr/bin/systemctl status bind9
+dns-server ALL=(ALL) NOPASSWD: /usr/sbin/rndc *

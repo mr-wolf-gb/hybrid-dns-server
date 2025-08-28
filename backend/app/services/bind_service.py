@@ -596,11 +596,15 @@ response-policy {
         logger = get_bind_logger()
         try:
             systemctl_path = await self._find_binary_path("systemctl")
+            sudo_path = await self._find_binary_path("sudo")
             if not systemctl_path:
                 logger.error("systemctl command not found")
                 return False
                 
-            result = await self._run_command([systemctl_path, "start", self.service_name])
+            if sudo_path:
+                result = await self._run_command([sudo_path, systemctl_path, "start", self.service_name])
+            else:
+                result = await self._run_command([systemctl_path, "start", self.service_name])
             success = result["returncode"] == 0
             
             if success:
@@ -619,11 +623,15 @@ response-policy {
         logger = get_bind_logger()
         try:
             systemctl_path = await self._find_binary_path("systemctl")
+            sudo_path = await self._find_binary_path("sudo")
             if not systemctl_path:
                 logger.error("systemctl command not found")
                 return False
                 
-            result = await self._run_command([systemctl_path, "stop", self.service_name])
+            if sudo_path:
+                result = await self._run_command([sudo_path, systemctl_path, "stop", self.service_name])
+            else:
+                result = await self._run_command([systemctl_path, "stop", self.service_name])
             success = result["returncode"] == 0
             
             if success:
@@ -655,7 +663,11 @@ response-policy {
             # Fallback to systemctl restart
             logger.warning("rndc command not found or failed, trying systemctl restart")
             systemctl_path = await self._find_binary_path("systemctl")
-            if systemctl_path:
+            sudo_path = await self._find_binary_path("sudo")
+            if systemctl_path and sudo_path:
+                result = await self._run_command([sudo_path, systemctl_path, "restart", self.service_name])
+            elif systemctl_path:
+                # Try without sudo first
                 result = await self._run_command([systemctl_path, "restart", self.service_name])
             else:
                 logger.error("systemctl command not found")
