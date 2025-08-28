@@ -664,6 +664,25 @@ configure_bind9() {
     silent_exec "cp '$INSTALL_DIR/bind9/named.conf.options' /etc/bind/" "BIND9 options copy"
     silent_exec "cp '$INSTALL_DIR/bind9/named.conf.local' /etc/bind/" "BIND9 local config copy"
     
+    # Validate that zones.conf is not included in both named.conf and named.conf.local
+    info "Validating BIND9 configuration for duplicate includes..."
+    
+    main_has_zones=$(grep -c 'include "/etc/bind/zones.conf"' /etc/bind/named.conf || echo "0")
+    local_has_zones=$(grep -c 'include "/etc/bind/zones.conf"' /etc/bind/named.conf.local || echo "0")
+    
+    if [[ "$main_has_zones" -gt 0 && "$local_has_zones" -gt 0 ]]; then
+        warning "Detected duplicate zones.conf includes - fixing automatically"
+        # Remove the include from named.conf.local and comment it out
+        sed -i 's|include "/etc/bind/zones.conf";|// REMOVED DUPLICATE: include "/etc/bind/zones.conf";|g' /etc/bind/named.conf.local
+        success "Fixed duplicate zones.conf include in named.conf.local"
+    elif [[ "$main_has_zones" -eq 0 && "$local_has_zones" -eq 0 ]]; then
+        # Add include to named.conf if it's missing
+        if ! grep -q 'include "/etc/bind/zones.conf"' /etc/bind/named.conf; then
+            echo 'include "/etc/bind/zones.conf";' >> /etc/bind/named.conf
+            success "Added zones.conf include to named.conf"
+        fi
+    fi
+    
     # Create clean zones.conf to prevent duplicate zone issues
     cat > /etc/bind/zones.conf << 'EOF'
 //
@@ -832,9 +851,11 @@ EOF
     # Temporarily disable logging configuration to avoid permission issues
     sed -i '/^\/\/ Logging Configuration/,/^};/s/^/\/\/ /' /etc/bind/named.conf.options
     
-    # Update main configuration
+    # Update main configuration to include zones.conf
+    # Note: zones.conf is included here in named.conf, not in named.conf.local to avoid duplicates
     if ! grep -q "include \"/etc/bind/zones.conf\";" /etc/bind/named.conf; then
         echo 'include "/etc/bind/zones.conf";' >> /etc/bind/named.conf
+        log "Added zones.conf include to named.conf"
     fi
     
     # Create symlinks for BIND9 binaries to ensure they're in PATH
@@ -846,11 +867,27 @@ EOF
         fi
     done
     
+    # Final validation: Check for duplicate includes one more time
+    info "Performing final BIND9 configuration validation..."
+    
+    main_zones_count=$(grep -c 'include "/etc/bind/zones.conf"' /etc/bind/named.conf || echo "0")
+    local_zones_count=$(grep -c 'include "/etc/bind/zones.conf"' /etc/bind/named.conf.local || echo "0")
+    
+    if [[ "$main_zones_count" -gt 1 ]]; then
+        error "Multiple zones.conf includes found in named.conf"
+    elif [[ "$local_zones_count" -gt 0 ]]; then
+        error "zones.conf include found in named.conf.local (should only be in named.conf)"
+    elif [[ "$main_zones_count" -eq 0 ]]; then
+        error "zones.conf include not found in named.conf"
+    fi
+    
+    success "BIND9 include validation passed"
+    
     # Test configuration
     if named-checkconf >> "$LOG_FILE" 2>&1; then
         success "BIND9 configuration is valid"
     else
-        error "BIND9 configuration is invalid"
+        error "BIND9 configuration is invalid - check $LOG_FILE for details"
     fi
     
     # Start BIND9 (handle different service names and Ubuntu 24.04 specifics)

@@ -63,16 +63,35 @@ async def lifespan(app: FastAPI):
     websocket_manager = get_websocket_manager()
     unified_websocket_manager = get_unified_websocket_manager()
     
-    # Regenerate BIND9 configurations from database on startup
+    # Validate and regenerate BIND9 configurations from database on startup
     try:
         from app.core.database import get_database_session
         async for db in get_database_session():
             bind_service_with_db = BindService(db)
+            
+            # First, validate BIND9 configuration for common issues
+            logger.info("Validating BIND9 configuration on startup...")
+            validation_result = await bind_service_with_db.validate_configuration_detailed()
+            
+            if not validation_result["valid"]:
+                logger.warning(f"BIND9 configuration issues detected: {validation_result['errors']}")
+                # Try to auto-fix common issues like duplicate includes
+                logger.info("Attempting to auto-fix BIND9 configuration issues...")
+                
+            # Regenerate configurations from database
             await bind_service_with_db.regenerate_all_configurations()
             logger.info("BIND9 configurations regenerated from database on startup")
+            
+            # Final validation after regeneration
+            final_validation = await bind_service_with_db.validate_configuration()
+            if final_validation:
+                logger.info("BIND9 configuration validation passed")
+            else:
+                logger.error("BIND9 configuration validation failed after regeneration")
+                
             break  # Only need one iteration
     except Exception as e:
-        logger.error(f"Failed to regenerate BIND9 configurations on startup: {e}")
+        logger.error(f"Failed to validate/regenerate BIND9 configurations on startup: {e}")
     
     # Start background services
     asyncio.create_task(monitoring_service.start())

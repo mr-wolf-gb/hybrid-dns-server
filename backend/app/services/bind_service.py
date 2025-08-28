@@ -1289,6 +1289,11 @@ include "{config_path}";
                 elif not config_path.stat().st_size > 0:
                     warnings.append(f"Configuration file is empty: {config_file}")
             
+            # Check for duplicate zones.conf includes
+            duplicate_check = await self._check_and_fix_duplicate_includes()
+            errors.extend(duplicate_check.get("errors", []))
+            warnings.extend(duplicate_check.get("warnings", []))
+            
             return {
                 "valid": len(errors) == 0,
                 "errors": errors,
@@ -1300,6 +1305,107 @@ include "{config_path}";
                 "valid": False,
                 "errors": [f"Failed to validate main configuration: {str(e)}"],
                 "warnings": warnings
+            }
+    
+    async def _check_and_fix_duplicate_includes(self) -> Dict[str, Any]:
+        """Check for and automatically fix duplicate zones.conf includes"""
+        logger = get_bind_logger()
+        errors = []
+        warnings = []
+        
+        try:
+            main_config = Path("/etc/bind/named.conf")
+            local_config = Path("/etc/bind/named.conf.local")
+            
+            if not main_config.exists() or not local_config.exists():
+                warnings.append("Could not check for duplicate includes - configuration files missing")
+                return {"errors": errors, "warnings": warnings}
+            
+            main_content = main_config.read_text()
+            local_content = local_config.read_text()
+            
+            main_has_zones = 'include "/etc/bind/zones.conf"' in main_content
+            local_has_zones = 'include "/etc/bind/zones.conf"' in local_content
+            
+            if main_has_zones and local_has_zones:
+                logger.warning("Detected duplicate zones.conf includes - attempting automatic fix")
+                
+                # Create backup of named.conf.local before fixing
+                backup_path = local_config.with_suffix(f'.backup.{datetime.now().strftime("%Y%m%d_%H%M%S")}')
+                local_config.rename(backup_path)
+                logger.info(f"Backed up named.conf.local to: {backup_path}")
+                
+                # Remove the duplicate include from named.conf.local
+                lines = local_content.split('\n')
+                new_lines = []
+                fixed = False
+                
+                for line in lines:
+                    if 'include "/etc/bind/zones.conf"' in line and not fixed:
+                        # Comment out the first occurrence
+                        new_lines.append(f"// REMOVED DUPLICATE: {line}")
+                        logger.info("Commented out duplicate zones.conf include in named.conf.local")
+                        fixed = True
+                    else:
+                        new_lines.append(line)
+                
+                # Write the fixed content
+                new_content = '\n'.join(new_lines)
+                local_config.write_text(new_content)
+                
+                warnings.append("Fixed duplicate zones.conf include - removed from named.conf.local")
+                
+            elif not main_has_zones and not local_has_zones:
+                warnings.append("zones.conf is not included in any configuration file")
+            elif main_has_zones:
+                # This is the correct configuration
+                pass
+            elif local_has_zones:
+                warnings.append("zones.conf is only included in named.conf.local - should be in named.conf")
+            
+            return {"errors": errors, "warnings": warnings}
+            
+        except Exception as e:
+            logger.error(f"Failed to check/fix duplicate includes: {e}")
+            errors.append(f"Could not check for duplicate includes: {str(e)}")
+            return {"errors": errors, "warnings": warnings}
+    
+    async def _check_zone_conflicts(self, zone: Zone, zone_file_path: Path) -> Dict[str, Any]:
+        """Check if the zone conflicts with existing BIND configuration"""
+        logger = get_bind_logger()
+        errors = []
+        warnings = []
+        
+        try:
+            # Check if the zone name already exists in the main BIND configuration
+            # This helps catch cases where zones might be defined in multiple places
+            
+            # Use named-checkconf with the zone file to see if it causes conflicts
+            result = await self._run_command([
+                "/usr/sbin/named-checkconf", 
+                "-z",  # Check zone files
+                "/etc/bind/named.conf"
+            ])
+            
+            if result["returncode"] != 0:
+                stderr_output = result["stderr"]
+                if zone.name in stderr_output and "already exists" in stderr_output:
+                    errors.append(f"Zone {zone.name} conflicts with existing configuration")
+                elif "already exists" in stderr_output:
+                    warnings.append("Configuration check detected potential zone conflicts")
+            
+            return {
+                "valid": len(errors) == 0,
+                "errors": errors,
+                "warnings": warnings
+            }
+            
+        except Exception as e:
+            logger.warning(f"Could not check zone conflicts: {e}")
+            return {
+                "valid": True,  # Don't fail if we can't check
+                "errors": [],
+                "warnings": [f"Could not verify zone conflicts: {str(e)}"]
             }
     
     async def _validate_all_zone_files(self) -> Dict[str, Any]:
@@ -2341,13 +2447,23 @@ include "{config_path}";
                 
                 # Validate the generated zone file
                 if zone.zone_type == "master":
+                    logger.info(f"Validating generated zone file for: {zone.name}")
                     post_validation = await self.validate_generated_zone_file(zone, temp_zone_path)
                     if not post_validation["valid"]:
                         logger.error(f"Generated zone file validation failed for {zone.name}: {post_validation['errors']}")
-                        # Don't fail the creation, but log the issues
+                        # Clean up temp file and fail
+                        temp_zone_path.unlink(missing_ok=True)
+                        raise ValueError(f"Zone file validation failed: {'; '.join(post_validation['errors'])}")
                     
                     if post_validation.get("warnings"):
                         logger.warning(f"Generated zone file warnings for {zone.name}: {post_validation['warnings']}")
+                    
+                    # Additional check: validate that the zone file doesn't conflict with existing zones
+                    conflict_check = await self._check_zone_conflicts(zone, temp_zone_path)
+                    if not conflict_check["valid"]:
+                        logger.error(f"Zone conflict detected for {zone.name}: {conflict_check['errors']}")
+                        temp_zone_path.unlink(missing_ok=True)
+                        raise ValueError(f"Zone conflict detected: {'; '.join(conflict_check['errors'])}")
                 
                 # Atomic move to final location
                 temp_zone_path.replace(zone_file_path)
@@ -5853,7 +5969,7 @@ $ORIGIN {zone.name if zone.name.endswith('.') else zone.name + '.'}
             
             # Use named-checkzone for basic validation
             result = await self._run_command([
-                "/usr/bin/named-checkzone",
+                "/usr/sbin/named-checkzone",
                 zone.name,
                 str(zone_file_path)
             ])

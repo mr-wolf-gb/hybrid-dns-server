@@ -3,9 +3,7 @@
 // Hybrid DNS Server - Conditional Forwarding and Local Zones
 //
 
-// Include zone files managed by the web interface
-include "/etc/bind/zones.conf";
-
+// NOTE: zones.conf is included in named.conf, not here to avoid duplicates
 // Include forwarders managed by the web interface
 include "/etc/bind/forwarders.conf";
 
