@@ -649,6 +649,10 @@ response-policy {
         """Reload BIND9 configuration"""
         logger = get_bind_logger()
         try:
+            # First, regenerate configurations to ensure they're current
+            logger.info("Regenerating configurations before reload")
+            await self.regenerate_all_configurations()
+            
             # Find rndc binary
             rndc_path = await self._find_binary_path("rndc")
             
@@ -664,22 +668,32 @@ response-policy {
             logger.warning("rndc command not found or failed, trying systemd reload service")
             
             systemctl_path = await self._find_binary_path("systemctl")
+            sudo_path = await self._find_binary_path("sudo")
+            
             if systemctl_path:
-                # Try the dedicated reload service first
-                result = await self._run_command([systemctl_path, "start", "bind9-reload.service"])
+                # Try reload first
+                if sudo_path:
+                    result = await self._run_command([sudo_path, systemctl_path, "reload", self.service_name])
+                else:
+                    result = await self._run_command([systemctl_path, "reload", self.service_name])
+                    
                 if result["returncode"] != 0:
-                    # If reload service fails, try restart service
-                    logger.warning("BIND9 reload service failed, trying restart service")
-                    result = await self._run_command([systemctl_path, "start", "bind9-restart.service"])
+                    # If reload fails, try restart service
+                    logger.warning("BIND9 reload failed, trying restart service")
+                    if sudo_path:
+                        result = await self._run_command([sudo_path, systemctl_path, "restart", self.service_name])
+                    else:
+                        result = await self._run_command([systemctl_path, "restart", self.service_name])
             else:
                 logger.error("systemctl command not found")
                 return False
+                
             success = result["returncode"] == 0
             
             if success:
-                logger.info("BIND9 service restarted successfully as fallback")
+                logger.info("BIND9 service reloaded/restarted successfully")
             else:
-                logger.error(f"Failed to restart BIND9 service: {result['stderr']}")
+                logger.error(f"Failed to reload/restart BIND9 service: {result['stderr']}")
             
             return success
             
@@ -687,10 +701,56 @@ response-policy {
             logger.error(f"Failed to reload BIND9 configuration: {e}")
             return False
     
+
+    
     async def validate_configuration(self) -> bool:
         """Validate BIND9 configuration (simple boolean result)"""
         validation_result = await self.validate_configuration_detailed()
         return validation_result["valid"]
+    
+    async def _validate_zones_config_syntax(self, config_path: Path) -> bool:
+        """Validate zones configuration file syntax"""
+        logger = get_bind_logger()
+        
+        try:
+            # Check if named-checkconf is available
+            checkconf_path = await self._find_binary_path("named-checkconf")
+            if not checkconf_path:
+                logger.warning("named-checkconf not available, skipping syntax validation")
+                return True  # Assume valid if we can't check
+            
+            # Create a temporary main config that includes our zones config
+            temp_main_config = config_path.parent / "temp_named.conf"
+            temp_main_content = f"""
+options {{
+    directory "/var/cache/bind";
+    recursion no;
+    allow-transfer {{ none; }};
+}};
+
+include "{config_path}";
+"""
+            
+            try:
+                temp_main_config.write_text(temp_main_content, encoding='utf-8')
+                
+                # Run named-checkconf on the temporary config
+                result = await self._run_command([checkconf_path, str(temp_main_config)])
+                
+                if result["returncode"] == 0:
+                    logger.debug("Zones configuration syntax validation passed")
+                    return True
+                else:
+                    logger.error(f"Zones configuration syntax validation failed: {result['stderr']}")
+                    return False
+                    
+            finally:
+                # Clean up temporary config
+                temp_main_config.unlink(missing_ok=True)
+                
+        except Exception as e:
+            logger.warning(f"Failed to validate zones configuration syntax: {e}")
+            return True  # Assume valid if validation fails
     
     async def validate_configuration_detailed(self) -> Dict[str, Any]:
         """Comprehensive BIND9 configuration validation with detailed results"""
@@ -2213,14 +2273,23 @@ response-policy {
         logger.info(f"Creating zone file for zone: {zone.name}")
         
         try:
-            # Ensure zones directory exists
+            # Ensure zones directory exists with proper permissions
             self.zones_dir.mkdir(parents=True, exist_ok=True)
+            import stat
+            self.zones_dir.chmod(stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
             
             # Generate zone file path if not set
             if not zone.file_path:
                 zone.file_path = self._validate_zone_file_path(zone.name, zone.zone_type)
             
             zone_file_path = Path(zone.file_path)
+            
+            # Check for existing zone with same name in database
+            if self.db:
+                existing_zone = await self._get_zone_by_name(zone.name)
+                if existing_zone and existing_zone.id != zone.id:
+                    logger.error(f"Zone with name '{zone.name}' already exists (ID: {existing_zone.id})")
+                    return False
             
             # Get zone records from database if available
             records = []
@@ -2262,23 +2331,32 @@ response-policy {
                 logger.warning(f"Unsupported zone type for file generation: {zone.zone_type}")
                 return False
             
-            # Write zone file
-            zone_file_path.write_text(content, encoding='utf-8')
-            
-            # Set appropriate permissions (readable by BIND9, group writable)
-            zone_file_path.chmod(0o664)
-            
-            # Validate the generated zone file
-            if zone.zone_type == "master":
-                post_validation = await self.validate_generated_zone_file(zone, zone_file_path)
-                if not post_validation["valid"]:
-                    logger.error(f"Generated zone file validation failed for {zone.name}: {post_validation['errors']}")
-                    # Don't fail the creation, but log the issues
+            # Write zone file atomically
+            temp_zone_path = zone_file_path.with_suffix('.tmp')
+            try:
+                temp_zone_path.write_text(content, encoding='utf-8')
                 
-                if post_validation.get("warnings"):
-                    logger.warning(f"Generated zone file warnings for {zone.name}: {post_validation['warnings']}")
-            
-            logger.info(f"Successfully created zone file: {zone_file_path}")
+                # Set appropriate permissions (readable by BIND9, group writable)
+                temp_zone_path.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH)
+                
+                # Validate the generated zone file
+                if zone.zone_type == "master":
+                    post_validation = await self.validate_generated_zone_file(zone, temp_zone_path)
+                    if not post_validation["valid"]:
+                        logger.error(f"Generated zone file validation failed for {zone.name}: {post_validation['errors']}")
+                        # Don't fail the creation, but log the issues
+                    
+                    if post_validation.get("warnings"):
+                        logger.warning(f"Generated zone file warnings for {zone.name}: {post_validation['warnings']}")
+                
+                # Atomic move to final location
+                temp_zone_path.replace(zone_file_path)
+                logger.info(f"Successfully created zone file: {zone_file_path}")
+                
+            except Exception as e:
+                # Clean up temp file on error
+                temp_zone_path.unlink(missing_ok=True)
+                raise e
             
             # Update zones.conf to include this zone
             await self.generate_zones_configuration()
@@ -3600,6 +3678,21 @@ response-policy {
             
             logger.info(f"Found {len(zones)} active zones to configure")
             
+            # Check for duplicate zone names and log them
+            zone_names = [zone.name for zone in zones]
+            duplicate_names = [name for name in set(zone_names) if zone_names.count(name) > 1]
+            if duplicate_names:
+                logger.warning(f"Found duplicate zone names in database: {duplicate_names}")
+                # Remove duplicates, keeping the first occurrence
+                seen_names = set()
+                unique_zones = []
+                for zone in zones:
+                    if zone.name not in seen_names:
+                        unique_zones.append(zone)
+                        seen_names.add(zone.name)
+                zones = unique_zones
+                logger.info(f"After removing duplicates: {len(zones)} unique zones")
+            
             # Generate configuration content using template
             template = self.jinja_env.get_template("config/zones.j2")
             content = template.render(
@@ -3611,13 +3704,36 @@ response-policy {
                 version="1.0"
             )
             
-            # Write zones configuration file
-            zones_config_path = self.config_dir / "zones.conf"
-            zones_config_path.write_text(content, encoding='utf-8')
-            zones_config_path.chmod(0o644)
+            # Ensure config directory exists with proper permissions
+            self.config_dir.mkdir(parents=True, exist_ok=True)
             
-            logger.info(f"Successfully generated zones configuration: {zones_config_path}")
-            return True
+            # Write zones configuration file atomically
+            zones_config_path = self.config_dir / "zones.conf"
+            temp_config_path = zones_config_path.with_suffix('.tmp')
+            
+            try:
+                # Write to temporary file first
+                temp_config_path.write_text(content, encoding='utf-8')
+                
+                # Set proper permissions on temp file
+                import stat
+                temp_config_path.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+                
+                # Validate the generated configuration
+                if await self._validate_zones_config_syntax(temp_config_path):
+                    # Atomic move to final location
+                    temp_config_path.replace(zones_config_path)
+                    logger.info(f"Successfully generated zones configuration: {zones_config_path}")
+                    return True
+                else:
+                    logger.error("Generated zones configuration failed syntax validation")
+                    temp_config_path.unlink(missing_ok=True)
+                    return False
+                    
+            except Exception as e:
+                # Clean up temp file on error
+                temp_config_path.unlink(missing_ok=True)
+                raise e
             
         except Exception as e:
             logger.error(f"Failed to generate zones configuration: {e}")

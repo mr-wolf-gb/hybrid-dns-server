@@ -663,11 +663,59 @@ configure_bind9() {
     # Copy our BIND9 configuration
     silent_exec "cp '$INSTALL_DIR/bind9/named.conf.options' /etc/bind/" "BIND9 options copy"
     silent_exec "cp '$INSTALL_DIR/bind9/named.conf.local' /etc/bind/" "BIND9 local config copy"
-    silent_exec "cp '$INSTALL_DIR/bind9/zones.conf' /etc/bind/" "BIND9 zones config copy"
-    silent_exec "cp '$INSTALL_DIR/bind9/forwarders.conf' /etc/bind/" "BIND9 forwarders config copy"
+    
+    # Create clean zones.conf to prevent duplicate zone issues
+    cat > /etc/bind/zones.conf << 'EOF'
+//
+// Dynamic Zones Configuration
+// This file is automatically managed by the Hybrid DNS Server web interface
+// Do not edit manually - changes will be overwritten
+//
+// Generated at: Installation
+// Configuration version: 1.0
+//
+
+// === AUTHORITATIVE ZONES SECTION ===
+// Managed via Web Interface
+// Local zones hosted on this server
+// (Zones will be populated automatically when created via web interface)
+
+// Last updated: Installation (managed by web interface)
+// Total zones configured: 0
+EOF
+    
+    # Create forwarders.conf
+    cat > /etc/bind/forwarders.conf << 'EOF'
+//
+// Forwarders Configuration
+// This file is automatically managed by the Hybrid DNS Server web interface
+// Do not edit manually - changes will be overwritten
+//
+
+// No forwarders configured
+EOF
     
     # Create directories with proper permissions
     silent_exec "mkdir -p /etc/bind/zones /etc/bind/rpz /var/log/bind /etc/bind/backups" "BIND9 directories creation"
+    silent_exec "mkdir -p /var/lib/bind/zones /var/lib/bind/rpz" "BIND9 data directories creation"
+    
+    # Create RPZ policy file
+    cat > /etc/bind/rpz-policy.conf << 'EOF'
+// Response Policy Zone (RPZ) Configuration
+// Generated automatically by Hybrid DNS Server
+// This file will be managed by the web interface
+
+response-policy {
+    // RPZ zones will be added here by the web interface
+    // Default empty configuration
+} qname-wait-recurse no;
+
+// RPZ Configuration Summary:
+// Enabled: false (will be enabled when policies are configured)
+// Break DNSSEC: false
+// Max Policy TTL: 300
+// QName Wait Recurse: false
+EOF
     
     # Copy zone files
     silent_exec "cp -r '$INSTALL_DIR/bind9/zones/'* /etc/bind/zones/" "Zone files copy"
@@ -678,11 +726,15 @@ configure_bind9() {
     silent_exec "find /etc/bind/rpz -name 'db.*' -exec sh -c 'echo \"\" >> \"\$1\"' _ {} \\;" "RPZ files newline fix"
     
     # Set comprehensive permissions
-    silent_exec "chown -R '$SERVICE_USER:bind' /etc/bind/" "BIND9 root ownership"
-    silent_exec "chown -R '$SERVICE_USER:bind' /etc/bind/zones" "Zone files ownership"
-    silent_exec "chown -R '$SERVICE_USER:bind' /etc/bind/rpz" "RPZ files ownership"
-    silent_exec "chown -R '$SERVICE_USER:bind' /var/log/bind" "BIND9 log ownership"
-    silent_exec "chown -R '$SERVICE_USER:bind' /etc/bind/backups" "BIND9 backup ownership"
+    silent_exec "chown -R bind:bind /etc/bind/" "BIND9 root ownership"
+    silent_exec "chown -R bind:bind /etc/bind/zones" "Zone files ownership"
+    silent_exec "chown -R bind:bind /etc/bind/rpz" "RPZ files ownership"
+    silent_exec "chown -R bind:bind /var/lib/bind/" "BIND9 data ownership"
+    silent_exec "chown -R bind:bind /var/log/bind" "BIND9 log ownership"
+    silent_exec "chown -R bind:bind /etc/bind/backups" "BIND9 backup ownership"
+    
+    # Allow service user to manage BIND9 files
+    silent_exec "usermod -a -G bind '$SERVICE_USER'" "Adding service user to bind group"
     
     # Set directory permissions
     silent_exec "chmod 775 /etc/bind/zones" "Zone directory permissions"
