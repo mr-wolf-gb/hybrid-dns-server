@@ -333,7 +333,9 @@ class ForwarderService(BaseService[Forwarder]):
             if not server_ip:
                 continue
             
-            result = await self.test_dns_server(server_ip, server_port, forwarder.domains[0] if forwarder.domains else 'google.com')
+            # Use a simple test domain that should resolve quickly
+            test_domain = 'google.com' if forwarder.forwarder_type == 'public' else (forwarder.domains[0] if forwarder.domains else 'google.com')
+            result = await self.test_dns_server(server_ip, server_port, test_domain)
             
             # Store health check result
             health_data = {
@@ -388,8 +390,8 @@ class ForwarderService(BaseService[Forwarder]):
             resolver = dns.resolver.Resolver()
             resolver.nameservers = [server_ip]
             resolver.port = server_port
-            resolver.timeout = 5.0  # 5 second timeout
-            resolver.lifetime = 10.0  # 10 second total timeout
+            resolver.timeout = 3.0  # 3 second timeout
+            resolver.lifetime = 5.0  # 5 second total timeout
             
             # Perform DNS query
             try:
@@ -432,7 +434,7 @@ class ForwarderService(BaseService[Forwarder]):
             except dns.resolver.Timeout:
                 return {
                     "status": "timeout",
-                    "error_message": f"DNS query timeout after 5 seconds"
+                    "error_message": f"DNS query timeout after 3 seconds"
                 }
                 
             except dns.exception.DNSException as e:

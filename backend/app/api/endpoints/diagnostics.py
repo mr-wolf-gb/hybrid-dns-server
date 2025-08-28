@@ -175,6 +175,9 @@ async def dns_lookup(
             if not validate_ip_address(request.nameserver):
                 raise HTTPException(status_code=400, detail="Invalid nameserver IP address")
             resolver.nameservers = [request.nameserver]
+        else:
+            # Default to local BIND9 server instead of system resolver
+            resolver.nameservers = ['127.0.0.1']
         
         resolver.timeout = request.timeout
         resolver.lifetime = request.timeout

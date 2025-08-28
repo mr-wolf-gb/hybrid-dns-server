@@ -480,7 +480,7 @@ class HealthService:
                     result = await db.execute(
                         select(
                             ForwarderHealth.checked_at,
-                            ForwarderHealth.is_healthy,
+                            ForwarderHealth.status,
                             ForwarderHealth.response_time,
                             ForwarderHealth.server_ip,
                             ForwarderHealth.error_message
@@ -496,7 +496,7 @@ class HealthService:
                         select(
                             ForwarderHealth.checked_at,
                             func.count(ForwarderHealth.id).label('total_checks'),
-                            func.sum(func.case((ForwarderHealth.is_healthy == True, 1), else_=0)).label('healthy_checks'),
+                            func.sum(func.case((ForwarderHealth.status == 'healthy', 1), else_=0)).label('healthy_checks'),
                             func.avg(ForwarderHealth.response_time).label('avg_response_time'),
                             func.min(ForwarderHealth.response_time).label('min_response_time'),
                             func.max(ForwarderHealth.response_time).label('max_response_time')
@@ -519,7 +519,7 @@ class HealthService:
                     health_records = db.query(
                         ForwarderHealth.checked_at,
                         func.count(ForwarderHealth.id).label('total_checks'),
-                        func.sum(func.case((ForwarderHealth.is_healthy == True, 1), else_=0)).label('healthy_checks'),
+                        func.sum(func.case((ForwarderHealth.status == 'healthy', 1), else_=0)).label('healthy_checks'),
                         func.avg(ForwarderHealth.response_time).label('avg_response_time'),
                         func.min(ForwarderHealth.response_time).label('min_response_time'),
                         func.max(ForwarderHealth.response_time).label('max_response_time')
@@ -536,7 +536,8 @@ class HealthService:
                 for record in health_records:
                     chart_data.append({
                         "timestamp": record.checked_at.isoformat(),
-                        "is_healthy": record.is_healthy,
+                        "is_healthy": record.status == "healthy",
+                        "status": record.status,
                         "response_time": record.response_time,
                         "server_ip": record.server_ip,
                         "error_message": record.error_message
@@ -584,7 +585,7 @@ class HealthService:
                 result = await db.execute(
                     select(
                         func.count(ForwarderHealth.id).label('total_checks'),
-                        func.sum(func.case((ForwarderHealth.is_healthy == True, 1), else_=0)).label('successful_checks'),
+                        func.sum(func.case((ForwarderHealth.status == 'healthy', 1), else_=0)).label('successful_checks'),
                         func.avg(ForwarderHealth.response_time).label('avg_response_time'),
                         func.percentile_cont(0.5).within_group(ForwarderHealth.response_time).label('median_response_time'),
                         func.percentile_cont(0.95).within_group(ForwarderHealth.response_time).label('p95_response_time'),
@@ -603,7 +604,7 @@ class HealthService:
                     select(
                         ForwarderHealth.forwarder_id,
                         func.count(ForwarderHealth.id).label('checks'),
-                        func.sum(func.case((ForwarderHealth.is_healthy == True, 1), else_=0)).label('successful'),
+                        func.sum(func.case((ForwarderHealth.status == 'healthy', 1), else_=0)).label('successful'),
                         func.avg(ForwarderHealth.response_time).label('avg_response_time')
                     ).filter(
                         ForwarderHealth.checked_at >= since
@@ -615,7 +616,7 @@ class HealthService:
                 from sqlalchemy import func
                 metrics = db.query(
                     func.count(ForwarderHealth.id).label('total_checks'),
-                    func.sum(func.case((ForwarderHealth.is_healthy == True, 1), else_=0)).label('successful_checks'),
+                    func.sum(func.case((ForwarderHealth.status == 'healthy', 1), else_=0)).label('successful_checks'),
                     func.avg(ForwarderHealth.response_time).label('avg_response_time'),
                     func.min(ForwarderHealth.response_time).label('min_response_time'),
                     func.max(ForwarderHealth.response_time).label('max_response_time')
@@ -627,7 +628,7 @@ class HealthService:
                 forwarder_metrics = db.query(
                     ForwarderHealth.forwarder_id,
                     func.count(ForwarderHealth.id).label('checks'),
-                    func.sum(func.case((ForwarderHealth.is_healthy == True, 1), else_=0)).label('successful'),
+                    func.sum(func.case((ForwarderHealth.status == 'healthy', 1), else_=0)).label('successful'),
                     func.avg(ForwarderHealth.response_time).label('avg_response_time')
                 ).filter(
                     ForwarderHealth.checked_at >= since
@@ -817,16 +818,16 @@ class HealthService:
         try:
             if hasattr(db, 'execute'):  # AsyncSession
                 result = await db.execute(
-                    select(ForwarderHealth.is_healthy)
+                    select(ForwarderHealth.status)
                     .filter(ForwarderHealth.forwarder_id == forwarder_id)
                     .order_by(ForwarderHealth.checked_at.desc())
                     .limit(10)
                 )
-                recent_checks = [row.is_healthy for row in result.fetchall()]
+                recent_checks = [row.status == 'healthy' for row in result.fetchall()]
             else:
                 recent_checks = [
-                    check.is_healthy for check in 
-                    db.query(ForwarderHealth.is_healthy)
+                    check.status == 'healthy' for check in 
+                    db.query(ForwarderHealth.status)
                     .filter(ForwarderHealth.forwarder_id == forwarder_id)
                     .order_by(ForwarderHealth.checked_at.desc())
                     .limit(10)
@@ -845,17 +846,6 @@ class HealthService:
         except Exception as e:
             self._logger.error(f"Error getting consecutive failures: {e}")
             return 0
-
-
-# Global health service instance
-_health_service_instance = None
-
-def get_health_service() -> HealthService:
-    """Get the global health service instance"""
-    global _health_service_instance
-    if _health_service_instance is None:
-        _health_service_instance = HealthService()
-    return _health_service_instance    
 
     async def _emit_health_event(self, event_type: EventType, forwarder_id: Optional[int], 
                                  action: str, details: Dict[str, Any]):
@@ -946,3 +936,14 @@ def get_health_service() -> HealthService:
         except Exception as e:
             self._logger.error(f"Failed to emit system metrics event: {e}")
             # Don't raise the exception to avoid breaking the main operation
+
+
+# Global health service instance
+_health_service_instance = None
+
+def get_health_service() -> HealthService:
+    """Get the global health service instance"""
+    global _health_service_instance
+    if _health_service_instance is None:
+        _health_service_instance = HealthService()
+    return _health_service_instance
