@@ -1010,8 +1010,8 @@ class RecordService(BaseService[DNSRecord]):
             # Determine event priority
             priority = EventPriority.HIGH if action == "delete" else EventPriority.NORMAL
             
-            # Create and emit the event
-            event = create_event(
+            # Emit the event directly with parameters
+            await self.event_service.emit_event(
                 event_type=event_type,
                 data=event_data,
                 source_user_id=user_id,
@@ -1025,8 +1025,6 @@ class RecordService(BaseService[DNSRecord]):
                     }
                 )
             )
-            
-            await self.event_service.emit_event(event)
             
         except Exception as e:
             logger.error(f"Failed to emit record event: {e}")
@@ -1056,8 +1054,8 @@ class RecordService(BaseService[DNSRecord]):
             success_rate = (processed_records / total_records * 100) if total_records > 0 else 0
             priority = EventPriority.HIGH if success_rate < 50 else EventPriority.NORMAL
             
-            # Create and emit the event
-            event = create_event(
+            # Emit the event directly with parameters
+            await self.event_service.emit_event(
                 event_type=event_type,
                 data=event_data,
                 source_user_id=user_id,
@@ -1071,8 +1069,6 @@ class RecordService(BaseService[DNSRecord]):
                     }
                 )
             )
-            
-            await self.event_service.emit_event(event)
             
         except Exception as e:
             logger.error(f"Failed to emit bulk operation event: {e}")

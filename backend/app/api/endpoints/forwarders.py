@@ -185,7 +185,8 @@ async def test_multiple_forwarders(
             for result in test_results:
                 if result.get("success_rate", 0) < 100:
                     overall_status = "degraded" if result.get("success_rate", 0) > 0 else "failed"
-                total_response_time += result.get("avg_response_time", 0)
+                response_time = result.get("avg_response_time") or 0
+                total_response_time += response_time
                 total_queries += 1
             
             avg_response_time = total_response_time / total_queries if total_queries > 0 else 0
@@ -240,7 +241,8 @@ async def test_forwarder(
     for result in test_results:
         if result.get("success_rate", 0) < 100:
             overall_status = "degraded" if result.get("success_rate", 0) > 0 else "failed"
-        total_response_time += result.get("avg_response_time", 0)
+        response_time = result.get("avg_response_time") or 0
+        total_response_time += response_time
         total_queries += 1
     
     avg_response_time = total_response_time / total_queries if total_queries > 0 else 0

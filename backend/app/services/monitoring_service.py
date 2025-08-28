@@ -21,7 +21,7 @@ from ..core.logging_config import get_monitoring_logger
 from ..websocket.unified_manager import get_unified_websocket_manager
 from ..websocket.models import EventType
 from .enhanced_event_service import get_enhanced_event_service
-from ..websocket.event_types import EventPriority, EventCategory, EventSeverity, create_event
+from ..websocket.event_types import EventPriority, EventCategory, EventSeverity, EventMetadata, create_event
 
 
 @dataclass
@@ -1800,22 +1800,21 @@ class MonitoringService:
                 priority = EventPriority.NORMAL
                 severity = EventSeverity.LOW
             
-            # Create and emit the event
-            event = create_event(
+            # Emit the event directly with parameters
+            await self.event_service.emit_event(
                 event_type=event_type,
-                category=EventCategory.SYSTEM,
                 data=event_data,
                 priority=priority,
                 severity=severity,
-                metadata={
-                    "service": "monitoring_service",
-                    "action": action,
-                    "query_volume": details.get("query_volume", 0),
-                    "block_rate": details.get("block_rate", 0)
-                }
+                metadata=EventMetadata(
+                    source_service="monitoring_service",
+                    source_component=action,
+                    custom_fields={
+                        "query_volume": details.get("query_volume", 0),
+                        "block_rate": details.get("block_rate", 0)
+                    }
+                )
             )
-            
-            await self.event_service.emit_event(event)
             
         except Exception as e:
             logger = get_monitoring_logger()
@@ -1845,21 +1844,20 @@ class MonitoringService:
                 priority = EventPriority.NORMAL
                 severity = EventSeverity.LOW
             
-            # Create and emit the event
-            event = create_event(
+            # Emit the event directly with parameters
+            await self.event_service.emit_event(
                 event_type=EventType.SYSTEM_CONFIG_CHANGED,
-                category=EventCategory.SYSTEM,
                 data=event_data,
                 priority=priority,
                 severity=severity,
-                metadata={
-                    "service": "monitoring_service",
-                    "action": action,
-                    "config_type": details.get("config_type", "unknown")
-                }
+                metadata=EventMetadata(
+                    source_service="monitoring_service",
+                    source_component=action,
+                    custom_fields={
+                        "config_type": details.get("config_type", "unknown")
+                    }
+                )
             )
-            
-            await self.event_service.emit_event(event)
             
         except Exception as e:
             logger = get_monitoring_logger()

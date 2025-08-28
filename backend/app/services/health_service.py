@@ -15,7 +15,7 @@ from ..core.logging_config import get_health_logger
 from ..models.dns import Forwarder, ForwarderHealth
 from .forwarder_service import ForwarderService
 from .enhanced_event_service import get_enhanced_event_service
-from ..websocket.event_types import EventType, EventPriority, EventCategory, EventSeverity, create_event
+from ..websocket.event_types import EventType, EventPriority, EventCategory, EventSeverity, EventMetadata, create_event
 
 
 class HealthService:
@@ -871,22 +871,21 @@ class HealthService:
                 priority = EventPriority.LOW
                 severity = EventSeverity.LOW
             
-            # Create and emit the event
-            event = create_event(
+            # Emit the event directly with parameters
+            await self.event_service.emit_event(
                 event_type=event_type,
-                category=EventCategory.SYSTEM,
                 data=event_data,
                 priority=priority,
                 severity=severity,
-                metadata={
-                    "service": "health_service",
-                    "action": action,
-                    "forwarder_id": forwarder_id,
-                    "health_status": health_status
-                }
+                metadata=EventMetadata(
+                    source_service="health_service",
+                    source_component=action,
+                    custom_fields={
+                        "forwarder_id": forwarder_id,
+                        "health_status": health_status
+                    }
+                )
             )
-            
-            await self.event_service.emit_event(event)
             
         except Exception as e:
             self._logger.error(f"Failed to emit health event: {e}")
@@ -916,22 +915,21 @@ class HealthService:
                 priority = EventPriority.LOW
                 severity = EventSeverity.LOW
             
-            # Create and emit the event
-            event = create_event(
+            # Emit the event directly with parameters
+            await self.event_service.emit_event(
                 event_type=EventType.SYSTEM_METRICS_UPDATED,
-                category=EventCategory.SYSTEM,
                 data=event_data,
                 priority=priority,
                 severity=severity,
-                metadata={
-                    "service": "health_service",
-                    "action": "metrics_update",
-                    "success_rate": success_rate,
-                    "avg_response_time": avg_response_time
-                }
+                metadata=EventMetadata(
+                    source_service="health_service",
+                    source_component="metrics_update",
+                    custom_fields={
+                        "success_rate": success_rate,
+                        "avg_response_time": avg_response_time
+                    }
+                )
             )
-            
-            await self.event_service.emit_event(event)
             
         except Exception as e:
             self._logger.error(f"Failed to emit system metrics event: {e}")
