@@ -667,8 +667,8 @@ configure_bind9() {
     # Validate that zones.conf is not included in both named.conf and named.conf.local
     info "Validating BIND9 configuration for duplicate includes..."
     
-    main_has_zones=$(grep -c 'include "/etc/bind/zones.conf"' /etc/bind/named.conf || echo "0")
-    local_has_zones=$(grep -c 'include "/etc/bind/zones.conf"' /etc/bind/named.conf.local || echo "0")
+    main_has_zones=$(($(grep -c 'include "/etc/bind/zones.conf"' /etc/bind/named.conf 2>/dev/null || echo "0")))
+    local_has_zones=$(($(grep -c 'include "/etc/bind/zones.conf"' /etc/bind/named.conf.local 2>/dev/null || echo "0")))
     
     if [[ "$main_has_zones" -gt 0 && "$local_has_zones" -gt 0 ]]; then
         warning "Detected duplicate zones.conf includes - fixing automatically"
@@ -870,8 +870,8 @@ EOF
     # Final validation: Check for duplicate includes one more time
     info "Performing final BIND9 configuration validation..."
     
-    main_zones_count=$(grep -c 'include "/etc/bind/zones.conf"' /etc/bind/named.conf || echo "0")
-    local_zones_count=$(grep -c 'include "/etc/bind/zones.conf"' /etc/bind/named.conf.local || echo "0")
+    main_zones_count=$(($(grep -c 'include "/etc/bind/zones.conf"' /etc/bind/named.conf 2>/dev/null || echo "0")))
+    local_zones_count=$(($(grep -c 'include "/etc/bind/zones.conf"' /etc/bind/named.conf.local 2>/dev/null || echo "0")))
     
     if [[ "$main_zones_count" -gt 1 ]]; then
         error "Multiple zones.conf includes found in named.conf"

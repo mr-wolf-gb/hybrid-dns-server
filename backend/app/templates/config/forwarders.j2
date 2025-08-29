@@ -17,7 +17,7 @@
 // Last Updated: {{ forwarder.updated_at.strftime('%Y-%m-%d %H:%M:%S') if forwarder.updated_at else 'Unknown' }}
 
 {% for domain in forwarder.domains %}
-zone "{{ domain.domain }}" {
+zone "{{ domain }}" {
     type forward;
 {% if forwarder.forwarder_type == 'active_directory' %}
     forward first;
