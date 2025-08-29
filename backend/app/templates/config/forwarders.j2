@@ -17,26 +17,23 @@
 // Last Updated: {{ forwarder.updated_at.strftime('%Y-%m-%d %H:%M:%S') if forwarder.updated_at else 'Unknown' }}
 
 {% for domain in forwarder.domains %}
-zone "{{ domain }}" {
+zone "{{ domain.domain }}" {
     type forward;
-    forward {{ 'first' if forwarder.forwarder_type == 'public' else 'only' }};
+{% if forwarder.forwarder_type == 'active_directory' %}
+    forward first;
+{% elif forwarder.forwarder_type == 'intranet' %}
+    forward only;
+{% elif forwarder.forwarder_type == 'public' %}
+    forward first;
+{% else %}
+    forward only;
+{% endif %}
     forwarders {
 {% for server in forwarder.servers | sort(attribute='priority') %}
         {{ server.ip }}{% if server.port != 53 %} port {{ server.port }}{% endif %};{% if server.priority > 1 %}  // Priority {{ server.priority }}{% endif %}
 
 {% endfor %}
     };
-{% if forwarder.forwarder_type == 'active_directory' %}
-    // Active Directory specific settings
-    forward first;
-    check-names ignore;
-{% elif forwarder.forwarder_type == 'intranet' %}
-    // Intranet specific settings
-    forward only;
-{% elif forwarder.forwarder_type == 'public' %}
-    // Public DNS specific settings
-    forward first;
-{% endif %}
 };
 
 {% endfor %}

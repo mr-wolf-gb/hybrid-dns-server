@@ -11,49 +11,9 @@ include "/etc/bind/forwarders.conf";
 // CONDITIONAL FORWARDING CONFIGURATION
 // Multi-source forwarding for different domain types
 //
-
-// Active Directory Domain Forwarding
-// Example: corp.local -> AD Domain Controllers
-zone "corp.local" {
-    type forward;
-    forward first;
-    forwarders {
-        192.168.1.10;   // Primary AD DC
-        192.168.1.11;   // Secondary AD DC  
-        192.168.1.12;   // Tertiary AD DC
-    };
-};
-
-// Second AD Domain Example
-zone "ad2.company" {
-    type forward;
-    forward first;
-    forwarders {
-        192.168.50.5;   // Primary AD DC
-        192.168.50.6;   // Secondary AD DC
-    };
-};
-
-// Internal Intranet Zone Forwarding  
-// Example: intranet.company -> Internal DNS servers
-zone "intranet.company" {
-    type forward;
-    forward first;
-    forwarders {
-        10.10.10.5;     // Primary intranet DNS
-        10.10.10.6;     // Secondary intranet DNS
-    };
-};
-
-// Research Network Example
-zone "research.local" {
-    type forward;
-    forward first;
-    forwarders {
-        10.20.0.1;      // Research network DNS
-        10.20.0.2;      // Research network DNS backup
-    };
-};
+// NOTE: Forwarders are now managed via the web interface
+// and configured in /etc/bind/forwarders.conf
+// Remove any hardcoded forwarder zones to avoid conflicts
 
 //
 // AUTHORITATIVE ZONES
